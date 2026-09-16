@@ -67,9 +67,12 @@ Saving this switches traffic from the old bot to Buddy. To roll back, put the ol
 
 In a DM with Buddy:
 - [ ] `hello` → a reply replaces "_Buddy is thinking…_"
-- [ ] `/help`, `/usage`, `/status`, `/reset`
-- [ ] `/asana connect` → link → Asana consent → "Asana connected" page
-- [ ] Open the same link again → "invalid or expired"
+- [ ] `/help` → card with examples and buttons (Connect Asana, My usage, Start fresh)
+- [ ] While not connected: "what's due today in Asana?" → **Connect your Asana first** card
+- [ ] **Connect Asana** → Asana consent → "✅ Asana connected" page
+- [ ] Back in Chat → **I've connected, continue** → Buddy answers the original question without retyping
+- [ ] Open the same connect link again → "This link has expired"
+- [ ] `/asana status` → **Disconnect** → asks first → **Yes, disconnect** → "Connect again" button
 - [ ] "What are my tasks due this week?" → answer, **no** approval card (read-only)
 - [ ] `/asana tools` lists actions split into "runs without asking" and "asks for approval"
 - [ ] "Create a task called Buddy test" → card shows Task title / Description / Due date / Assignee by name → **Cancel** → nothing created

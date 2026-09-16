@@ -12,17 +12,19 @@
 |---|---|---|
 | Someone other than Google Chat calls the bot | Cloud Run IAM allows only `chat@system.gserviceaccount.com`; the app also verifies Google's signed JWT (audience + issuer) | `infra/deploy.sh`, `core/chat-verify.js` |
 | Someone outside the pilot uses Buddy | Chat app visibility + `BUDDY_ALLOWED_USERS` allowlist checked on every event | Chat console, `chat-gateway/handler.js` |
-| Account hijack via the connect link (bug in the old bot) | Link created inside Chat for the verified user; signed; server-side session; single use; 10 min expiry; PKCE; Asana email must match the Google email | `core/oauth-flows.js`, `asana/tokens.js` |
+| Account hijack via the connect link (bug in the old bot) | Link created inside Chat for the verified user; signed; server-side session; single use; 1 h expiry; PKCE; Asana email must match the Google email | `core/oauth-flows.js`, `asana/tokens.js` |
 | Asana token theft from the database | Tokens encrypted with Cloud KMS, bound to module + user; the OAuth service can encrypt but never decrypt | `core/sealer.js`, `infra/setup.sh` |
 | Token sent somewhere other than Asana | MCP URL hard-restricted to `https://mcp.asana.com` | `asana/toolset.js` |
 | Claude changes or deletes Asana data unexpectedly (incl. prompt injection from a file or task) | Every tool not explicitly read-only stops the loop **before running**. Batches are split so each change is approved on its own; the card shows every parameter (names resolved with read-only lookups, falling back to raw ids). Each item runs at most once, only after the owner's click; undecided items expire after 15 min | `core/agent-loop.js`, `chat-gateway/handler.js`, `asana/present.js` |
-| Duplicate event runs an action twice | Each Chat message id is processed once | `chat-gateway/handler.js` |
+| Duplicate event runs an action twice | Each Chat message id is processed once; "Try again" and "continue" buttons are single-use and owner-only | `chat-gateway/handler.js` |
+| A button does something the user couldn't do by typing | Command buttons run the slash command as the person who clicks, with the same space and permission checks as typing it | `chat-gateway/handler.js` |
+| Card formatting injected through Asana names or descriptions | All module text is escaped before it is put on a card | `chat-gateway/cards.js` |
 | One person's Asana data shown to a group | Asana module disabled in spaces and group chats | `asana/index.js` (`allowedIn: ['DM']`) |
 | Malicious uploads | 10 MB limit enforced while downloading; zip-bomb check before parsing .xlsx; maintained parser; files never stored | `files/` |
 | Runaway cost | Per-user monthly cap checked before **every** Claude call; max 12 steps per request | `core/usage.js`, `core/agent-loop.js` |
 | Over-privileged runtime | Dedicated service accounts with only Firestore, specific secrets and KMS; Editor removed from the default account after cutover | `infra/setup.sh`, `infra/decommission-legacy.sh` |
 | Leaking secrets in logs or errors | Credential-looking fields redacted; users see a reference code, never raw errors | `core/log.js`, `chat-gateway/handler.js` |
-| Data kept forever | Firestore TTL: threads 30 days, approvals 15 min, login sessions 10 min, event ids 1 day | `infra/setup.sh` |
+| Data kept forever | Firestore TTL: threads 30 days, approvals 15 min, login sessions 1 h, saved requests and event ids 1 day | `infra/setup.sh` |
 | Broken deploys (old revision 24) | Deploy refuses failing tests or uncommitted files; sets every setting every time; verifies access rules afterwards | `infra/deploy.sh` |
 
 ## Data flows

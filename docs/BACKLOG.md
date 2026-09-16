@@ -17,6 +17,15 @@ Status: `todo` · `doing` · `done` · `blocked`
 | A5 | Remove the old bot: `CONFIRM=yes bash infra/decommission-legacy.sh` | todo |
 | A6 | Remy's feedback: one card section per task (title, description, due date, assignee by name), Approve/Cancel each, Approve all/Cancel all; update ≠ "cannot be undone" | built, awaiting deploy |
 | A7 | `/asana tools` command listing free vs approval-gated actions | built, awaiting deploy |
+| A8 | Friendlier UX: Connect button on the first Asana request + "I've connected, continue"; Reconnect card when the connection stops working; welcome/help/status as button cards; disconnect asks first; Try again on errors and expired approvals; approval card copy with expiry time in the user's time zone; "Checking your Asana…" progress; 1 h connect links | built, awaiting deploy |
+
+## Later
+
+| # | Item | Notes |
+|---|---|---|
+| U1 | **App Home tab** in the DM: connection status, this month's usage, quick buttons | Enable "Support App Home" in the Chat console; handle `APP_HOME` events |
+| U2 | **Proactive connection check**: a daily job that warns users whose Asana connection stopped working, before they need it | Needs the scheduled jobs hook (R6) |
+| U3 | Register `/help` and `/asana` under Commands in the Chat console for autocomplete | Console only |
 
 ## P0: Security (independent of the merge)
 
