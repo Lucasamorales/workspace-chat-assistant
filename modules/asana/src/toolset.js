@@ -6,6 +6,7 @@
 const { Client } = require('@modelcontextprotocol/sdk/client/index.js');
 const { StreamableHTTPClientTransport } = require('@modelcontextprotocol/sdk/client/streamableHttp.js');
 const tokens = require('./tokens');
+const { splitInput, describeTool, describeFields, createNameResolver } = require('./present');
 
 const DEFAULT_MCP_URL = 'https://mcp.asana.com/v2/mcp';
 const MAX_TOOLS = 100;
@@ -84,6 +85,13 @@ async function createAsanaToolset(ctx, { connect = connectMcp } = {}) {
 
   const byName = new Map(tools.map(t => [t.name, t]));
   const readOnlyOverrides = String(ctx.settings.ASANA_READONLY_TOOLS || '').split(',').map(s => s.trim()).filter(Boolean);
+  const needsApproval = name => needsApprovalFor(byName.get(name), readOnlyOverrides);
+
+  const resolveName = createNameResolver({
+    tools: byName,
+    isReadOnly: name => !needsApproval(name),
+    callTool: async (name, args) => renderResult(await client.callTool({ name, arguments: args })),
+  });
 
   return {
     definitions: tools.map(t => ({
@@ -92,12 +100,14 @@ async function createAsanaToolset(ctx, { connect = connectMcp } = {}) {
       input_schema: t.inputSchema || { type: 'object' },
     })),
 
-    needsApproval: name => needsApprovalFor(byName.get(name), readOnlyOverrides),
+    needsApproval,
 
-    describe(name) {
-      const t = byName.get(name);
-      const a = (t && t.annotations) || {};
-      return { title: a.title || (t && t.title) || name, destructive: a.destructiveHint === true };
+    split: (name, input) => splitInput(input),
+
+    async describe(name, input, position = { of: 1 }) {
+      const tool = byName.get(name);
+      const { effect, title } = describeTool(name, (tool && tool.annotations) || {}, position.of > 1);
+      return { effect, title, fields: await describeFields(name, input, resolveName) };
     },
 
     async execute(name, input) {

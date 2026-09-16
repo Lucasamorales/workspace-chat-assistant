@@ -34,7 +34,15 @@
  * @property {(name: string, input: object) => Promise<{content: string, isError?: boolean}>} execute
  * @property {(name: string, input: object) => Promise<boolean>|boolean} [needsApproval]
  *   Return false ONLY for calls that cannot change anything. Missing = approval required.
- * @property {(name: string, input: object) => {title: string, destructive?: boolean}} [describe]
+ * @property {(name: string, input: object) => object[]} [split]
+ *   Split a batch call into independently executable calls (e.g. one per task), so the user
+ *   can approve each. Every returned input must be safe to execute on its own.
+ * @property {(name: string, input: object, position: {part: number, of: number}) => Promise<ApprovalInfo>} [describe]
+ *
+ * @typedef {object} ApprovalInfo          What the approval card shows for one item
+ * @property {string} title                e.g. "Create task"
+ * @property {'create'|'update'|'delete'|'change'} [effect]   'delete' is shown as "cannot be undone"
+ * @property {{label: string, value: string}[]} [fields]      Human-readable; resolve ids to names where possible
  * @property {() => Promise<void>} [close]
  * @property {string} [unavailable]        Instead of tools: a note for Claude, e.g. "not connected"
  *

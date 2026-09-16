@@ -4,6 +4,7 @@ const http = require('node:http');
 const core = require('@buddy/core');
 const { createEventHandler } = require('../src/handler');
 const { createApp } = require('../src/app');
+const { ACTIONS } = require('../src/cards');
 
 const quietLog = { info() {}, warn() {}, error() {}, child() { return quietLog; } };
 const ROBIN = { name: 'users/111', email: 'robin@example.com', type: 'HUMAN' };
@@ -23,16 +24,17 @@ function fakeChat() {
   };
 }
 
-/** A stand-in "tasks" module with one read tool and one delete tool. */
+/** A stand-in module with a read tool and a batch "create" tool that splits per task. */
 function tasksModule(executed) {
   return {
     name: 'tasks',
     allowedIn: ['DM'],
     commands: { tasks: { description: 'd', run: async () => 'tasks ok' } },
     tools: async () => ({
-      definitions: [{ name: 'list', input_schema: { type: 'object' } }, { name: 'delete', input_schema: { type: 'object' } }],
+      definitions: [{ name: 'list', input_schema: { type: 'object' } }, { name: 'create', input_schema: { type: 'object' } }],
       needsApproval: name => name !== 'list',
-      describe: name => ({ title: name === 'delete' ? 'Delete task' : 'List tasks', destructive: name === 'delete' }),
+      split: (name, input) => (input.tasks || [input]).map(t => ({ tasks: [t] })),
+      describe: async (name, input) => ({ title: 'Create task', effect: 'create', fields: [{ label: 'Task title', value: input.tasks[0].name }] }),
       execute: async (name, input) => { executed.push({ name, input }); return { content: `${name} ok` }; },
     }),
   };
@@ -44,6 +46,7 @@ function setup(claudeScript) {
   const executed = [];
   const background = [];
   const script = [...claudeScript];
+  const claudeCalls = [];
   const registry = core.createRegistry({ modules: [require('@buddy/module-basics'), tasksModule(executed)], env: {}, log: quietLog });
   const handle = createEventHandler({
     registry, chat, store, log: quietLog,
@@ -51,21 +54,36 @@ function setup(claudeScript) {
     threads: core.createThreads({ store, maxMessages: 20, ttlDays: 30 }),
     usage: core.createUsage({ store, capUsd: 15, prices: { inPerMTok: 2, outPerMTok: 10 } }),
     oauthFlows: core.createOAuthFlows({ store, secret: 'k'.repeat(40), baseUrl: 'https://oauth.test' }),
-    claude: { create: async () => { const r = script.shift(); if (!r) throw new Error('no more scripted replies'); return { usage: {}, ...r }; } },
+    claude: {
+      create: async params => {
+        claudeCalls.push(structuredClone(params));
+        const r = script.shift();
+        if (!r) throw new Error('no more scripted replies');
+        return { usage: {}, ...r };
+      },
+    },
     makeModuleContext: core.createContextFactory({ store, sealer: core.createLocalSealer(), env: {}, log: quietLog }),
     defer: p => background.push(p),
   });
   const settle = async () => { while (background.length) await background.shift(); };
-  return { handle, chat, executed, store, settle };
+  return { handle, chat, executed, store, settle, claudeCalls };
 }
 
 const message = (user, space, text, id = Math.random().toString(36)) => ({
   type: 'MESSAGE', user, space, message: { name: `${space.name}/messages/${id}`, text, argumentText: text, thread: { name: `${space.name}/threads/t1` } },
 });
-const click = (user, fn, pendingId) => ({
-  type: 'CARD_CLICKED', user, space: DM, common: { invokedFunction: fn, parameters: { pendingId } }, message: { name: 'spaces/dm1/messages/card' },
+const click = (user, fn, pendingId, item) => ({
+  type: 'CARD_CLICKED', user, space: DM,
+  common: { invokedFunction: fn, parameters: { pendingId, ...(item !== undefined ? { item: String(item) } : {}) } },
+  message: { name: 'spaces/dm1/messages/card' },
 });
 const toolUse = (id, name, input = {}) => ({ type: 'tool_use', id, name, input });
+
+const lastCard = chat => chat.log.filter(l => l.op === 'card').at(-1).cardsV2[0].card;
+const buttons = card => card.sections.flatMap(s => s.widgets).filter(w => w.buttonList).flatMap(w => w.buttonList.buttons);
+const pendingIdOf = card => buttons(card)[0].onClick.action.parameters.find(p => p.key === 'pendingId').value;
+
+const CREATE_TWO = toolUse('w', 'tasks__create', { tasks: [{ name: 'Report' }, { name: 'Burn after reading' }] });
 
 test('people not on the allowlist get nothing', async () => {
   const { handle, chat } = setup([]);
@@ -93,50 +111,82 @@ test('DM-only commands and tools are refused in spaces', async () => {
   assert.deepEqual(store.dump().core__pending || {}, {});
 });
 
-test('full approval flow: pause → card → wrong user refused → approve once → replay refused', async () => {
-  const { handle, settle, chat, executed, store } = setup([
-    { stop_reason: 'tool_use', content: [toolUse('a', 'tasks__list'), toolUse('b', 'tasks__delete', { id: 7 })] },
-    { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Deleted task 7.' }] },
+test('the card shows one section per task with its own buttons, plus approve/cancel all', async () => {
+  const { handle, settle, chat, executed } = setup([{ stop_reason: 'tool_use', content: [CREATE_TWO] }]);
+  await handle(message(ROBIN, DM, 'create two tasks'));
+  await settle();
+
+  assert.equal(executed.length, 0, 'nothing runs before a click');
+  const card = lastCard(chat);
+  assert.match(JSON.stringify(card.sections[0]), /Task title:<\/b> Report/);
+  assert.match(JSON.stringify(card.sections[1]), /Burn after reading/);
+  assert.deepEqual(buttons(card).map(b => b.text), ['Approve', 'Cancel', 'Approve', 'Cancel', 'Approve all', 'Cancel all']);
+});
+
+test('approve one, cancel the other: only the approved task is created, then Claude summarises', async () => {
+  const { handle, settle, chat, executed, store, claudeCalls } = setup([
+    { stop_reason: 'tool_use', content: [CREATE_TWO] },
+    { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Created Report; skipped the other.' }] },
   ]);
-
-  await handle(message(ROBIN, DM, 'delete task 7'));
+  await handle(message(ROBIN, DM, 'create two tasks'));
   await settle();
-  assert.deepEqual(executed.map(e => e.name), ['list'], 'delete must wait for approval');
+  const id = pendingIdOf(lastCard(chat));
 
-  const card = chat.log.find(l => l.op === 'card');
-  assert.ok(card, 'approval card shown');
-  const pendingId = card.cardsV2[0].card.sections[0].widgets.at(-1).buttonList.buttons[0].onClick.action.parameters[0].value;
-
-  const stolen = await handle(click(REMY, 'buddy.approve', pendingId));
+  const stolen = await handle(click(REMY, ACTIONS.APPROVE, id, 0));
   assert.match(stolen.text, /Only the person who asked/);
-  assert.deepEqual(executed.map(e => e.name), ['list']);
 
-  const ok = await handle(click(ROBIN, 'buddy.approve', pendingId));
-  assert.equal(ok.actionResponse.type, 'UPDATE_MESSAGE');
+  const first = await handle(click(ROBIN, ACTIONS.APPROVE, id, 0));
+  assert.equal(first.actionResponse.type, 'UPDATE_MESSAGE');
+  assert.match(JSON.stringify(first.cardsV2), /Working on it/);
   await settle();
-  assert.deepEqual(executed, [{ name: 'list', input: {} }, { name: 'delete', input: { id: 7 } }]);
-  assert.equal(chat.log.at(-1).text, 'Deleted task 7.');
+  assert.deepEqual(executed, [{ name: 'create', input: { tasks: [{ name: 'Report' }] } }]);
+  assert.equal(claudeCalls.length, 1, 'Claude waits until every item is decided');
 
-  const replay = await handle(click(ROBIN, 'buddy.approve', pendingId));
+  const again = await handle(click(ROBIN, ACTIONS.APPROVE, id, 0));
+  await settle();
+  assert.equal(executed.length, 1, 'double click does not create twice');
+  assert.equal(again.actionResponse.type, 'UPDATE_MESSAGE');
+
+  await handle(click(ROBIN, ACTIONS.CANCEL, id, 1));
+  await settle();
+  assert.equal(executed.length, 1);
+  assert.equal(chat.log.at(-1).text, 'Created Report; skipped the other.');
+  const result = claudeCalls[1].messages.at(-1).content[0].content;
+  assert.match(result, /Part 1 of 2.*create ok/s);
+  assert.match(result, /Part 2 of 2.*declined/s);
+
+  const replay = await handle(click(ROBIN, ACTIONS.APPROVE, id, 1));
   assert.match(replay.text, /expired or was already handled/);
-  await settle();
-  assert.equal(executed.filter(e => e.name === 'delete').length, 1, 'delete ran exactly once');
   assert.deepEqual(store.dump().core__pending, {});
 });
 
-test('cancel runs nothing and lets Claude acknowledge', async () => {
+test('approve all creates every task exactly once', async () => {
   const { handle, settle, chat, executed } = setup([
-    { stop_reason: 'tool_use', content: [toolUse('b', 'tasks__delete', { id: 7 })] },
-    { stop_reason: 'end_turn', content: [{ type: 'text', text: 'OK, I left it.' }] },
+    { stop_reason: 'tool_use', content: [CREATE_TWO] },
+    { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Both created.' }] },
   ]);
-  await handle(message(ROBIN, DM, 'delete task 7'));
+  await handle(message(ROBIN, DM, 'create two tasks'));
   await settle();
-  const card = chat.log.find(l => l.op === 'card');
-  const pendingId = card.cardsV2[0].card.sections[0].widgets.at(-1).buttonList.buttons[1].onClick.action.parameters[0].value;
-  await handle(click(ROBIN, 'buddy.cancel', pendingId));
+  const id = pendingIdOf(lastCard(chat));
+
+  await handle(click(ROBIN, ACTIONS.APPROVE_ALL, id));
+  await handle(click(ROBIN, ACTIONS.APPROVE_ALL, id));
+  await settle();
+  assert.deepEqual(executed.map(e => e.input.tasks[0].name), ['Report', 'Burn after reading']);
+  assert.equal(chat.log.at(-1).text, 'Both created.');
+});
+
+test('cancel all runs nothing and lets Claude acknowledge', async () => {
+  const { handle, settle, chat, executed } = setup([
+    { stop_reason: 'tool_use', content: [CREATE_TWO] },
+    { stop_reason: 'end_turn', content: [{ type: 'text', text: 'OK, nothing created.' }] },
+  ]);
+  await handle(message(ROBIN, DM, 'create two tasks'));
+  await settle();
+  await handle(click(ROBIN, ACTIONS.CANCEL_ALL, pendingIdOf(lastCard(chat))));
   await settle();
   assert.equal(executed.length, 0);
-  assert.equal(chat.log.at(-1).text, 'OK, I left it.');
+  assert.equal(chat.log.at(-1).text, 'OK, nothing created.');
 });
 
 test('HTTP layer rejects requests that are not signed by Google Chat', async () => {

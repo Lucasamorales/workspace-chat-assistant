@@ -4,12 +4,14 @@
  */
 
 const crypto = require('crypto');
-const { runLoop, resumeLoop, Anthropic } = require('@buddy/core');
-const { approvalCard, statusResponse, ACTION_APPROVE, ACTION_CANCEL } = require('./cards');
+const { runLoop, resumeLoop, executeApprovedItem, Anthropic } = require('@buddy/core');
+const { approvalCard, cardResponse, statusResponse, ACTIONS } = require('./cards');
 
 const PENDING_TTL_MS = 15 * 60 * 1000;
 const EVENT_TTL_MS = 24 * 60 * 60 * 1000;
-const MAX_PENDING_BYTES = 900_000; // Firestore documents max out at 1 MiB
+// Firestore documents max out at 1 MiB; leave room for per-item results added later.
+const MAX_PENDING_BYTES = 500_000;
+const MAX_ITEM_RESULT_CHARS = 10_000;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 const BASE_PROMPT = [
@@ -52,6 +54,11 @@ function createEventHandler(deps) {
       threadKey: thread || msg.name || (event.space && event.space.name),
     };
   }
+
+  const baseOfRecord = r => ({
+    userId: r.userId, userEmail: r.userEmail, spaceKind: r.spaceKind,
+    space: r.space, thread: r.thread, threadKey: r.threadKey,
+  });
 
   function contextsFor(base) {
     return mod => makeModuleContext(mod, base, {
@@ -99,6 +106,15 @@ function createEventHandler(deps) {
     }
   }
 
+  async function withToolset(base, fn) {
+    const toolset = await registry.buildToolset(contextsFor(base), base.spaceKind);
+    try {
+      return await fn(toolset);
+    } finally {
+      await toolset.close();
+    }
+  }
+
   async function finish(base, messageName, historyText, result) {
     if (result.status === 'needs_approval') {
       const loop = JSON.stringify(result.saved);
@@ -109,11 +125,13 @@ function createEventHandler(deps) {
       await pendingCol.set(id, {
         ...base,
         historyText,
-        pending: result.pending,
+        items: result.items,
         loop,
+        cardMessage: messageName,
+        resumed: false,
         expireAt: new Date(now() + PENDING_TTL_MS),
       });
-      const card = approvalCard(id, result.pending);
+      const card = approvalCard(id, result.items);
       await chat.replaceWithCard(messageName, card.text, card.cardsV2);
       return;
     }
@@ -126,15 +144,6 @@ function createEventHandler(deps) {
 
     await threads.append(base.threadKey, historyText, reply);
     await chat.replaceText(messageName, base.space, base.thread, reply);
-  }
-
-  async function withToolset(base, fn) {
-    const toolset = await registry.buildToolset(contextsFor(base), base.spaceKind);
-    try {
-      return await fn(toolset);
-    } finally {
-      await toolset.close();
-    }
   }
 
   async function converse(base, text, attachments) {
@@ -174,20 +183,70 @@ function createEventHandler(deps) {
     }
   }
 
-  async function resume(record, approved) {
-    const base = {
-      userId: record.userId, userEmail: record.userEmail, spaceKind: record.spaceKind,
-      space: record.space, thread: record.thread, threadKey: record.threadKey,
-    };
+  /* ---------- approvals ---------- */
+
+  const expired = record => new Date(record.expireAt).getTime() < now();
+
+  async function refreshCard(id) {
+    const record = await pendingCol.get(id);
+    if (!record) return;
+    const card = approvalCard(id, record.items);
+    await chat.replaceWithCard(record.cardMessage, card.text, card.cardsV2);
+  }
+
+  /** Runs items that a click moved to 'running', saving each result as soon as it exists. */
+  async function runApproved(id, record, indexes) {
+    const base = baseOfRecord(record);
+    await withToolset(base, async toolset => {
+      for (const i of indexes) {
+        const r = await executeApprovedItem(toolset, record.items[i]);
+        const result = { content: String(r.content ?? '').slice(0, MAX_ITEM_RESULT_CHARS), isError: Boolean(r.isError) };
+        await pendingCol.update(id, doc => {
+          if (!doc || !doc.items[i]) return undefined;
+          doc.items[i].state = 'done';
+          doc.items[i].result = result;
+          return doc;
+        });
+      }
+    });
+  }
+
+  /**
+   * When nothing is pending or running, claim the record exactly once and let Claude
+   * continue. With `expire`, anything still pending counts as declined.
+   */
+  async function finalizeIfDecided(id, { expire = false } = {}) {
+    let claimed = null;
+    await pendingCol.update(id, doc => {
+      claimed = null; // transactions can retry; never trust a previous attempt
+      if (!doc || doc.resumed) return undefined;
+      if (expire) doc.items.forEach(it => { if (it.state === 'pending') it.state = 'declined'; });
+      const open = doc.items.some(it => it.state === 'pending' || it.state === 'running');
+      if (open) return expire ? doc : undefined;
+      doc.resumed = true;
+      claimed = doc;
+      return doc;
+    });
+    if (!claimed) return;
+
+    const card = approvalCard(id, claimed.items);
+    await chat.replaceWithCard(claimed.cardMessage, card.text, card.cardsV2).catch(error => log.warn('could not update approval card', { error }));
+    await pendingCol.delete(id);
+    await resume(claimed);
+  }
+
+  async function resume(record) {
+    const base = baseOfRecord(record);
     let messageName;
     try {
-      messageName = await chat.postText(base.space, base.thread, approved ? '_Working on it…_' : '_OK, not doing that…_');
+      messageName = await chat.postText(base.space, base.thread, '_Buddy is finishing up…_');
       await withToolset(base, async toolset => {
         const result = await resumeLoop({
-          claude, toolset, log, approved,
+          claude, toolset, log,
           budget: usage.forUser(base.userId),
           system: systemFor(base.spaceKind, toolset.notes),
           saved: JSON.parse(record.loop),
+          items: record.items,
         });
         await finish(base, messageName, record.historyText, result);
       });
@@ -195,6 +254,74 @@ function createEventHandler(deps) {
       await fail(base, messageName, error);
     }
   }
+
+  async function onCardClicked(event) {
+    const common = event.common || {};
+    const action = event.action || {};
+    const fn = common.invokedFunction || action.actionMethodName;
+    if (!Object.values(ACTIONS).includes(fn)) return {};
+
+    const params = common.parameters || Object.fromEntries((action.parameters || []).map(p => [p.key, p.value]));
+    const id = String(params.pendingId || '');
+    if (!/^[A-Za-z0-9_-]{20,64}$/.test(id)) return statusResponse('This request is no longer valid.');
+
+    const single = fn === ACTIONS.APPROVE || fn === ACTIONS.CANCEL;
+    const index = Number(params.item);
+    if (single && !(Number.isInteger(index) && index >= 0)) return statusResponse('This request is no longer valid.');
+    const approve = fn === ACTIONS.APPROVE || fn === ACTIONS.APPROVE_ALL;
+    const base = baseOf(event);
+
+    let outcome;
+    const updated = await pendingCol.update(id, doc => {
+      outcome = null; // transactions can retry; recompute every attempt
+      if (!doc) { outcome = { kind: 'missing' }; return undefined; }
+      if (doc.userId !== base.userId) { outcome = { kind: 'forbidden', owner: doc.userId }; return undefined; }
+      if (expired(doc)) { outcome = { kind: 'expired' }; return undefined; }
+
+      const targets = single ? [index] : doc.items.map((_, i) => i);
+      const changed = targets.filter(i => doc.items[i] && doc.items[i].state === 'pending');
+      if (!changed.length) { outcome = { kind: 'noop', doc }; return undefined; }
+
+      for (const i of changed) doc.items[i].state = approve ? 'running' : 'declined';
+      outcome = { kind: 'changed', changed };
+      return doc;
+    });
+
+    switch (outcome.kind) {
+      case 'missing':
+        return statusResponse('This request expired or was already handled. Ask me again if you still need it.');
+      case 'forbidden':
+        log.warn('approval attempted by a different user', { owner: outcome.owner, clicker: base.userId });
+        return { actionResponse: { type: 'NEW_MESSAGE' }, text: 'Only the person who asked can approve this.' };
+      case 'expired':
+        defer(finalizeIfDecided(id, { expire: true }));
+        return statusResponse('This request expired. Anything you didn\'t approve was not changed.');
+      case 'noop':
+        return cardResponse(approvalCard(id, outcome.doc.items));
+      default:
+        break;
+    }
+
+    log.info(approve ? 'approval items approved' : 'approval items declined', {
+      userId: base.userId, tools: outcome.changed.map(i => updated.items[i].name),
+    });
+
+    defer((async () => {
+      try {
+        if (approve) {
+          await runApproved(id, updated, outcome.changed);
+          await refreshCard(id);
+        }
+        await finalizeIfDecided(id);
+      } catch (error) {
+        await fail(baseOfRecord(updated), null, error);
+      }
+    })());
+
+    return cardResponse(approvalCard(id, updated.items));
+  }
+
+  /* ---------- messages ---------- */
 
   async function runCommand(base, name, args) {
     const found = registry.findCommand(name);
@@ -225,35 +352,6 @@ function createEventHandler(deps) {
 
     defer(converse(base, text, msg.attachment || []));
     return {};
-  }
-
-  async function onCardClicked(event) {
-    const common = event.common || {};
-    const action = event.action || {};
-    const fn = common.invokedFunction || action.actionMethodName;
-    if (fn !== ACTION_APPROVE && fn !== ACTION_CANCEL) return {};
-
-    const params = common.parameters || Object.fromEntries((action.parameters || []).map(p => [p.key, p.value]));
-    const id = String(params.pendingId || '');
-    if (!/^[A-Za-z0-9_-]{20,64}$/.test(id)) return statusResponse('This request is no longer valid.');
-
-    const base = baseOf(event);
-    const record = await pendingCol.take(id); // atomic: a double click or replay finds nothing
-    if (!record || new Date(record.expireAt).getTime() < now()) {
-      return statusResponse('This request expired or was already handled. Ask me again if you still need it.');
-    }
-    if (record.userId !== base.userId) {
-      await pendingCol.set(id, record); // put it back for the person who asked
-      log.warn('approval attempted by a different user', { owner: record.userId, clicker: base.userId });
-      return { actionResponse: { type: 'NEW_MESSAGE' }, text: 'Only the person who asked can approve this.' };
-    }
-
-    const approved = fn === ACTION_APPROVE;
-    log.info(approved ? 'actions approved' : 'actions declined', {
-      userId: base.userId, tools: record.pending.map(p => p.name),
-    });
-    defer(resume(record, approved));
-    return statusResponse(approved ? 'Approved — working on it…' : 'Cancelled — nothing was changed.', record.pending);
   }
 
   return async function handleEvent(event) {

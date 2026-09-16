@@ -71,9 +71,12 @@ In a DM with Buddy:
 - [ ] `/asana connect` → link → Asana consent → "Asana connected" page
 - [ ] Open the same link again → "invalid or expired"
 - [ ] "What are my tasks due this week?" → answer, **no** approval card (read-only)
-- [ ] "Create a task called Buddy test" → approval card → **Cancel** → nothing created
-- [ ] Same again → **Approve** → task exists in Asana; clicking Approve again → "already handled"
-- [ ] "Delete the task Buddy test" → card says "cannot be undone" → Approve → gone
+- [ ] `/asana tools` lists actions split into "runs without asking" and "asks for approval"
+- [ ] "Create a task called Buddy test" → card shows Task title / Description / Due date / Assignee by name → **Cancel** → nothing created
+- [ ] "Create two tasks A and B" → one section per task → **Approve** A, **Cancel** B → only A exists; Buddy summarises
+- [ ] "Create tasks C and D" → **Approve all** → both exist; clicking again changes nothing
+- [ ] "Move task A's due date to Friday" → card says "changes something that already exists" (not "cannot be undone")
+- [ ] "Delete the task A" → card says "cannot be undone" → Approve → gone
 - [ ] Upload a PDF, an image and an .xlsx with a question each
 - [ ] `/asana disconnect` → Buddy no longer appears under Asana → Settings → Apps
 

@@ -99,6 +99,12 @@ test('toolset: not connected → note for Claude; connected → MCP tools with b
   assert.deepEqual(ts.definitions.map(d => d.name), ['get_task', 'delete_task']);
   assert.equal(ts.needsApproval('get_task'), false);
   assert.equal(ts.needsApproval('delete_task'), true);
-  assert.deepEqual(ts.describe('delete_task'), { title: 'Delete task', destructive: true });
+  assert.deepEqual(await ts.describe('delete_task', { task: 'abc' }), { effect: 'delete', title: 'Delete task', fields: [{ label: 'Task', value: 'abc' }] });
   assert.deepEqual(await ts.execute('delete_task', {}), { content: 'delete_task done', isError: false });
+});
+
+test('/asana tools lists what runs freely and what needs approval', async () => {
+  const ctx = ctxFor();
+  const notConnected = await asana.commands.asana.run({ ...ctx, core: {} }, 'tools');
+  assert.match(notConnected, /not connected/);
 });

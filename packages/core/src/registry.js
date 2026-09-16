@@ -19,6 +19,14 @@ function withTimeout(promiseFn, ms, label) {
   ]).finally(() => clearTimeout(timer));
 }
 
+/** Fallback when a module can't describe a call: show every parameter so approval is still informed. */
+function genericFields(input) {
+  return Object.entries(input && typeof input === 'object' ? input : {}).map(([key, value]) => ({
+    label: key.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase()),
+    value: typeof value === 'string' ? value : JSON.stringify(value),
+  }));
+}
+
 function createRegistry({ modules, env = process.env, log, timeouts = {} }) {
   const limits = { ...DEFAULT_TIMEOUTS, ...timeouts };
   const byName = new Map();
@@ -127,11 +135,27 @@ function createRegistry({ modules, env = process.env, log, timeouts = {} }) {
           const r = await safe(route.mod, 'needsApproval', () => route.ts.needsApproval(route.name, input));
           return !(r.ok && r.value === false); // anything but an explicit false requires approval
         },
-        describe(name, input) {
+        /** Batch calls may be split so each part can be approved on its own. */
+        async split(name, input) {
+          const route = routes.get(name);
+          if (!route || !route.ts.split) return [input];
+          const r = await safe(route.mod, 'split', () => route.ts.split(route.name, input));
+          return r.ok && Array.isArray(r.value) && r.value.length ? r.value : [input];
+        },
+        async describe(name, input, position) {
           const route = routes.get(name);
           let d = {};
-          try { d = (route && route.ts.describe && route.ts.describe(route.name, input)) || {}; } catch { /* fall back */ }
-          return { module: route ? route.mod.name : 'unknown', title: d.title || name, destructive: Boolean(d.destructive) };
+          if (route && route.ts.describe) {
+            const r = await safe(route.mod, 'describe', () => route.ts.describe(route.name, input, position));
+            if (r.ok && r.value) d = r.value;
+          }
+          const effect = ['create', 'update', 'delete'].includes(d.effect) ? d.effect : 'change';
+          return {
+            module: route ? route.mod.name : 'unknown',
+            title: d.title || name,
+            effect,
+            fields: Array.isArray(d.fields) && d.fields.length ? d.fields : genericFields(input),
+          };
         },
         async execute(name, input) {
           const route = routes.get(name);

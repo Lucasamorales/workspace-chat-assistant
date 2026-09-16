@@ -15,6 +15,8 @@ Status: `todo` · `doing` · `done` · `blocked`
 | A3 | Tune `ASANA_READONLY_TOOLS` if reads ask for approval | todo |
 | A4 | After A2 passes: `feat:` commit marking the build verified | todo |
 | A5 | Remove the old bot: `CONFIRM=yes bash infra/decommission-legacy.sh` | todo |
+| A6 | Remy's feedback: one card section per task (title, description, due date, assignee by name), Approve/Cancel each, Approve all/Cancel all; update ≠ "cannot be undone" | built, awaiting deploy |
+| A7 | `/asana tools` command listing free vs approval-gated actions | built, awaiting deploy |
 
 ## P0: Security (independent of the merge)
 

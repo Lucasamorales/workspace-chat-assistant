@@ -51,6 +51,29 @@ test('approval is required unless a module explicitly says false', async () => {
   assert.equal(await ts.needsApproval('safe__a'), false);
 });
 
+test('split and describe fall back safely when a module has none or throws', async () => {
+  const defs = [{ name: 'a', input_schema: {} }];
+  const mods = [
+    { name: 'plain', tools: async () => ({ definitions: defs, execute: async () => ({}) }) },
+    {
+      name: 'broken',
+      tools: async () => ({
+        definitions: defs,
+        execute: async () => ({}),
+        split: () => { throw new Error('x'); },
+        describe: async () => { throw new Error('x'); },
+      }),
+    },
+  ];
+  const ts = await make(mods).buildToolset(() => ({}), 'DM');
+  for (const name of ['plain__a', 'broken__a']) {
+    assert.deepEqual(await ts.split(name, { id: 1 }), [{ id: 1 }]);
+    const d = await ts.describe(name, { due_on: '2026-09-17' }, { part: 0, of: 1 });
+    assert.equal(d.effect, 'change');
+    assert.deepEqual(d.fields, [{ label: 'Due on', value: '2026-09-17' }], 'every parameter is still shown');
+  }
+});
+
 test('DM-only modules are invisible in spaces', async () => {
   const dmOnly = {
     name: 'asana',

@@ -22,8 +22,8 @@ module.exports = {
 
   commands: {
     asana: {
-      description: 'Connect, check or disconnect your Asana account',
-      usage: '/asana connect | status | disconnect',
+      description: 'Connect, check or disconnect your Asana account; list available actions',
+      usage: '/asana connect | status | tools | disconnect',
       async run(ctx, args) {
         const action = (args || 'status').trim().toLowerCase();
         if (action === 'connect') {
@@ -35,7 +35,8 @@ module.exports = {
           return had ? 'Asana disconnected, and Buddy\'s access was revoked at Asana.' : 'Asana was not connected.';
         }
         if (action === 'status') return statusLine(ctx);
-        return 'Usage: `/asana connect`, `/asana status` or `/asana disconnect`.';
+        if (action === 'tools') return toolsSummary(ctx);
+        return 'Usage: `/asana connect`, `/asana status`, `/asana tools` or `/asana disconnect`.';
       },
     },
   },
@@ -54,6 +55,26 @@ module.exports = {
 
   tools: ctx => createAsanaToolset(ctx),
 };
+
+/** Lists what Buddy can do in Asana for this user, split by whether it asks first. */
+async function toolsSummary(ctx) {
+  const toolset = await createAsanaToolset(ctx);
+  if (toolset.unavailable) return 'Asana is not connected. Send `/asana connect` first.';
+  try {
+    const free = [];
+    const gated = [];
+    for (const d of toolset.definitions) (toolset.needsApproval(d.name) ? gated : free).push(`\`${d.name}\``);
+    return [
+      `*Asana actions available to Buddy (${toolset.definitions.length})*`,
+      '',
+      `*Runs without asking* (read-only): ${free.join(', ') || '—'}`,
+      '',
+      `*Asks for your approval first*: ${gated.join(', ') || '—'}`,
+    ].join('\n').slice(0, 3900);
+  } finally {
+    await toolset.close();
+  }
+}
 
 async function statusLine(ctx) {
   const t = await tokens.load(ctx);
