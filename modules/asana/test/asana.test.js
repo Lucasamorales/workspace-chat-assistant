@@ -81,7 +81,7 @@ test('the token can only ever be sent to mcp.asana.com', () => {
 
 test('toolset: not connected → note for Claude; connected → MCP tools with bearer token', async () => {
   const notConnected = await createAsanaToolset(ctxFor());
-  assert.match(notConnected.unavailable, /\/asana connect/);
+  assert.deepEqual(notConnected, { connect: { reason: 'not_connected' } });
 
   const ctx = ctxFor();
   await tokens.saveFromOAuth(ctx, { access_token: 'AT', expires_in: 3600, data: { email: 'robin@example.com' } });
@@ -103,8 +103,37 @@ test('toolset: not connected → note for Claude; connected → MCP tools with b
   assert.deepEqual(await ts.execute('delete_task', {}), { content: 'delete_task done', isError: false });
 });
 
-test('/asana tools lists what runs freely and what needs approval', async () => {
+const withCore = ctx => ({ ...ctx, core: { startOAuth: async () => 'https://oauth.test/auth/asana/start?s=abc' } });
+
+test('not connected: status, tools and connect all offer a Connect button instead of a command', async () => {
+  const ctx = withCore(ctxFor());
+  for (const args of ['connect', 'status', 'tools']) {
+    const reply = await asana.commands.asana.run(ctx, args);
+    assert.deepEqual(reply.buttons, [{ text: 'Connect Asana', url: 'https://oauth.test/auth/asana/start?s=abc' }], args);
+  }
+  assert.deepEqual(await asana.quickActions(ctx), [{ text: 'Connect Asana', url: 'https://oauth.test/auth/asana/start?s=abc' }]);
+  assert.equal(await asana.connected(ctx), false);
+});
+
+test('disconnect asks first, then confirms with a Connect again button', async () => {
+  const ctx = withCore(ctxFor({ fetchImpl: async () => json(200, {}) }));
+  await tokens.saveFromOAuth(ctx, { access_token: 'AT', data: { email: 'robin@example.com' } });
+  assert.equal(await asana.connected(ctx), true);
+
+  const ask = await asana.commands.asana.run(ctx, 'disconnect');
+  assert.deepEqual(ask.buttons.map(b => b.args), ['disconnect confirm', 'status']);
+  assert.equal(await asana.connected(ctx), true, 'asking does not disconnect');
+
+  const done = await asana.commands.asana.run(ctx, 'disconnect confirm');
+  assert.equal(done.title, 'Asana disconnected');
+  assert.equal(done.buttons[0].text, 'Connect again');
+  assert.equal(await asana.connected(ctx), false);
+});
+
+test('access removed on Asana\'s side turns into a Reconnect request, and stored tokens are dropped', async () => {
   const ctx = ctxFor();
-  const notConnected = await asana.commands.asana.run({ ...ctx, core: {} }, 'tools');
-  assert.match(notConnected, /not connected/);
+  await tokens.saveFromOAuth(ctx, { access_token: 'AT', expires_in: 3600, data: { email: 'robin@example.com' } });
+  const ts = await createAsanaToolset(ctx, { connect: async () => { throw Object.assign(new Error('Unauthorized'), { code: 401 }); } });
+  assert.deepEqual(ts, { connect: { reason: 'expired' } });
+  assert.equal(await tokens.load(ctx), null);
 });

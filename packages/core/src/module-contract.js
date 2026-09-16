@@ -27,7 +27,15 @@
  * @property {string}      description     Shown in /help
  * @property {string}      [usage]         e.g. "/asana connect|disconnect"
  * @property {SpaceKind[]} [allowedIn]     Defaults to the module's allowedIn
- * @property {(ctx: ModuleContext, args: string) => Promise<string>} run
+ * @property {(ctx: ModuleContext, args: string) => Promise<Reply>} run
+ *
+ * @typedef {string | {title?: string, text: string, buttons?: Button[]}} Reply
+ *   A string is sent as plain text; an object becomes a card with buttons.
+ *
+ * @typedef {{text: string, url: string} | {text: string, command: string, args?: string, replace?: boolean}} Button
+ *   `url` opens a page. `command` runs a slash command as the person who clicks, exactly as
+ *   if they had typed it (so a button can never do more than typing could). `replace`
+ *   updates the card in place instead of posting a new message.
  *
  * @typedef {object} Toolset               Returned by tools(ctx)
  * @property {{name: string, description?: string, input_schema: object}[]} definitions
@@ -44,7 +52,10 @@
  * @property {'create'|'update'|'delete'|'change'} [effect]   'delete' is shown as "cannot be undone"
  * @property {{label: string, value: string}[]} [fields]      Human-readable; resolve ids to names where possible
  * @property {() => Promise<void>} [close]
- * @property {string} [unavailable]        Instead of tools: a note for Claude, e.g. "not connected"
+ * @property {string} [unavailable]        Instead of tools: a note for Claude, e.g. "service is down"
+ * @property {{reason: 'not_connected'|'expired'}} [connect]
+ *   Instead of tools, for OAuth modules: the user must (re)connect. Core gives Claude a
+ *   "connect account" action and shows the user a Connect button when it is used.
  *
  * @typedef {object} BuddyModule
  * @property {string}      name            Lowercase; also the command, storage, route and settings namespace
@@ -57,6 +68,9 @@
  * @property {(ctx: ModuleContext) => Promise<Toolset|null>} [tools]
  * @property {OAuthSpec}   [oauth]
  * @property {(ctx: ModuleContext) => Promise<string>} [status]
+ * @property {string[]}    [examples]      Example requests shown in the help card
+ * @property {(ctx: ModuleContext) => Promise<Button[]>} [quickActions]   Buttons for the welcome/help cards
+ * @property {(ctx: ModuleContext) => Promise<boolean>} [connected]       OAuth modules: is this user connected?
  *
  * @typedef {object} Attachment
  * @property {string} name
@@ -77,6 +91,7 @@
 const FIELDS = [
   'name', 'description', 'allowedIn', 'settings', 'instructions',
   'commands', 'readAttachment', 'tools', 'oauth', 'status',
+  'examples', 'quickActions', 'connected',
 ];
 const SPACE_KINDS = ['DM', 'SPACE'];
 
@@ -96,8 +111,11 @@ function validateModule(mod, source = 'module') {
   for (const s of mod.settings || []) {
     if (!s.startsWith(prefix)) fail(`setting ${s} must start with ${prefix}`);
   }
-  for (const hook of ['readAttachment', 'tools', 'status']) {
+  for (const hook of ['readAttachment', 'tools', 'status', 'quickActions', 'connected']) {
     if (mod[hook] !== undefined && typeof mod[hook] !== 'function') fail(`${hook} must be a function`);
+  }
+  if (mod.examples !== undefined && !(Array.isArray(mod.examples) && mod.examples.every(e => typeof e === 'string'))) {
+    fail('examples must be an array of strings');
   }
   for (const [cmd, spec] of Object.entries(mod.commands || {})) {
     if (!/^[a-z][a-z0-9-]*$/.test(cmd)) fail(`command "${cmd}" must be lowercase`);

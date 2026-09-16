@@ -3,9 +3,12 @@
 const CACHE_WRITE_MULTIPLIER = 1.25;
 const CACHE_READ_MULTIPLIER = 0.1;
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 class BudgetExceededError extends Error {
-  constructor(capUsd) {
-    super(`Monthly budget of $${capUsd} reached.`);
+  constructor(capUsd, now = new Date()) {
+    const reset = MONTHS[(now.getUTCMonth() + 1) % 12];
+    super(`You've reached this month's limit ($${capUsd}). It resets on 1 ${reset}.`);
     this.expose = true;
   }
 }
@@ -37,7 +40,7 @@ function createUsage({ store, prices, capUsd, now = () => new Date() }) {
       return {
         async get() { return { ...current(await col.get(userId)), capUsd }; },
         async check() {
-          if (current(await col.get(userId)).usd >= capUsd) throw new BudgetExceededError(capUsd);
+          if (current(await col.get(userId)).usd >= capUsd) throw new BudgetExceededError(capUsd, now());
         },
         async record(usage) {
           await col.update(userId, doc => {

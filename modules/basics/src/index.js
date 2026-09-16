@@ -8,12 +8,20 @@ module.exports = {
     help: {
       description: 'What Buddy can do',
       async run(ctx) {
-        const lines = ctx.core.listCommands()
-          .map(c => `• \`${c.usage || `/${c.name}`}\` — ${c.description}`);
+        const examples = ['Ask me anything, the way you would ask a colleague', ...ctx.core.examples()];
         const where = ctx.spaceKind === 'DM'
-          ? 'Just write to me here. Asana works in this DM.'
-          : 'Mention @Buddy to talk to me. Asana only works in a direct message with me.';
-        return [`*Buddy*`, where, '', '*Commands*', ...lines].join('\n');
+          ? ''
+          : '\n\nIn this space, mention me to ask something. Asana only works in a private chat with me.';
+        const commands = ctx.core.listCommands().map(c => c.usage || `/${c.name}`).join(' · ');
+        return {
+          title: 'What Buddy can do',
+          text: `${examples.map(e => `• ${e}`).join('\n')}${where}\n\nPrefer typing? ${commands}`,
+          buttons: [
+            ...(await ctx.core.quickActions()),
+            { text: 'My usage', command: 'usage' },
+            { text: 'Start fresh', command: 'reset' },
+          ],
+        };
       },
     },
 
@@ -30,7 +38,7 @@ module.exports = {
       description: 'Forget this thread\'s conversation',
       async run(ctx) {
         await ctx.core.resetThread();
-        return 'Done — I\'ve forgotten this thread.';
+        return 'Done — I\'ve forgotten this conversation. What would you like to do next?';
       },
     },
 

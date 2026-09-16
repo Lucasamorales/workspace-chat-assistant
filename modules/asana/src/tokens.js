@@ -9,7 +9,8 @@ const REFRESH_MARGIN_MS = 5 * 60 * 1000;
 const DEFAULT_TTL_S = 3600; // Asana access tokens last one hour
 
 const expose = message => Object.assign(new Error(message), { expose: true });
-const notConnected = message => Object.assign(expose(message), { notConnected: true });
+// reason: 'not_connected' (never linked) or 'expired' (was linked, stopped working) — they get different wording.
+const notConnected = (message, reason = 'not_connected') => Object.assign(expose(message), { notConnected: true, reason });
 
 function normalize(resp, previous = {}, now = Date.now()) {
   const user = resp.data || previous.asanaUser || null;
@@ -70,13 +71,13 @@ async function accessToken(ctx, now = Date.now()) {
 
   if (!tokens.refresh_token) {
     await col(ctx).delete(ctx.userId);
-    throw notConnected('Your Asana connection expired.');
+    throw notConnected('Your Asana connection expired.', 'expired');
   }
 
   const res = await postForm(ctx, TOKEN_URL, { grant_type: 'refresh_token', refresh_token: tokens.refresh_token });
   if (res.status === 400 || res.status === 401) {
     await col(ctx).delete(ctx.userId); // refresh token revoked or invalid: force a clean reconnect
-    throw notConnected('Your Asana connection was revoked or expired.');
+    throw notConnected('Your Asana connection was revoked or expired.', 'expired');
   }
   if (!res.ok) throw new Error(`Asana token refresh failed with HTTP ${res.status}`);
 
@@ -102,4 +103,7 @@ async function disconnect(ctx) {
   return Boolean(tokens);
 }
 
-module.exports = { saveFromOAuth, accessToken, disconnect, load, normalize, TOKEN_URL };
+/** Drop stored tokens without calling Asana (they are already rejected there). */
+const forget = ctx => col(ctx).delete(ctx.userId);
+
+module.exports = { saveFromOAuth, accessToken, disconnect, forget, load, normalize, TOKEN_URL };

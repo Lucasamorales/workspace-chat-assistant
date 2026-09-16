@@ -70,7 +70,7 @@ test('usage: cost includes cache pricing and the cap blocks further calls', asyn
   const u = createUsage({ store: createMemoryStore(), prices: { inPerMTok: 2, outPerMTok: 10 }, capUsd: 1 }).forUser('u');
   await u.check();
   await u.record({ input_tokens: 0, output_tokens: 100_000 });
-  await assert.rejects(u.check(), /Monthly budget/);
+  await assert.rejects(u.check(), /reached this month's limit \(\$1\)\. It resets on 1 [A-Z][a-z]{2}\./);
 });
 
 test('threads: capped, start with user, expire after TTL', async () => {

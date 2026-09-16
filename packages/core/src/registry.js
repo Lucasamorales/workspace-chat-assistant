@@ -19,6 +19,12 @@ function withTimeout(promiseFn, ms, label) {
   ]).finally(() => clearTimeout(timer));
 }
 
+function isButton(b) {
+  if (!b || typeof b.text !== 'string' || !b.text) return false;
+  if (typeof b.url === 'string') return b.url.startsWith('https://');
+  return typeof b.command === 'string' && /^[a-z][a-z0-9-]*$/.test(b.command);
+}
+
 /** Fallback when a module can't describe a call: show every parameter so approval is still informed. */
 function genericFields(input) {
   return Object.entries(input && typeof input === 'object' ? input : {}).map(([key, value]) => ({
@@ -80,6 +86,34 @@ function createRegistry({ modules, env = process.env, log, timeouts = {} }) {
       return active(kind).filter(m => m.instructions).map(m => `## ${m.name}\n${m.instructions}`);
     },
 
+    /** Human name for a module, e.g. "Asana". */
+    label(name) {
+      const mod = byName.get(name);
+      if (mod && mod.oauth) return mod.oauth.label;
+      return name.charAt(0).toUpperCase() + name.slice(1);
+    },
+
+    examples(kind) {
+      return active(kind).flatMap(m => m.examples || []);
+    },
+
+    /** Buttons modules offer on the welcome and help cards. Malformed buttons are dropped. */
+    async quickActions(ctxFor, kind) {
+      const buttons = [];
+      for (const mod of active(kind).filter(m => m.quickActions)) {
+        const r = await safe(mod, 'quickActions', () => mod.quickActions(ctxFor(mod)));
+        if (r.ok && Array.isArray(r.value)) buttons.push(...r.value.filter(isButton));
+      }
+      return buttons;
+    },
+
+    async isConnected(ctxFor, name) {
+      const mod = byName.get(name);
+      if (!mod || !mod.connected) return false;
+      const r = await safe(mod, 'connected', () => mod.connected(ctxFor(mod)));
+      return r.ok && r.value === true;
+    },
+
     async statuses(ctxFor, kind) {
       const lines = [];
       for (const mod of active(kind).filter(m => m.status)) {
@@ -108,6 +142,7 @@ function createRegistry({ modules, env = process.env, log, timeouts = {} }) {
       const routes = new Map();
       const closers = [];
       const notes = [];
+      const connectRoutes = new Map();
 
       for (const mod of active(kind).filter(m => m.tools)) {
         const r = await safe(mod, 'tools', () => mod.tools(ctxFor(mod)));
@@ -115,7 +150,24 @@ function createRegistry({ modules, env = process.env, log, timeouts = {} }) {
         const ts = r.value;
         if (!ts) continue;
         if (ts.close) closers.push(() => ts.close());
-        if (ts.unavailable) { notes.push(`${mod.name}: ${ts.unavailable}`); continue; }
+
+        if (ts.connect && mod.oauth) {
+          // Claude decides whether a request needs this service; if so it calls this action
+          // and the user gets a Connect button instead of instructions to type a command.
+          const label = mod.oauth.label;
+          const reason = ts.connect.reason === 'expired' ? 'expired' : 'not_connected';
+          const name = `${mod.name}__connect_account`;
+          definitions.push({
+            name,
+            description: `The user's ${label} account is ${reason === 'expired' ? 'no longer connected (the connection stopped working)' : 'not connected'}. `
+              + `Call this whenever the user's request needs ${label}. Do not answer the request yourself and do not mention commands: `
+              + 'the user will be shown a button to connect, and their request will continue afterwards.',
+            input_schema: { type: 'object', properties: {} },
+          });
+          connectRoutes.set(name, { module: mod.name, label, reason });
+          continue;
+        }
+        if (ts.unavailable || ts.connect) { notes.push(`${mod.name}: ${ts.unavailable || 'not connected.'}`); continue; }
 
         for (const def of ts.definitions || []) {
           const name = `${mod.name}__${def.name}`;
@@ -129,6 +181,10 @@ function createRegistry({ modules, env = process.env, log, timeouts = {} }) {
       return {
         definitions,
         notes,
+        /** {module, label, reason} if this tool is a request to connect an account, else null. */
+        connectionRequest: name => connectRoutes.get(name) || null,
+        /** Module name behind a tool, for progress messages. */
+        moduleOf: name => (routes.get(name) ? routes.get(name).mod.name : null),
         async needsApproval(name, input) {
           const route = routes.get(name);
           if (!route || !route.ts.needsApproval) return true;
@@ -172,4 +228,4 @@ function createRegistry({ modules, env = process.env, log, timeouts = {} }) {
   };
 }
 
-module.exports = { createRegistry, withTimeout };
+module.exports = { createRegistry, withTimeout, isButton };

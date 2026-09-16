@@ -68,13 +68,22 @@ async function createAsanaToolset(ctx, { connect = connectMcp } = {}) {
   try {
     accessToken = await tokens.accessToken(ctx);
   } catch (e) {
-    if (e.notConnected) {
-      return { unavailable: `${e.message} Tell the user to send \`/asana connect\` in this direct message to connect their account.` };
-    }
+    if (e.notConnected) return { connect: { reason: e.reason } };
     throw e;
   }
 
-  const client = await connect(mcpUrl(ctx.settings), accessToken);
+  let client;
+  try {
+    client = await connect(mcpUrl(ctx.settings), accessToken);
+  } catch (e) {
+    // Access removed on Asana's side while our token still looked valid: treat as disconnected
+    // so the user gets a Reconnect button instead of a generic failure.
+    if (e.code === 401 || /\b401\b|unauthori[sz]ed/i.test(String(e.message))) {
+      await tokens.forget(ctx);
+      return { connect: { reason: 'expired' } };
+    }
+    throw e;
+  }
   let tools;
   try {
     tools = await listAllTools(client);

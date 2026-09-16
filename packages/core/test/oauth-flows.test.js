@@ -50,6 +50,6 @@ test('a link for one connector cannot be used for another, forged or expired lin
   await assert.rejects(flows.authorizeUrl({ moduleName: 'other', token, oauth: OAUTH, clientId: 'c' }), /does not match/);
   await assert.rejects(flows.authorizeUrl({ moduleName: 'asana', token: `${token}x`, oauth: OAUTH, clientId: 'c' }), /signature|malformed/);
   await assert.rejects(flows.authorizeUrl({ moduleName: 'asana', token: null, oauth: OAUTH, clientId: 'c' }), /malformed/);
-  now += 11 * 60 * 1000;
+  now += 61 * 60 * 1000;
   await assert.rejects(flows.authorizeUrl({ moduleName: 'asana', token, oauth: OAUTH, clientId: 'c' }), /expired/);
 });

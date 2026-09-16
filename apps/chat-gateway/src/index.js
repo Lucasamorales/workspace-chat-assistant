@@ -18,6 +18,7 @@ const config = core.loadConfig({
   OAUTH_BASE_URL: { type: 'url', required: true },
   BUDDY_MODULES: { type: 'list', required: true },
   BUDDY_ALLOWED_USERS: { type: 'list', required: true },
+  BUDDY_APP_NAME: { default: 'Buddy' },
   ANTHROPIC_API_KEY: { type: 'secret', required: true },
   STATE_SECRET: { type: 'secret', required: true, minLength: 32 },
   KMS_KEY_NAME: { required: true },
@@ -50,6 +51,7 @@ const handleEvent = createEventHandler({
   store,
   log,
   allowedUsers: config.BUDDY_ALLOWED_USERS,
+  appName: config.BUDDY_APP_NAME,
   threads: core.createThreads({ store, maxMessages: config.MAX_HISTORY_MESSAGES, ttlDays: config.THREAD_TTL_DAYS }),
   usage: core.createUsage({
     store,

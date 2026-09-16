@@ -47,8 +47,8 @@ function createOAuthApp({ registry, flows, makeModuleContext, env = process.env,
       res.redirect(302, url);
     } catch (error) {
       log.warn('oauth start rejected', { module: mod.name, reason: error.message });
-      res.status(400).send(page('This link is invalid or has expired',
-        'Go back to Buddy in Google Chat and ask for a new link.'));
+      res.status(400).send(page('This link has expired',
+        `Connect links work once, for 1 hour. Go back to Google Chat and click "Connect ${mod.oauth.label}" again.`));
     }
   });
 
@@ -58,7 +58,7 @@ function createOAuthApp({ registry, flows, makeModuleContext, env = process.env,
 
     if (req.query.error) {
       return res.status(400).send(page(`${mod.oauth.label} was not connected`,
-        'Authorisation was cancelled. You can close this tab.'));
+        `You cancelled the request, so nothing was connected. You can close this tab, or go back to Google Chat and click "Connect ${mod.oauth.label}" to try again.`));
     }
 
     try {
@@ -72,11 +72,12 @@ function createOAuthApp({ registry, flows, makeModuleContext, env = process.env,
       });
       const ctx = makeModuleContext(mod, { userId, userEmail, spaceKind: 'DM' });
       await mod.oauth.saveTokens(ctx, tokenResponse);
-      res.send(page(`${mod.oauth.label} connected`, 'You can close this tab and go back to Google Chat.'));
+      res.send(page(`✅ ${mod.oauth.label} connected`,
+        'You can close this tab. Go back to Google Chat and click "I\'ve connected, continue" to carry on with your request.'));
     } catch (error) {
       log.warn('oauth callback failed', { module: mod.name, reason: error.message });
       res.status(400).send(page(`${mod.oauth.label} was not connected`,
-        error.expose ? error.message : 'This link is invalid, expired or was already used. Ask Buddy for a new one.'));
+        error.expose ? error.message : `This link has expired or was already used. Go back to Google Chat and click "Connect ${mod.oauth.label}" again.`));
     }
   });
 

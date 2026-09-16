@@ -4,14 +4,15 @@
  * - The link is created INSIDE Chat, where Google has verified who is asking. The browser
  *   routes never accept a user id from the URL.
  * - The link carries a signed token pointing at a server-side session that is single-use
- *   and expires after 10 minutes.
+ *   and expires after 1 hour.
  * - PKCE: the code verifier stays on our server, so a stolen authorisation code is useless.
  */
 
 const crypto = require('crypto');
 const { signToken, verifyToken } = require('./signed-token');
 
-const SESSION_TTL_MS = 10 * 60 * 1000;
+// Long enough to click the link later in the day, short enough that old links stop working.
+const SESSION_TTL_MS = 60 * 60 * 1000;
 
 const b64url = buf => buf.toString('base64url');
 

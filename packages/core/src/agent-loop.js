@@ -55,7 +55,7 @@ function combineItems(items) {
   return { content: lines.join('\n\n'), isError: allFailed };
 }
 
-async function drive({ claude, system, toolset, budget, maxSteps, log }, messages, stepsUsed) {
+async function drive({ claude, system, toolset, budget, maxSteps, log, onProgress }, messages, stepsUsed) {
   let steps = stepsUsed;
   while (steps < maxSteps) {
     await budget.check();
@@ -70,6 +70,15 @@ async function drive({ claude, system, toolset, budget, maxSteps, log }, message
     }
 
     const uses = res.content.filter(b => b.type === 'tool_use');
+
+    // A connect request ends the turn: the user connects, then the original request re-runs.
+    const connect = toolset.connectionRequest && uses.map(u => toolset.connectionRequest(u.name)).find(Boolean);
+    if (connect) return { status: 'needs_connection', ...connect, messages };
+
+    if (onProgress) {
+      try { await onProgress(uses.map(u => u.name)); } catch { /* progress is cosmetic */ }
+    }
+
     const results = {};
     const items = [];
     for (const use of uses) {
