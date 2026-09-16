@@ -13,18 +13,26 @@ Creates (safe to re-run): service accounts `buddy-bot`, `buddy-oauth`, `buddy-bu
 KMS key `buddy/tokens`; secrets `buddy-state-secret` (random) and `asana-mcp-client-secret`
 (empty); Artifact Registry repo `buddy` with a cleanup policy; Firestore TTL policies.
 
-## 2. Asana app (needs an Asana admin)
+## 2. Asana app
+
+Any Asana user can create the app. If the workspace restricts third-party apps, an Asana
+admin must approve it.
 
 1. <https://app.asana.com/0/my-apps> → **Create new app** → type **MCP app** (not a regular
-   OAuth app — tokens from regular apps are rejected by Asana's MCP server, which is the
-   error the old bot hit).
+   OAuth app: Asana's MCP server rejects tokens from regular apps).
 2. Redirect URL, exactly: `https://buddy-oauth-000000000000.europe-west1.run.app/auth/asana/callback`
 3. Distribution: your Google Workspace.
-4. Put the **client ID** in `infra/config.env` → `ASANA_CLIENT_ID=`.
-5. Store the **client secret** (use `printf`, not `echo` — a trailing newline breaks it):
-   ```bash
-   printf '%s' 'PASTE_SECRET' | gcloud secrets versions add asana-mcp-client-secret --data-file=- --project=your-gcp-project
+4. Put the **client ID** in `infra/config.env` → `ASANA_CLIENT_ID=`. It is not secret.
+5. Store the **client secret** in Secret Manager from PowerShell. The file is written without
+   a trailing newline (a newline silently breaks the secret) and deleted right after:
+   ```powershell
+   $secure = Read-Host "Asana client secret" -AsSecureString
+   $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
+   [IO.File]::WriteAllText("$env:TEMP\asana-secret.txt", $plain)
+   gcloud secrets create asana-mcp-client-secret --replication-policy=automatic --data-file="$env:TEMP\asana-secret.txt" --project=your-gcp-project
+   Remove-Item "$env:TEMP\asana-secret.txt"
    ```
+   If the secret already exists (e.g. `setup.sh` ran first), use `gcloud secrets versions add asana-mcp-client-secret` instead of `gcloud secrets create`.
 
 ## 3. Deploy
 
