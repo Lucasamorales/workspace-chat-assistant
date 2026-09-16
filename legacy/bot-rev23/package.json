@@ -1,0 +1,13 @@
+{
+  "name": "legacy-chat-bot",
+  "type": "commonjs",
+  "engines": { "node": ">=20" },
+  "scripts": { "start": "node server.js" },
+  "dependencies": {
+    "@google-cloud/firestore": "^7",
+    "express": "^4",
+    "google-auth-library": "^9",
+    "googleapis": "^140",
+    "xlsx": "^0.18"
+  }
+}

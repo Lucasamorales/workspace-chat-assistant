@@ -1,0 +1,14 @@
+{
+  "name": "buddy",
+  "private": true,
+  "engines": { "node": "22.x" },
+  "workspaces": [
+    "packages/*",
+    "modules/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "npm test --workspaces --if-present",
+    "test:module": "npm test --workspace"
+  }
+}
