@@ -1,0 +1,7 @@
+.git
+node_modules
+legacy
+docs
+infra
+**/test
+**/*.md

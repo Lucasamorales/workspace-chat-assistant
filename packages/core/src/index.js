@@ -1,0 +1,17 @@
+module.exports = {
+  ...require('./config'),
+  ...require('./log'),
+  ...require('./store'),
+  ...require('./sealer'),
+  ...require('./signed-token'),
+  ...require('./chat-verify'),
+  ...require('./chat-client'),
+  ...require('./module-contract'),
+  ...require('./registry'),
+  ...require('./agent-loop'),
+  ...require('./usage'),
+  ...require('./threads'),
+  ...require('./oauth-flows'),
+  ...require('./context'),
+  ...require('./claude'),
+};

@@ -4,9 +4,13 @@ Your company's assistant inside Google Chat. Talk to Buddy in a DM, or `@Buddy` 
 Buddy is a small core plus independent **modules** (Asana, files, …). A change to one
 module must never break another.
 
-Status: **rebuild in progress.** The live bot is still Remy's revision 23
-(`legacy-chat-bot`, project `your-gcp-project`); its code is kept read-only in
-`legacy/bot-rev23/` for reference.
+Status: **built and tested locally, not deployed yet.** The live bot is still Remy's
+`legacy-chat-bot`; its code is kept read-only in `legacy/bot-rev23/`.
+
+- How to set up, deploy and verify: [docs/RUNBOOK.md](docs/RUNBOOK.md)
+- Security model: [docs/SECURITY.md](docs/SECURITY.md)
+- Decisions: [docs/decisions/](docs/decisions/)
+- Tests: `npm install && npm test`
 
 ## Layout
 

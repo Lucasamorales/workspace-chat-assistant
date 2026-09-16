@@ -1,0 +1,71 @@
+/**
+ * buddy-bot: the Google Chat endpoint.
+ * Deploy with --no-allow-unauthenticated (only chat@system may invoke) and
+ * --no-cpu-throttling (work continues after the webhook is acknowledged).
+ */
+
+const { Firestore } = require('@google-cloud/firestore');
+const { KeyManagementServiceClient } = require('@google-cloud/kms');
+const { GoogleAuth, OAuth2Client } = require('google-auth-library');
+const { chat: chatApi } = require('@googleapis/chat');
+const core = require('@buddy/core');
+const { createApp } = require('./app');
+const { createEventHandler } = require('./handler');
+
+const config = core.loadConfig({
+  PORT: { type: 'number', default: 8080 },
+  CHAT_AUDIENCE: { type: 'url', required: true },
+  OAUTH_BASE_URL: { type: 'url', required: true },
+  BUDDY_MODULES: { type: 'list', required: true },
+  BUDDY_ALLOWED_USERS: { type: 'list', required: true },
+  ANTHROPIC_API_KEY: { type: 'secret', required: true },
+  STATE_SECRET: { type: 'secret', required: true, minLength: 32 },
+  KMS_KEY_NAME: { required: true },
+  MODEL: { default: 'claude-sonnet-5' },
+  EFFORT: { type: 'enum', values: ['low', 'medium', 'high', 'xhigh', 'max'], default: 'medium' },
+  MONTHLY_USD_CAP: { type: 'number', min: 0, default: 15 },
+  USD_PER_MTOK_IN: { type: 'number', min: 0, required: true },
+  USD_PER_MTOK_OUT: { type: 'number', min: 0, required: true },
+  MAX_HISTORY_MESSAGES: { type: 'number', min: 2, default: 20 },
+  THREAD_TTL_DAYS: { type: 'number', min: 1, default: 30 },
+});
+
+const log = core.createLogger('chat-gateway');
+
+const modules = config.BUDDY_MODULES.map(name => {
+  if (!/^[a-z][a-z0-9]*$/.test(name)) throw new Error(`invalid module name "${name}"`);
+  return require(`@buddy/module-${name}`);
+});
+const registry = core.createRegistry({ modules, log });
+
+const store = core.createFirestoreStore(new Firestore());
+const sealer = core.createKmsSealer({ kmsClient: new KeyManagementServiceClient(), keyName: config.KMS_KEY_NAME });
+const chat = core.createChatClient({
+  api: chatApi({ version: 'v1', auth: new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/chat.bot'] }) }),
+});
+
+const handleEvent = createEventHandler({
+  registry,
+  chat,
+  store,
+  log,
+  allowedUsers: config.BUDDY_ALLOWED_USERS,
+  threads: core.createThreads({ store, maxMessages: config.MAX_HISTORY_MESSAGES, ttlDays: config.THREAD_TTL_DAYS }),
+  usage: core.createUsage({
+    store,
+    capUsd: config.MONTHLY_USD_CAP,
+    prices: { inPerMTok: config.USD_PER_MTOK_IN, outPerMTok: config.USD_PER_MTOK_OUT },
+  }),
+  oauthFlows: core.createOAuthFlows({ store, secret: config.STATE_SECRET, baseUrl: config.OAUTH_BASE_URL }),
+  claude: core.createClaude({ apiKey: config.ANTHROPIC_API_KEY, model: config.MODEL, effort: config.EFFORT }),
+  makeModuleContext: core.createContextFactory({ store, sealer, log }),
+  defer: promise => promise.catch(error => log.error('background task crashed', { error })),
+});
+
+const app = createApp({
+  verifyChat: core.createChatVerifier({ audience: config.CHAT_AUDIENCE, oauthClient: new OAuth2Client() }),
+  handleEvent,
+  log,
+});
+
+app.listen(config.PORT, () => log.info('buddy-bot listening', { port: config.PORT, modules: config.BUDDY_MODULES }));

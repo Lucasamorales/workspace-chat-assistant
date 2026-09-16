@@ -1,0 +1,18 @@
+{
+  "name": "@buddy/oauth-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@buddy/core": "*",
+    "@buddy/module-asana": "*",
+    "express": "^5.2.1",
+    "@google-cloud/firestore": "^9.1.0",
+    "@google-cloud/kms": "^6.1.0",
+    "google-auth-library": "^11.1.0"
+  }
+}

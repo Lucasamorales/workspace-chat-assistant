@@ -1,0 +1,16 @@
+{
+  "name": "@buddy/module-files",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "read-excel-file": "^9.3.10"
+  },
+  "devDependencies": {
+    "@buddy/core": "*",
+    "write-excel-file": "^4.1.1"
+  }
+}
