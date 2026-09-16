@@ -12,6 +12,7 @@ Date: 2026-09-16 · Decided by: Robin (full authority over the project, taken ov
 | 6 | Remy's project Owner role | **Keep.** Add Robin as Owner. |
 | — | ClickUp | **Removed.** Asana only for now. |
 | — | Architecture | Small core + independent modules (see README). |
+| — | App name | **Buddy-Asana** for now, a separate Chat app. Kudos and OOO move in later and it's renamed **Buddy** (see `docs/BACKLOG.md`). |
 | — | Who may use Buddy | **robin@ and remy@example.com only**, enforced both in the Chat app visibility setting and by an allowlist in code. |
 
 ## Consequences

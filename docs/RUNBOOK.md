@@ -52,7 +52,7 @@ only) with every setting, then checks: `buddy-bot` is not public, an anonymous c
 | Field | Value |
 |---|---|
 | Build as Workspace add-on | **unticked** |
-| App name | Buddy |
+| App name | Buddy-Asana (renamed to Buddy at the merge, see `docs/BACKLOG.md` Epic 4) |
 | Functionality | Receive 1:1 messages; Join spaces and group conversations |
 | Connection | HTTP endpoint URL → `https://buddy-bot-000000000000.europe-west1.run.app` |
 | Triggers | Use a common HTTP endpoint URL for all triggers |
