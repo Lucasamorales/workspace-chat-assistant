@@ -17,6 +17,7 @@
     "@buddy/module-basics": "*",
     "@buddy/module-files": "*",
     "@googleapis/chat": "^51.0.0",
-    "@buddy/module-kudos": "*"
+    "@buddy/module-kudos": "*",
+    "@buddy/module-assistant": "*"
   }
 }

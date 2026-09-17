@@ -8,7 +8,7 @@ module.exports = {
     help: {
       description: 'What Buddy can do',
       async run(ctx) {
-        const examples = ['Ask me anything, the way you would ask a colleague', ...ctx.core.examples()];
+        const examples = ctx.core.examples();
         const where = ctx.spaceKind === 'DM'
           ? ''
           : '\n\nIn this space, mention me to ask something. Asana only works in a private chat with me.';

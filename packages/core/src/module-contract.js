@@ -74,6 +74,11 @@
  * @property {string[]}    [settings]      Env vars that MUST be set; each must start with <NAME>_
  * @property {string[]}    [roles]         Role names, e.g. ['admin']; each needs BUDDY_ROLE_<NAME>_<ROLE>
  *   Who may use the module at all is BUDDY_ACCESS_<NAME> (required for every enabled module).
+ * @property {true}        [conversation]  This module lets people chat freely with Claude. Messages
+ *   that no handler or command takes only reach Claude if a conversation module is available
+ *   to that person; otherwise they get a short "here's what I can do" reply, at no cost.
+ * @property {true}        [needsConversation]  The module only works through Claude (tools,
+ *   attachments). It is hidden from people who can't chat, so they never see a dead end.
  * @property {(ctx: ModuleContext, message: ChatMessage) => Promise<Reply|null>} [handleMessage]
  *   Handle a message directly, without Claude (e.g. a kudos vote). Return null to pass.
  *   Modules are asked in BUDDY_MODULES order; the first non-null reply wins.
@@ -106,7 +111,7 @@
 const FIELDS = [
   'name', 'description', 'allowedIn', 'settings', 'instructions',
   'commands', 'readAttachment', 'tools', 'oauth', 'status',
-  'examples', 'quickActions', 'connected', 'roles', 'handleMessage',
+  'examples', 'quickActions', 'connected', 'roles', 'handleMessage', 'conversation', 'needsConversation',
 ];
 const SPACE_KINDS = ['DM', 'SPACE'];
 
@@ -126,6 +131,10 @@ function validateModule(mod, source = 'module') {
   for (const s of mod.settings || []) {
     if (!s.startsWith(prefix)) fail(`setting ${s} must start with ${prefix}`);
   }
+  for (const flag of ['conversation', 'needsConversation']) {
+    if (mod[flag] !== undefined && mod[flag] !== true) fail(`${flag} must be true when set`);
+  }
+  if (mod.conversation && mod.needsConversation) fail('a module cannot both provide and need conversation');
   const roles = mod.roles || [];
   if (!Array.isArray(roles) || !roles.every(r => typeof r === 'string' && /^[a-z]+$/.test(r))) {
     fail('roles must be an array of lowercase words');

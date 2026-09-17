@@ -272,6 +272,11 @@ function createEventHandler(deps) {
           return;
         }
       }
+      // Claude chat is a permission (the assistant module): without it, point to what they can use.
+      if (!registry.canConverse(scopeOf(base))) {
+        await postReply(base, await whatICanDo(base));
+        return;
+      }
       messageName = await chat.postText(base.space, base.thread, '_Buddy is thinking…_');
       const budget = usage.forUser(base.userId);
       await budget.check();
@@ -545,15 +550,35 @@ function createEventHandler(deps) {
     return {};
   }
 
+  /** Free reply for people who can't chat with Claude: only what's actually available to them. */
+  async function whatICanDo(base) {
+    const scope = scopeOf(base);
+    const examples = registry.examples(scope);
+    const actions = await registry.quickActions(contextsFor(base), scope);
+    const help = registry.findCommand('help', scope) ? [{ text: 'What can you do?', command: 'help' }] : [];
+    return {
+      title: 'Here\'s what I can help with',
+      text: examples.length ? examples.map(e => `• ${e}`).join('\n') : 'There\'s nothing I can help you with here yet.',
+      buttons: [...actions, ...help],
+    };
+  }
+
   async function onAddedToSpace(event) {
     const base = baseOf(event);
+    const scope = scopeOf(base);
     if (base.spaceKind !== 'DM') {
-      return { text: `Hi, I'm ${appName}. Mention me to ask something. Some features, like Asana, only work in a private chat with me.` };
+      return {
+        text: registry.canConverse(scope)
+          ? `Hi, I'm ${appName}. Mention me to ask something. Some features, like Asana, only work in a private chat with me.`
+          : `Hi, I'm ${appName}. Mention me when you need me here.`,
+      };
     }
-    const actions = await registry.quickActions(contextsFor(base), scopeOf(base));
+    const actions = await registry.quickActions(contextsFor(base), scope);
     return renderReply({
       title: `Hi, I'm ${appName} 👋`,
-      text: 'Ask me anything, send me a file, or let me help with your work tools.',
+      text: registry.canConverse(scope)
+        ? 'Ask me anything, send me a file, or let me help with your work tools.'
+        : 'Here are the things I can help you with.',
       buttons: [{ text: 'What can you do?', command: 'help' }, ...actions],
     });
   }

@@ -10,6 +10,8 @@ module.exports = {
   name: 'asana',
   description: 'Work in Asana as yourself',
   allowedIn: ['DM'],
+  // Asana is only reachable through Claude, so it's hidden from people who can't chat.
+  needsConversation: true,
   settings: ['ASANA_CLIENT_ID', 'ASANA_CLIENT_SECRET'],
 
   instructions: [

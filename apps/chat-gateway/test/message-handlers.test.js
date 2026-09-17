@@ -23,7 +23,7 @@ function votesModule(seen) {
   };
 }
 
-function setup() {
+function setup({ assistantAccess = 'robin@example.com' } = {}) {
   const store = core.createMemoryStore();
   const posted = [];
   const seen = [];
@@ -36,17 +36,19 @@ function setup() {
     replaceWithCard: async () => {},
     download: async () => Buffer.alloc(0),
   };
-  const modules = [require('@buddy/module-basics'), votesModule(seen)];
+  const modules = [require('@buddy/module-basics'), votesModule(seen), require('@buddy/module-asana'), require('@buddy/module-assistant')];
   const access = core.createAccessPolicy({
     modules,
     env: {
       BUDDY_ACCESS_BASICS: 'domain:example.com',
       BUDDY_ACCESS_VOTES: 'robin@example.com',
       BUDDY_ROLE_VOTES_ADMIN: 'robin@example.com',
+      BUDDY_ACCESS_ASANA: 'domain:example.com',
+      BUDDY_ACCESS_ASSISTANT: assistantAccess,
     },
   });
   const handle = createEventHandler({
-    registry: core.createRegistry({ modules, env: {}, log: quietLog, access }),
+    registry: core.createRegistry({ modules, env: { ASANA_CLIENT_ID: 'x', ASANA_CLIENT_SECRET: 'y' }, log: quietLog, access }),
     chat, store, log: quietLog, appName: 'Buddy',
     allowedUsers: ['domain:example.com'],
     threads: core.createThreads({ store, maxMessages: 20, ttlDays: 30 }),
@@ -94,13 +96,35 @@ test('a handled message never reaches Claude, and the module gets mentions, spac
   assert.deepEqual(message.sender, { userId: 'users/111', email: 'robin@example.com', displayName: 'Robin' });
 });
 
-test('someone without access to the module goes to Claude, and cannot see or run its commands', async () => {
-  const { handle, settle, seen, claudeCount } = setup();
-  await handle(voteEvent(EVE));
+const chatEvent = (user, text, space = { name: 'spaces/dm-eve', spaceType: 'DIRECT_MESSAGE' }) => ({
+  type: 'MESSAGE', user, space,
+  message: { name: `${space.name}/messages/${Math.random().toString(36)}`, text, argumentText: text, annotations: [] },
+});
+
+test('without assistant access: no Claude, no cost — a card with what they can use instead', async () => {
+  const { handle, settle, posted, seen, claudeCount } = setup();
+  await handle(voteEvent(EVE)); // Eve has no access to the votes module either
+  await handle(chatEvent(EVE, 'write me a poem'));
   await settle();
+
   assert.equal(seen.length, 0);
+  assert.equal(claudeCount(), 0);
+  assert.equal(posted.at(-1).text, 'Here\'s what I can help with');
+  assert.doesNotMatch(JSON.stringify(posted.at(-1).cardsV2), /Ask me anything|Asana/, 'no chat or Claude-only features offered');
+
+  const cmd = await handle(chatEvent(EVE, '/votes-audit'));
+  assert.match(cmd.text, /I don't know \/votes-audit/);
+  const asana = await handle(chatEvent(EVE, '/asana connect'));
+  assert.match(asana.text, /I don't know \/asana/, 'Asana needs Claude, so it is hidden without assistant access');
+});
+
+test('with assistant access, ordinary messages go to Claude and Claude-only modules appear', async () => {
+  const { handle, settle, claudeCount } = setup({ assistantAccess: 'domain:example.com' });
+  await handle(chatEvent(EVE, 'write me a poem'));
+  await settle();
   assert.equal(claudeCount(), 1);
 
-  const res = await handle({ ...voteEvent(EVE), message: { ...voteEvent(EVE).message, text: '/votes-audit', argumentText: '/votes-audit', annotations: [] } });
-  assert.match(res.text, /I don't know \/votes-audit/);
+  const help = await handle(chatEvent(EVE, '/help'));
+  assert.match(JSON.stringify(help.cardsV2), /Ask me anything/);
+  assert.match(JSON.stringify(help.cardsV2), /Connect Asana/);
 });

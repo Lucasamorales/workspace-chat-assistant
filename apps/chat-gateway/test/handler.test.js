@@ -65,7 +65,7 @@ function setup(claudeScript, { connected = true, reason, now } = {}) {
   const script = [...claudeScript];
   const claudeCalls = [];
   const state = { connected, reason };
-  const registry = core.createRegistry({ modules: [require('@buddy/module-basics'), tasksModule(executed, state)], env: {}, log: quietLog });
+  const registry = core.createRegistry({ modules: [require('@buddy/module-basics'), tasksModule(executed, state), require('@buddy/module-assistant')], env: {}, log: quietLog });
   const handle = createEventHandler({
     registry, chat, store, log: quietLog, appName: 'Buddy-Asana',
     allowedUsers: ['robin@example.com', 'remy@example.com'],

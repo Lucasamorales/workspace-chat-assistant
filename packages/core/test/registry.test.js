@@ -180,3 +180,29 @@ test('message handlers: first taker wins, nulls pass through, failures reply ins
   assert.match(r.reply, /something went wrong with Boom/);
   assert.equal(await make([pass]).handleMessage(() => ({}), { text: 'hi' }, DM), null);
 });
+
+test('conversation is a permission: Claude-only modules disappear for people who cannot chat', async () => {
+  const assistant = { name: 'assistant', conversation: true, examples: ['Ask me anything'] };
+  const asana = { name: 'asana', needsConversation: true, commands: { asana: { description: 'd', run: async () => 'ok' } }, examples: ['asana'] };
+  const kudos = { name: 'kudos', examples: ['give kudos'], handleMessage: async () => null };
+  const access = createAccessPolicy({
+    modules: [assistant, asana, kudos],
+    env: {
+      BUDDY_ACCESS_ASSISTANT: 'robin@example.com',
+      BUDDY_ACCESS_ASANA: 'domain:example.com',
+      BUDDY_ACCESS_KUDOS: 'domain:example.com',
+    },
+  });
+  const reg = make([assistant, asana, kudos], {}, access);
+  const as = user => ({ kind: 'DM', user });
+
+  assert.equal(reg.canConverse(as(ROBIN)), true);
+  assert.deepEqual(reg.examples(as(ROBIN)), ['Ask me anything', 'asana', 'give kudos']);
+
+  assert.equal(reg.canConverse(as(EVE)), false);
+  assert.deepEqual(reg.examples(as(EVE)), ['give kudos'], 'asana is hidden even though Eve has asana access');
+  assert.equal(reg.findCommand('asana', as(EVE)), null);
+
+  assert.throws(() => validateModule({ name: 'x', conversation: true, needsConversation: true }), /cannot both provide and need/);
+  assert.throws(() => validateModule({ name: 'x', conversation: 'yes' }), /conversation must be true/);
+});

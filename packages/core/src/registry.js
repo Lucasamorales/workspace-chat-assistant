@@ -67,11 +67,19 @@ function createRegistry({ modules, env = process.env, log, timeouts = {}, access
   const allowedHere = (list, kind) => (list || ['DM', 'SPACE']).includes(kind);
   // With a policy, a scope without a user sees nothing: a caller that forgets the user fails closed.
   const mayUse = (mod, scope) => !access || Boolean(scope.user && access.canUse(mod.name, scope.user));
-  const visible = (mod, scope) => allowedHere(mod.allowedIn, scope.kind) && mayUse(mod, scope);
+  const reachable = (mod, scope) => allowedHere(mod.allowedIn, scope.kind) && mayUse(mod, scope);
+  /** Can this person chat with Claude here? Only if some conversation module is reachable for them. */
+  const canConverse = scope => [...byName.values()].some(m => m.conversation && reachable(m, scope));
+  // Modules that only work through Claude are hidden from people who can't chat.
+  const visible = (mod, scope) => reachable(mod, scope) && (!mod.needsConversation || canConverse(scope));
   const active = scope => [...byName.values()].filter(m => visible(m, scope));
 
   const hasRole = (mod, role, user) => (access ? access.hasRole(mod.name, role, user) : false);
-  const commandVisible = (c, scope) => mayUse(c.module, scope)
+  // For commands the place is judged separately (so "/asana" in a space can say "use a DM"),
+  // so the conversation requirement only asks whether the person can chat anywhere.
+  const conversationOk = (mod, scope) => !mod.needsConversation
+    || canConverse({ ...scope, kind: 'DM' }) || canConverse({ ...scope, kind: 'SPACE' });
+  const commandVisible = (c, scope) => mayUse(c.module, scope) && conversationOk(c.module, scope)
     && allowedHere(c.spec.allowedIn || c.module.allowedIn, scope.kind)
     && (!c.spec.role || hasRole(c.module, c.spec.role, scope.user));
 
@@ -88,6 +96,7 @@ function createRegistry({ modules, env = process.env, log, timeouts = {}, access
     modules: () => [...byName.values()],
     get: name => byName.get(name),
     hasRole: (name, role, user) => (byName.has(name) ? hasRole(byName.get(name), role, user) : false),
+    canConverse,
 
     /**
      * Look up a slash command for this person and place.
@@ -96,7 +105,7 @@ function createRegistry({ modules, env = process.env, log, timeouts = {}, access
      */
     findCommand(name, scope) {
       const found = commands.get(name);
-      if (!found || !mayUse(found.module, scope)) return null;
+      if (!found || !mayUse(found.module, scope) || !conversationOk(found.module, scope)) return null;
       if (found.spec.role && !hasRole(found.module, found.spec.role, scope.user)) return null;
       return { ...found, placeAllowed: allowedHere(found.spec.allowedIn || found.module.allowedIn, scope.kind) };
     },
