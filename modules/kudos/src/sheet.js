@@ -94,11 +94,25 @@ function createKudosSheet({ sheetsApi, spreadsheetId, tab = 'Raw Data' }) {
       const meta = await sheetsApi.spreadsheets.get({ spreadsheetId, fields: 'properties(title,timeZone),sheets(properties(title))' });
       const tabs = (meta.data.sheets || []).map(s => s.properties.title);
       let headers = [];
+      let canWrite = null;
       if (tabs.includes(tab)) {
         const res = await sheetsApi.spreadsheets.values.get({ spreadsheetId, range: range('A1:H1') });
         headers = (res.data.values && res.data.values[0]) || [];
+        // Reading works for Viewers too, so prove edit access by writing A1's own content back
+        // unchanged (as a formula if it is one). Only a 403 means "not allowed".
+        try {
+          const a1 = await sheetsApi.spreadsheets.values.get({ spreadsheetId, range: range('A1'), valueRenderOption: 'FORMULA' });
+          const current = (a1.data.values && a1.data.values[0] && a1.data.values[0][0]) ?? '';
+          await sheetsApi.spreadsheets.values.update({
+            spreadsheetId, range: range('A1'), valueInputOption: 'USER_ENTERED', requestBody: { values: [[current]] },
+          });
+          canWrite = true;
+        } catch (error) {
+          if (Number(error.status || error.code || (error.response && error.response.status)) !== 403) throw error;
+          canWrite = false;
+        }
       }
-      return { title: meta.data.properties.title, timeZone: meta.data.properties.timeZone, tabs, hasTab: tabs.includes(tab), headers };
+      return { title: meta.data.properties.title, timeZone: meta.data.properties.timeZone, tabs, hasTab: tabs.includes(tab), headers, canWrite };
     },
   };
 }

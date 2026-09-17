@@ -26,9 +26,11 @@ function fakeSheets(initialRows = []) {
         get: async params => {
           calls.push(['get', params]);
           if (params.range.endsWith('A1:H1')) return { data: { values: [['Date', 'Voter', 'Value', 'Nominee', 'Space', 'Raw Text']] } };
+          if (params.range.endsWith('!A1')) return { data: { values: [['Date']] } };
           return { data: { values: rows } };
         },
         append: async params => { calls.push(['append', params]); rows.push(...params.requestBody.values); return { data: {} }; },
+        update: async params => { calls.push(['update', params]); return { data: {} }; },
       },
       get: async () => ({ data: { properties: { title: 'Kudos TEST', timeZone: 'America/Argentina/Buenos_Aires' }, sheets: [{ properties: { title: 'Raw Data' } }] } }),
     },
@@ -176,4 +178,18 @@ test('Sheet access problems give a specific, actionable reply instead of a gener
       `${c.op} ${c.status}`,
     );
   }
+});
+
+test('/kudos check proves write access without changing the Sheet', async () => {
+  const { mod, sheets, ctxFor } = setup();
+  const run = (user, args, message) => mod.commands.kudos.run({ ...ctxFor(user), message }, args);
+
+  const ok = await run(ROBIN, 'check', vote(ROBIN, '/kudos check'));
+  assert.match(ok.text, /✅ Buddy can add rows/);
+  const update = sheets.calls.find(c => c[0] === 'update')[1];
+  assert.deepEqual([update.range, update.requestBody.values], ["'Raw Data'!A1", [['Date']]], 'A1 is written back with its own content');
+
+  sheets.spreadsheets.values.update = async () => { throw Object.assign(new Error('forbidden'), { status: 403 }); };
+  const viewer = await run(ROBIN, 'check', vote(ROBIN, '/kudos check'));
+  assert.match(viewer.text, /can read the Sheet but can't add rows/);
 });

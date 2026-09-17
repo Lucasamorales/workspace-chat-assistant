@@ -133,6 +133,8 @@ function createKudosModule({ sheetsApi, now = () => new Date() } = {}) {
       const info = await sheetFor(ctx).describe();
       lines.push(`✅ Sheet reachable: "${info.title}" (time zone ${info.timeZone})`);
       lines.push(info.hasTab ? `✅ Tab "${ctx.settings.KUDOS_RAW_TAB || 'Raw Data'}" found. Headers: ${info.headers.join(' | ') || '(none)'}` : `❌ Tab "${ctx.settings.KUDOS_RAW_TAB || 'Raw Data'}" not found. Tabs: ${info.tabs.join(', ')}`);
+      if (info.canWrite === true) lines.push('✅ Buddy can add rows.');
+      if (info.canWrite === false) lines.push('❌ Buddy can read the Sheet but can\'t add rows. Share it as Editor with the buddy-bot service account.');
     } catch (error) {
       ctx.log.warn('kudos sheet check failed', { error });
       lines.push('❌ Buddy can\'t open the Kudos Sheet. Share it as Editor with the buddy-bot service account.');
