@@ -4,7 +4,21 @@
  * the signed, single-use session created inside Chat.
  */
 
+const path = require('path');
 const express = require('express');
+
+// Buddy's pixel-art images for Google Chat cards and the app avatar. Chat can only show images
+// from a public HTTPS address, so this public service serves them — only these exact files.
+const ASSET_DIR = path.join(__dirname, '..', 'public');
+const ASSETS = new Map([
+  ['buddy-avatar.png', 'image/png'],
+  ['buddy-neutral.png', 'image/png'],
+  ['buddy-happy.png', 'image/png'],
+  ['buddy-thinking.png', 'image/png'],
+  ['buddy-idle.gif', 'image/gif'],
+  ['buddy-talking.gif', 'image/gif'],
+  ['buddy-thinking.gif', 'image/gif'],
+]);
 
 const SECURITY_HEADERS = {
   'Cache-Control': 'no-store',
@@ -33,6 +47,13 @@ function createOAuthApp({ registry, flows, makeModuleContext, env = process.env,
     return mod && mod.oauth ? mod : null;
   };
   const single = v => (typeof v === 'string' ? v : null); // reject ?s=a&s=b style arrays
+
+  app.get('/assets/:file', (req, res) => {
+    const type = ASSETS.get(req.params.file);
+    if (!type) return res.status(404).send(page('Not found', ''));
+    res.set({ 'Content-Type': type, 'Cache-Control': 'public, max-age=86400', 'Cross-Origin-Resource-Policy': 'cross-origin' });
+    res.sendFile(path.join(ASSET_DIR, req.params.file));
+  });
 
   app.get('/auth/:module/start', async (req, res) => {
     const mod = oauthModule(req.params.module);

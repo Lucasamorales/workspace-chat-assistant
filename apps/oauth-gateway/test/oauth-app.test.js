@@ -69,3 +69,17 @@ test('repeated query parameters are rejected', () => withServer(async ({ flows, 
   const res = await get(`/auth/asana/start?s=${encodeURIComponent(s)}&s=${encodeURIComponent(s)}`);
   assert.equal(res.status, 400);
 }));
+
+test('serves only Buddy\'s listed images, as cacheable public files', () => withServer(async ({ get }) => {
+  const png = await get('/assets/buddy-happy.png');
+  assert.equal(png.status, 200);
+  assert.equal(png.headers.get('content-type'), 'image/png');
+  assert.match(png.headers.get('cache-control'), /public/);
+  const bytes = Buffer.from(await png.arrayBuffer());
+  assert.equal(bytes.subarray(1, 4).toString(), 'PNG');
+
+  assert.equal((await get('/assets/buddy-thinking.gif')).headers.get('content-type'), 'image/gif');
+  assert.equal((await get('/assets/..%2Fsrc%2Fapp.js')).status, 404);
+  assert.equal((await get('/assets/app.js')).status, 404);
+  assert.equal((await get('/assets/')).status, 404);
+}));
