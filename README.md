@@ -133,11 +133,24 @@ legacy/bot-rev23/     the original bot, kept read-only for reference
 
 ## Modules
 
-| Module | Where | Needs | Stores |
-|---|---|---|---|
-| **basics** | DMs + spaces | — | — |
-| **files** | DMs + spaces | — | nothing (files are processed in memory) |
-| **asana** | DMs only | `ASANA_CLIENT_ID`, `ASANA_CLIENT_SECRET` | `m_asana__tokens` (KMS-encrypted) |
+| Module | Where | Who (default) | Needs | Stores |
+|---|---|---|---|---|
+| **basics** | DMs + spaces | everyone @example.com | — | — |
+| **files** | DMs + spaces | everyone @example.com | — | nothing (files are processed in memory) |
+| **asana** | DMs only | robin@, remy@ | `ASANA_CLIENT_ID`, `ASANA_CLIENT_SECRET` | `m_asana__tokens` (KMS-encrypted) |
+| **kudos** | *planned* ([backlog](docs/BACKLOG.md)) | everyone; admins for audits | | |
+
+### Permissions per module
+Two layers, both checked on every event:
+
+1. **`ALLOWED_USERS`** — who may talk to Buddy at all.
+2. **`BUDDY_ACCESS_<MODULE>`** — who may use each module. **Required** for every enabled module;
+   the service refuses to start without it. Modules can also declare **roles** (e.g. Kudos
+   `admin`), configured as `BUDDY_ROLE_<MODULE>_<ROLE>`.
+
+Entries are comma-separated: `robin@example.com`, `users/<chat id>`, or
+`domain:example.com`. A module (or role-restricted command) someone can't use is
+invisible to them: no commands, no help entries, no tools for Claude, no message handling.
 
 Rules every module follows:
 
@@ -157,7 +170,8 @@ Full model: [docs/SECURITY.md](docs/SECURITY.md). Highlights:
 
 - **Only Google Chat can reach the bot** (Cloud Run IAM + JWT issuer/audience check). The only
   public service serves the connect pages.
-- **Allowlist** checked on every event, on top of the Chat app's visibility setting.
+- **Allowlist and per-module access** checked on every event, on top of the Chat app's
+  visibility setting. Missing access rules stop the service instead of opening a module up.
 - **Connect links** are created for the verified Chat user, signed, single-use, expire after
   1 hour, use PKCE, and the Asana account's email must match the Google account.
 - **Asana tokens** are encrypted with Cloud KMS and bound to module + user; they are only ever
@@ -233,7 +247,9 @@ in Secret Manager and are mounted at deploy time.
 
 | Setting | Where | Purpose |
 |---|---|---|
-| `ALLOWED_USERS` | config.env | Emails allowed to use Buddy (also set Chat app visibility) |
+| `ALLOWED_USERS` | config.env | Who may talk to Buddy at all (also set Chat app visibility) |
+| `BUDDY_ACCESS_<MODULE>` | config.env | Who may use each module (required per enabled module) |
+| `BUDDY_ROLE_<MODULE>_<ROLE>` | config.env | Who holds a module role, e.g. `BUDDY_ROLE_KUDOS_ADMIN` |
 | `APP_NAME` | config.env | Name used in messages; match the Chat app name |
 | `MODULES` | config.env | Enabled modules, e.g. `basics,files,asana` |
 | `MODEL`, `EFFORT` | config.env | Claude model and effort level |
@@ -258,7 +274,9 @@ Services validate settings at startup and refuse to run with a missing or malfor
 
    | Hook | Use it for |
    |---|---|
-   | `commands` | Slash commands; replies can be text or a card with buttons |
+   | `commands` | Slash commands; replies can be text or a card with buttons; `role` restricts a command |
+   | `handleMessage` | Handle a message directly without Claude (e.g. a kudos vote); gets mentions, space and sender |
+   | `roles` | Module roles such as `admin`; check with `ctx.hasRole('admin')` |
    | `tools(ctx)` | Actions Claude can take; mark read-only ones with `needsApproval → false` |
    | `split`, `describe` | Break batches into approvable items and describe them in plain language |
    | `readAttachment` | Understand uploaded files |
@@ -269,7 +287,8 @@ Services validate settings at startup and refuse to run with a missing or malfor
 
 3. Add tests in `modules/<name>/test/`.
 4. Add the package as a dependency of the gateways that load it, add the name to `MODULES` in
-   `infra/config.env`, and pass any new settings/secrets in `infra/deploy.sh`.
+   `infra/config.env` together with its `BUDDY_ACCESS_<NAME>` rule (and any role rules), and pass
+   any new settings/secrets in `infra/deploy.sh`.
 5. `npm test`, commit, deploy.
 
 ---

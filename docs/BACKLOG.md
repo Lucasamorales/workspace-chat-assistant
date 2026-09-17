@@ -38,10 +38,10 @@ Status: `todo` · `doing` · `done` · `blocked`
 
 | # | Item | Acceptance |
 |---|---|---|
-| R1 | **Per-module access**: `ACCESS_<MODULE>` in `infra/config.env` accepting emails, `domain:example.com`, later groups | A user without access never sees the module: not in `/help`, commands refused, tools never sent to Claude. Tests prove it |
+| R1 | ✅ **Per-module access + roles**: `BUDDY_ACCESS_<MODULE>` (required) and `BUDDY_ROLE_<MODULE>_<ROLE>` in `infra/config.env`, accepting emails, `users/<id>`, `domain:example.com` | A user without access never sees the module: not in `/help`, commands refused, tools never sent to Claude. Tests prove it |
 | R2 | **Assistant module**: move free-form Claude chat out of core into `modules/assistant` with its own access rule | People without assistant access get a short help reply; no Claude cost |
-| R3 | **Direct message handlers**: contract hook `handleMessage(ctx, message)` for exact matches (kudos votes, "who is out") that run before Claude | Ordered, one winner, isolated like other hooks |
-| R4 | **Mentions in context**: pass Chat user mentions (name, email, id) to modules | Kudos can read tagged teammates without parsing text |
+| R3 | ✅ **Direct message handlers**: contract hook `handleMessage(ctx, message)` for exact matches (kudos votes, "who is out") that run before Claude | Ordered, one winner, isolated like other hooks |
+| R4 | ✅ **Mentions in context**: pass Chat user mentions (name, email, id) to modules | Kudos can read tagged teammates without parsing text |
 | R5 | **Google API access pattern**: modules read/write Sheets and Calendar as `buddy-bot`, with only specific files/calendars shared to it. No keys | Documented in `docs/ADDING_A_MODULE.md` |
 | R6 | **Scheduled jobs hook** `onSchedule(ctx)` driven by Cloud Scheduler → authenticated endpoint | Not needed for Kudos/OOO; enables future reminders/digests |
 | R7 | **Module template + test helpers** (`@buddy/core/testing`: fake ctx, fake store, fake event) | New module = copy folder, add to config, tests run standalone |
