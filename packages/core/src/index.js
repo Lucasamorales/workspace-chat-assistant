@@ -8,6 +8,7 @@ module.exports = {
   ...require('./chat-client'),
   ...require('./module-contract'),
   ...require('./registry'),
+  ...require('./access'),
   ...require('./agent-loop'),
   ...require('./usage'),
   ...require('./threads'),

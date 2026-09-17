@@ -37,7 +37,9 @@ const modules = config.BUDDY_MODULES.map(name => {
   if (!/^[a-z][a-z0-9]*$/.test(name)) throw new Error(`invalid module name "${name}"`);
   return require(`@buddy/module-${name}`);
 });
-const registry = core.createRegistry({ modules, log });
+// Fails startup if any enabled module lacks BUDDY_ACCESS_<MODULE> or a declared role rule.
+const access = core.createAccessPolicy({ modules });
+const registry = core.createRegistry({ modules, log, access });
 
 const store = core.createFirestoreStore(new Firestore());
 const sealer = core.createKmsSealer({ kmsClient: new KeyManagementServiceClient(), keyName: config.KMS_KEY_NAME });
@@ -60,7 +62,7 @@ const handleEvent = createEventHandler({
   }),
   oauthFlows: core.createOAuthFlows({ store, secret: config.STATE_SECRET, baseUrl: config.OAUTH_BASE_URL }),
   claude: core.createClaude({ apiKey: config.ANTHROPIC_API_KEY, model: config.MODEL, effort: config.EFFORT }),
-  makeModuleContext: core.createContextFactory({ store, sealer, log }),
+  makeModuleContext: core.createContextFactory({ store, sealer, log, access }),
   defer: promise => promise.catch(error => log.error('background task crashed', { error })),
 });
 

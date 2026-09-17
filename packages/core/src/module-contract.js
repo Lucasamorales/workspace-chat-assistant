@@ -20,6 +20,7 @@
  * @property {Record<string,string>} settings           Only env vars starting with <NAME>_
  * @property {object}    log               Structured logger tagged with the module name
  * @property {typeof fetch} fetch
+ * @property {(role: string) => boolean} hasRole   e.g. ctx.hasRole('admin'); roles come from BUDDY_ROLE_<MODULE>_<ROLE>
  * @property {object}    [core]            Chat-only helpers:
  *   listCommands(), moduleStatuses(), usage(), resetThread(), startOAuth()
  *
@@ -27,7 +28,16 @@
  * @property {string}      description     Shown in /help
  * @property {string}      [usage]         e.g. "/asana connect|disconnect"
  * @property {SpaceKind[]} [allowedIn]     Defaults to the module's allowedIn
+ * @property {string}      [role]          Only people with this module role can see or run it
  * @property {(ctx: ModuleContext, args: string) => Promise<Reply>} run
+ *
+ * @typedef {object} ChatMessage           What handleMessage receives
+ * @property {string} text                 Full text, including any @mentions (indexes refer to this)
+ * @property {string} argumentText         Text with the leading @Buddy mention removed
+ * @property {{userId: string, displayName: string, type: string, startIndex: number, length: number}[]} mentions
+ *   Human and bot mentions from Chat's own annotations; userId is "users/123"
+ * @property {{name: string, displayName: string, kind: SpaceKind}} space
+ * @property {{userId: string, email: string, displayName: string}} sender
  *
  * @typedef {string | {title?: string, text: string, buttons?: Button[]}} Reply
  *   A string is sent as plain text; an object becomes a card with buttons.
@@ -62,6 +72,11 @@
  * @property {string}      [description]
  * @property {SpaceKind[]} [allowedIn]     Where the module is active. Default ['DM', 'SPACE']
  * @property {string[]}    [settings]      Env vars that MUST be set; each must start with <NAME>_
+ * @property {string[]}    [roles]         Role names, e.g. ['admin']; each needs BUDDY_ROLE_<NAME>_<ROLE>
+ *   Who may use the module at all is BUDDY_ACCESS_<NAME> (required for every enabled module).
+ * @property {(ctx: ModuleContext, message: ChatMessage) => Promise<Reply|null>} [handleMessage]
+ *   Handle a message directly, without Claude (e.g. a kudos vote). Return null to pass.
+ *   Modules are asked in BUDDY_MODULES order; the first non-null reply wins.
  * @property {string}      [instructions]  Static text appended to Claude's system prompt
  * @property {Record<string, CommandSpec>} [commands]
  * @property {(ctx: ModuleContext, attachment: Attachment) => Promise<object[]|null>} [readAttachment]
@@ -91,7 +106,7 @@
 const FIELDS = [
   'name', 'description', 'allowedIn', 'settings', 'instructions',
   'commands', 'readAttachment', 'tools', 'oauth', 'status',
-  'examples', 'quickActions', 'connected',
+  'examples', 'quickActions', 'connected', 'roles', 'handleMessage',
 ];
 const SPACE_KINDS = ['DM', 'SPACE'];
 
@@ -111,7 +126,14 @@ function validateModule(mod, source = 'module') {
   for (const s of mod.settings || []) {
     if (!s.startsWith(prefix)) fail(`setting ${s} must start with ${prefix}`);
   }
-  for (const hook of ['readAttachment', 'tools', 'status', 'quickActions', 'connected']) {
+  const roles = mod.roles || [];
+  if (!Array.isArray(roles) || !roles.every(r => typeof r === 'string' && /^[a-z]+$/.test(r))) {
+    fail('roles must be an array of lowercase words');
+  }
+  for (const [cmd, spec] of Object.entries(mod.commands || {})) {
+    if (spec && spec.role !== undefined && !roles.includes(spec.role)) fail(`command "${cmd}" uses undeclared role "${spec.role}"`);
+  }
+  for (const hook of ['readAttachment', 'tools', 'status', 'quickActions', 'connected', 'handleMessage']) {
     if (mod[hook] !== undefined && typeof mod[hook] !== 'function') fail(`${hook} must be a function`);
   }
   if (mod.examples !== undefined && !(Array.isArray(mod.examples) && mod.examples.every(e => typeof e === 'string'))) {

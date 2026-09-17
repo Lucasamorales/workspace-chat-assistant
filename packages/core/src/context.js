@@ -2,7 +2,7 @@
 
 const { scopeStore } = require('./store');
 
-function createContextFactory({ store, sealer, env = process.env, log, fetchImpl = fetch }) {
+function createContextFactory({ store, sealer, env = process.env, log, fetchImpl = fetch, access = null }) {
   const settingsFor = mod => {
     const prefix = `${mod.name.toUpperCase()}_`;
     return Object.freeze(Object.fromEntries(Object.entries(env).filter(([k]) => k.startsWith(prefix))));
@@ -25,6 +25,10 @@ function createContextFactory({ store, sealer, env = process.env, log, fetchImpl
       settings: settingsFor(mod),
       log: log.child(mod.name),
       fetch: fetchImpl,
+      hasRole: role => Boolean(access && access.hasRole(mod.name, role, {
+        email: base.userEmail,
+        id: base.userId ? `users/${base.userId}` : undefined,
+      })),
       ...(core ? { core } : {}),
     });
   };

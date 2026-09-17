@@ -2,6 +2,10 @@
  * Loads modules and is the only place core talks to them. Every call into a module goes
  * through `safe()`, which adds a timeout and turns exceptions into values, so one broken
  * module cannot break the others.
+ *
+ * Most methods take a `scope` — {kind: 'DM'|'SPACE', user: {email, id}} — and only consider
+ * modules that are allowed in that place AND that this person may use. A module a person
+ * can't use is invisible to them: no commands, no help entries, no tools, no handlers.
  */
 
 const { validateModule } = require('./module-contract');
@@ -19,6 +23,11 @@ function withTimeout(promiseFn, ms, label) {
   ]).finally(() => clearTimeout(timer));
 }
 
+function labelOf(mod) {
+  if (mod.oauth) return mod.oauth.label;
+  return mod.name.charAt(0).toUpperCase() + mod.name.slice(1);
+}
+
 function isButton(b) {
   if (!b || typeof b.text !== 'string' || !b.text) return false;
   if (typeof b.url === 'string') return b.url.startsWith('https://');
@@ -33,7 +42,11 @@ function genericFields(input) {
   }));
 }
 
-function createRegistry({ modules, env = process.env, log, timeouts = {} }) {
+/**
+ * @param opts.access  access policy (see access.js). Omitted only in tests and in the OAuth
+ *                     service, which never acts on behalf of a Chat event.
+ */
+function createRegistry({ modules, env = process.env, log, timeouts = {}, access = null }) {
   const limits = { ...DEFAULT_TIMEOUTS, ...timeouts };
   const byName = new Map();
   const commands = new Map();
@@ -51,8 +64,16 @@ function createRegistry({ modules, env = process.env, log, timeouts = {} }) {
   }
   if (missing.length) throw new Error(`Missing module settings: ${missing.join(', ')}`);
 
-  const allowed = (list, kind) => (list || ['DM', 'SPACE']).includes(kind);
-  const active = kind => [...byName.values()].filter(m => allowed(m.allowedIn, kind));
+  const allowedHere = (list, kind) => (list || ['DM', 'SPACE']).includes(kind);
+  // With a policy, a scope without a user sees nothing: a caller that forgets the user fails closed.
+  const mayUse = (mod, scope) => !access || Boolean(scope.user && access.canUse(mod.name, scope.user));
+  const visible = (mod, scope) => allowedHere(mod.allowedIn, scope.kind) && mayUse(mod, scope);
+  const active = scope => [...byName.values()].filter(m => visible(m, scope));
+
+  const hasRole = (mod, role, user) => (access ? access.hasRole(mod.name, role, user) : false);
+  const commandVisible = (c, scope) => mayUse(c.module, scope)
+    && allowedHere(c.spec.allowedIn || c.module.allowedIn, scope.kind)
+    && (!c.spec.role || hasRole(c.module, c.spec.role, scope.user));
 
   async function safe(mod, label, fn, ms = limits.hook) {
     try {
@@ -66,66 +87,87 @@ function createRegistry({ modules, env = process.env, log, timeouts = {} }) {
   return {
     modules: () => [...byName.values()],
     get: name => byName.get(name),
+    hasRole: (name, role, user) => (byName.has(name) ? hasRole(byName.get(name), role, user) : false),
 
-    /** Look up a slash command. Returns null if unknown. */
-    findCommand(name) {
+    /**
+     * Look up a slash command for this person and place.
+     * Returns null if unknown or not available to them (so it looks the same as unknown),
+     * or {…, placeAllowed: false} when they could use it, just not here.
+     */
+    findCommand(name, scope) {
       const found = commands.get(name);
-      if (!found) return null;
-      const where = found.spec.allowedIn || found.module.allowedIn;
-      return { ...found, allowedIn: kind => allowed(where, kind) };
+      if (!found || !mayUse(found.module, scope)) return null;
+      if (found.spec.role && !hasRole(found.module, found.spec.role, scope.user)) return null;
+      return { ...found, placeAllowed: allowedHere(found.spec.allowedIn || found.module.allowedIn, scope.kind) };
     },
 
-    listCommands(kind) {
-      return [...commands].filter(([, c]) => allowed(c.spec.allowedIn || c.module.allowedIn, kind))
+    listCommands(scope) {
+      return [...commands].filter(([, c]) => commandVisible(c, scope))
         .map(([name, c]) => ({ name, module: c.module.name, description: c.spec.description, usage: c.spec.usage }));
     },
 
     runCommand: (found, ctx, args) => safe(found.module, `command.${ctx.commandName}`, () => found.spec.run(ctx, args)),
 
-    instructions(kind) {
-      return active(kind).filter(m => m.instructions).map(m => `## ${m.name}\n${m.instructions}`);
+    instructions(scope) {
+      return active(scope).filter(m => m.instructions).map(m => `## ${m.name}\n${m.instructions}`);
     },
 
     /** Human name for a module, e.g. "Asana". */
-    label(name) {
-      const mod = byName.get(name);
-      if (mod && mod.oauth) return mod.oauth.label;
-      return name.charAt(0).toUpperCase() + name.slice(1);
-    },
+    label: name => labelOf(byName.get(name) || { name }),
 
-    examples(kind) {
-      return active(kind).flatMap(m => m.examples || []);
+    examples(scope) {
+      return active(scope).flatMap(m => m.examples || []);
     },
 
     /** Buttons modules offer on the welcome and help cards. Malformed buttons are dropped. */
-    async quickActions(ctxFor, kind) {
+    async quickActions(ctxFor, scope) {
       const buttons = [];
-      for (const mod of active(kind).filter(m => m.quickActions)) {
+      for (const mod of active(scope).filter(m => m.quickActions)) {
         const r = await safe(mod, 'quickActions', () => mod.quickActions(ctxFor(mod)));
         if (r.ok && Array.isArray(r.value)) buttons.push(...r.value.filter(isButton));
       }
       return buttons;
     },
 
-    async isConnected(ctxFor, name) {
+    async isConnected(ctxFor, name, scope) {
       const mod = byName.get(name);
-      if (!mod || !mod.connected) return false;
+      if (!mod || !mod.connected || !mayUse(mod, scope)) return false;
       const r = await safe(mod, 'connected', () => mod.connected(ctxFor(mod)));
       return r.ok && r.value === true;
     },
 
-    async statuses(ctxFor, kind) {
+    async statuses(ctxFor, scope) {
       const lines = [];
-      for (const mod of active(kind).filter(m => m.status)) {
+      for (const mod of active(scope).filter(m => m.status)) {
         const r = await safe(mod, 'status', () => mod.status(ctxFor(mod)));
         lines.push(r.ok ? String(r.value) : `${mod.name}: unavailable right now`);
       }
       return lines;
     },
 
+    /**
+     * Offers a message to modules that handle messages directly, in configured order.
+     * Returns {module, reply} for the first taker, or null so the message goes to Claude.
+     * A module that fails after claiming nothing still ends here with a friendly reply,
+     * rather than silently falling through to Claude with a half-done action.
+     */
+    async handleMessage(ctxFor, message, scope) {
+      for (const mod of active(scope).filter(m => m.handleMessage)) {
+        const r = await safe(mod, 'handleMessage', () => mod.handleMessage(ctxFor(mod), message));
+        if (!r.ok) {
+          return {
+            module: mod.name,
+            reply: r.error.expose ? r.error.message : `Sorry, something went wrong with ${labelOf(mod)}. Please try again.`,
+          };
+        }
+        if (r.value) return { module: mod.name, reply: r.value };
+      }
+      return null;
+    },
+
     /** First module that understands the attachment wins. Always returns content blocks. */
-    async readAttachment(ctxFor, attachment, kind) {
-      for (const mod of active(kind).filter(m => m.readAttachment)) {
+    async readAttachment(ctxFor, attachment, scope) {
+      for (const mod of active(scope).filter(m => m.readAttachment)) {
         const r = await safe(mod, 'readAttachment', () => mod.readAttachment(ctxFor(mod), attachment));
         if (!r.ok) {
           const why = r.error.expose ? `: ${r.error.message}` : '.';
@@ -137,14 +179,14 @@ function createRegistry({ modules, env = process.env, log, timeouts = {} }) {
     },
 
     /** Collects every active module's tools into one namespaced toolset for Claude. */
-    async buildToolset(ctxFor, kind) {
+    async buildToolset(ctxFor, scope) {
       const definitions = [];
       const routes = new Map();
       const closers = [];
       const notes = [];
       const connectRoutes = new Map();
 
-      for (const mod of active(kind).filter(m => m.tools)) {
+      for (const mod of active(scope).filter(m => m.tools)) {
         const r = await safe(mod, 'tools', () => mod.tools(ctxFor(mod)));
         if (!r.ok) { notes.push(`${mod.name}: temporarily unavailable. Tell the user if they ask for it.`); continue; }
         const ts = r.value;

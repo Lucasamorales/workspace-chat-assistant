@@ -4,7 +4,7 @@
  */
 
 const crypto = require('crypto');
-const { runLoop, resumeLoop, executeApprovedItem, Anthropic } = require('@buddy/core');
+const { runLoop, resumeLoop, executeApprovedItem, parseRule, Anthropic } = require('@buddy/core');
 const {
   ACTIONS, approvalCard, connectCard, noticeCard, renderReply, simpleCard, updateMessage, newMessage,
 } = require('./cards');
@@ -37,6 +37,18 @@ function spaceKindOf(space = {}) {
   return space.spaceType === 'DIRECT_MESSAGE' || space.type === 'DM' || space.singleUserBotDm ? 'DM' : 'SPACE';
 }
 
+/** @mentions from Chat's own annotations; indexes refer to message.text. */
+const mentionsOf = msg => (msg.annotations || [])
+  .filter(a => a.type === 'USER_MENTION' && a.userMention && a.userMention.user && a.userMention.user.name)
+  .map(a => ({
+    userId: String(a.userMention.user.name),
+    displayName: String(a.userMention.user.displayName || ''),
+    type: String(a.userMention.user.type || 'HUMAN'),
+    startIndex: Number(a.startIndex) || 0,
+    length: Number(a.length) || 0,
+  }))
+  .sort((a, b) => a.startIndex - b.startIndex);
+
 /** Chat attachment → the minimal metadata needed to download it again later. */
 const attachmentMeta = att => ({
   name: att.contentName,
@@ -53,12 +65,13 @@ function createEventHandler(deps) {
   const events = store.collection('core__events');
   const pendingCol = store.collection('core__pending');
   const requests = store.collection('core__requests');
-  const allowed = new Set(allowedUsers.map(u => u.toLowerCase()));
+  // Who may talk to Buddy at all; each module then has its own BUDDY_ACCESS_<MODULE> rule.
+  const allowed = parseRule(allowedUsers.join(','), 'BUDDY_ALLOWED_USERS');
   const privateOnly = `For privacy, this only works in a private chat with me. Open a chat with ${appName} and ask there.`;
 
   function isAllowed(user) {
     if (!user || user.type === 'BOT') return false;
-    return allowed.has(String(user.email || '').toLowerCase()) || allowed.has(String(user.name || '').toLowerCase());
+    return allowed({ email: user.email, id: user.name });
   }
 
   function baseOf(event) {
@@ -81,14 +94,20 @@ function createEventHandler(deps) {
     space: r.space, thread: r.thread, threadKey: r.threadKey, timeZone: r.timeZone || null,
   });
 
+  /** Who is asking and where: decides which modules, commands and tools exist for them. */
+  const scopeOf = base => ({
+    kind: base.spaceKind,
+    user: { email: base.userEmail, id: base.userId ? `users/${base.userId}` : '' },
+  });
+
   const expired = record => new Date(record.expireAt).getTime() < now();
 
   function contextsFor(base) {
     return mod => makeModuleContext(mod, base, {
-      listCommands: () => registry.listCommands(base.spaceKind),
-      moduleStatuses: () => registry.statuses(contextsFor(base), base.spaceKind),
-      examples: () => registry.examples(base.spaceKind),
-      quickActions: () => registry.quickActions(contextsFor(base), base.spaceKind),
+      listCommands: () => registry.listCommands(scopeOf(base)),
+      moduleStatuses: () => registry.statuses(contextsFor(base), scopeOf(base)),
+      examples: () => registry.examples(scopeOf(base)),
+      quickActions: () => registry.quickActions(contextsFor(base), scopeOf(base)),
       usage: () => usage.forUser(base.userId).get(),
       resetThread: () => threads.reset(base.threadKey),
       startOAuth: () => startOAuth(base, mod.name),
@@ -103,13 +122,13 @@ function createEventHandler(deps) {
     return oauthFlows.createLink({ userId: base.userId, userEmail: base.userEmail, moduleName });
   }
 
-  function systemFor(kind, notes) {
-    const where = kind === 'DM'
+  function systemFor(scope, notes) {
+    const where = scope.kind === 'DM'
       ? 'You are in a private direct message with the user.'
       : 'You are in a shared space: everyone in it can read your replies. Some features, like Asana, only work in a '
         + `private chat; if someone asks for them, tell them to open a private chat with ${appName}.`;
     return [
-      { type: 'text', text: [BASE_PROMPT, where, ...registry.instructions(kind)].join('\n\n') },
+      { type: 'text', text: [BASE_PROMPT, where, ...registry.instructions(scope)].join('\n\n') },
       { type: 'text', text: [`Today is ${new Date(now()).toISOString().slice(0, 10)}.`, ...notes.map(n => `- ${n}`)].join('\n') },
     ];
   }
@@ -178,7 +197,7 @@ function createEventHandler(deps) {
   }
 
   async function withToolset(base, fn) {
-    const toolset = await registry.buildToolset(contextsFor(base), base.spaceKind);
+    const toolset = await registry.buildToolset(contextsFor(base), scopeOf(base));
     try {
       return await fn(toolset);
     } finally {
@@ -232,9 +251,26 @@ function createEventHandler(deps) {
     await chat.replaceText(messageName, base.space, base.thread, reply);
   }
 
-  async function converse(base, request) {
+  async function postReply(base, reply) {
+    const body = renderReply(reply);
+    if (body.cardsV2) await chat.postCard(base.space, base.thread, body.text, body.cardsV2);
+    else await chat.postText(base.space, base.thread, body.text);
+  }
+
+  /**
+   * @param message  the original Chat message, for modules that handle messages directly.
+   *                 Omitted for "Try again" / "continue", which always go to Claude.
+   */
+  async function converse(base, request, message) {
     let messageName;
     try {
+      if (message) {
+        const handled = await registry.handleMessage(contextsFor(base), message, scopeOf(base));
+        if (handled) {
+          await postReply(base, handled.reply);
+          return;
+        }
+      }
       messageName = await chat.postText(base.space, base.thread, '_Buddy is thinking…_');
       const budget = usage.forUser(base.userId);
       await budget.check();
@@ -250,7 +286,7 @@ function createEventHandler(deps) {
             if (!att.resourceName) throw expose('this file can no longer be downloaded');
             return chat.download(att.resourceName, Math.min(maxBytes, MAX_FILE_BYTES));
           },
-        }, base.spaceKind));
+        }, scopeOf(base)));
       }
       blocks.push({ type: 'text', text: request.text || 'Please look at the attached file(s).' });
       const history = await threads.load(base.threadKey);
@@ -259,7 +295,7 @@ function createEventHandler(deps) {
         let shown = '';
         const result = await runLoop({
           claude, toolset, budget, log,
-          system: systemFor(base.spaceKind, toolset.notes),
+          system: systemFor(scopeOf(base), toolset.notes),
           messages: [...history, { role: 'user', content: blocks }],
           onProgress: async names => {
             const labels = [...new Set(names.map(n => toolset.moduleOf(n)).filter(Boolean))].map(m => registry.label(m));
@@ -336,7 +372,7 @@ function createEventHandler(deps) {
         const result = await resumeLoop({
           claude, toolset, log,
           budget: usage.forUser(base.userId),
-          system: systemFor(base.spaceKind, toolset.notes),
+          system: systemFor(scopeOf(base), toolset.notes),
           saved: JSON.parse(record.loop),
           items: record.items,
         });
@@ -425,7 +461,7 @@ function createEventHandler(deps) {
     if (response) return response;
     const requestBase = baseOfRecord(record);
 
-    if (!(await registry.isConnected(contextsFor(requestBase), moduleName))) {
+    if (!(await registry.isConnected(contextsFor(requestBase), moduleName, scopeOf(requestBase)))) {
       const url = await startOAuth(requestBase, moduleName);
       return updateMessage(connectCard({
         label, reason: 'not_connected', url, requestId: String(params.requestId), module: moduleName,
@@ -468,9 +504,10 @@ function createEventHandler(deps) {
 
   async function runCommand(base, name, args) {
     if (!/^[a-z][a-z0-9-]*$/.test(name)) return 'Send /help to see what I can do.';
-    const found = registry.findCommand(name);
+    // Commands someone may not use look exactly like unknown ones.
+    const found = registry.findCommand(name, scopeOf(base));
     if (!found) return `I don't know /${name}. Send /help to see what I can do.`;
-    if (!found.allowedIn(base.spaceKind)) return privateOnly;
+    if (!found.placeAllowed) return privateOnly;
     const ctx = { ...contextsFor(base)(found.module), commandName: name };
     const r = await registry.runCommand(found, ctx, args);
     if (r.ok) return r.value || 'Done.';
@@ -494,7 +531,14 @@ function createEventHandler(deps) {
     const command = /^\/([a-z][a-z0-9-]*)(?:\s+([\s\S]*))?$/i.exec(text);
     if (command) return renderReply(await runCommand(base, command[1].toLowerCase(), (command[2] || '').trim()));
 
-    defer(converse(base, { text, attachments: (msg.attachment || []).map(attachmentMeta) }));
+    const chatMessage = {
+      text: String(msg.text || ''),
+      argumentText: String(msg.argumentText !== undefined ? msg.argumentText : msg.text || ''),
+      mentions: mentionsOf(msg),
+      space: { name: base.space, displayName: String(event.space.displayName || ''), kind: base.spaceKind },
+      sender: { userId: String(event.user.name || ''), email: base.userEmail, displayName: String(event.user.displayName || '') },
+    };
+    defer(converse(base, { text, attachments: (msg.attachment || []).map(attachmentMeta) }, chatMessage));
     return {};
   }
 
@@ -503,7 +547,7 @@ function createEventHandler(deps) {
     if (base.spaceKind !== 'DM') {
       return { text: `Hi, I'm ${appName}. Mention me to ask something. Some features, like Asana, only work in a private chat with me.` };
     }
-    const actions = await registry.quickActions(contextsFor(base), 'DM');
+    const actions = await registry.quickActions(contextsFor(base), scopeOf(base));
     return renderReply({
       title: `Hi, I'm ${appName} 👋`,
       text: 'Ask me anything, send me a file, or let me help with your work tools.',
