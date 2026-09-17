@@ -10,7 +10,7 @@
 const VALUES = [
   { name: 'Own it', pattern: /\bown(?:s|ed|ing)?\s*it\b/i },
   { name: 'Think big', pattern: /\b(?:think(?:s|ing)?|thought)\s*big\b/i },
-  { name: 'Go beyond', pattern: /\b(?:go(?:es|ing)?|went|gone)\s*(?:above\s+and\s+)?beyond\b/i },
+  { name: 'Go beyond', pattern: /\b(?:go(?:es|ing)?|went|gone)\s*(?:above\s*(?:and|&|n)\s*)?beyond\b/i },
   { name: 'Be curious', pattern: /\bcurio(?:us|sity)\b/i },
 ];
 

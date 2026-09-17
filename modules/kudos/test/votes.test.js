@@ -26,6 +26,7 @@ test('values: the forms people write are recognised', () => {
     'for owning it': 'Own it', 'she owned it': 'Own it', 'owns it every day': 'Own it', '#ownit': 'Own it',
     'thinking big': 'Think big', 'thought big on this': 'Think big', 'think big': 'Think big',
     'going beyond': 'Go beyond', 'went above and beyond': 'Go beyond', 'goes beyond': 'Go beyond',
+    'going above & beyond': 'Go beyond', 'went above n beyond': 'Go beyond',
     'being curious': 'Be curious', 'so much curiosity': 'Be curious',
   };
   for (const [text, value] of Object.entries(cases)) assert.equal(extractValue(text), value, text);
@@ -43,6 +44,11 @@ test('which messages count as kudos attempts', () => {
   assert.equal(looksLikeKudos(msg('@Buddy summarise what @Eve said')), false, 'normal requests go to Claude');
   assert.equal(looksLikeKudos(msg('@Buddy what does think big mean?')), false);
   assert.equal(looksLikeKudos(msg('@Buddy kudos for thinking big')), true, 'forgot to tag someone: answer with a hint');
+  assert.deepEqual(
+    nominationsFrom(msg('@Buddy id like to give a kudos to @Eve for going above and beyond')).map(n => [n.name, n.value]),
+    [['Eve', 'Go beyond']],
+    'natural phrasing works',
+  );
 });
 
 test('each nominee gets the value written after their name, or the shared one', () => {
