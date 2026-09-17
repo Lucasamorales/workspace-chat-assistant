@@ -124,6 +124,7 @@ modules/
   basics/              /help /usage /status /reset
   files/               attachments → content Claude can read
   asana/               Asana via MCP: connect, tools, approval descriptions
+  kudos/               kudos votes → Kudos Google Sheet, policy limits, admin setup commands
 infra/                 setup, deploy and decommission scripts; config.env; Cloud Build
 docs/                  runbook, security model, backlog, decisions
 legacy/bot-rev23/     the original bot, kept read-only for reference
