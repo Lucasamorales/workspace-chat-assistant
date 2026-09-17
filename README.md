@@ -121,6 +121,7 @@ packages/
     src/store.js         storage interface (Firestore in prod, memory in tests)
     …                    config validation, logging, usage/budget, threads, Chat client
 modules/
+  assistant/           free-form Claude chat, as a permission (no code of its own)
   basics/              /help /usage /status /reset
   files/               attachments → content Claude can read
   asana/               Asana via MCP: connect, tools, approval descriptions
@@ -136,9 +137,10 @@ legacy/bot-rev23/     the original bot, kept read-only for reference
 
 | Module | Where | Who (default) | Needs | Stores |
 |---|---|---|---|---|
+| **assistant** | DMs + spaces | robin@, remy@ | — | — (free-form chat with Claude; this rule decides who can chat) |
 | **basics** | DMs + spaces | everyone @example.com | — | — |
-| **files** | DMs + spaces | everyone @example.com | — | nothing (files are processed in memory) |
-| **asana** | DMs only | robin@, remy@ | `ASANA_CLIENT_ID`, `ASANA_CLIENT_SECRET` | `m_asana__tokens` (KMS-encrypted) |
+| **files** | DMs + spaces | everyone @example.com (needs assistant) | — | nothing (files are processed in memory) |
+| **asana** | DMs only | robin@, remy@ (needs assistant) | `ASANA_CLIENT_ID`, `ASANA_CLIENT_SECRET` | `m_asana__tokens` (KMS-encrypted) |
 | **kudos** | spaces (votes), DMs (`/kudos`) | pilot: robin@, remy@; admins for setup commands | `KUDOS_SHEET_ID`, `KUDOS_SPACES` | appends to the Kudos Google Sheet; leadership list in `m_kudos__settings` |
 
 ### Permissions per module
@@ -152,6 +154,11 @@ Two layers, both checked on every event:
 Entries are comma-separated: `robin@example.com`, `users/<chat id>`, or
 `domain:example.com`. A module (or role-restricted command) someone can't use is
 invisible to them: no commands, no help entries, no tools for Claude, no message handling.
+
+**Chatting with Claude is itself a permission** — `BUDDY_ACCESS_ASSISTANT`. People without it can
+still use modules that don't need Claude (Kudos votes, commands); any other message gets a free
+"here's what I can help with" card. Modules that only work through Claude (Asana, files) are
+marked `needsConversation` and are hidden from them.
 
 Rules every module follows:
 
@@ -278,6 +285,7 @@ Services validate settings at startup and refuse to run with a missing or malfor
    | `commands` | Slash commands; replies can be text or a card with buttons; `role` restricts a command |
    | `handleMessage` | Handle a message directly without Claude (e.g. a kudos vote); gets mentions, space and sender |
    | `roles` | Module roles such as `admin`; check with `ctx.hasRole('admin')` |
+   | `needsConversation` | Set to `true` if the module only works through Claude, so people without assistant access don't see it |
    | `tools(ctx)` | Actions Claude can take; mark read-only ones with `needsApproval → false` |
    | `split`, `describe` | Break batches into approvable items and describe them in plain language |
    | `readAttachment` | Understand uploaded files |

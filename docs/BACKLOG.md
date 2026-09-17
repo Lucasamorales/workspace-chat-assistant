@@ -39,7 +39,7 @@ Status: `todo` · `doing` · `done` · `blocked`
 | # | Item | Acceptance |
 |---|---|---|
 | R1 | ✅ **Per-module access + roles**: `BUDDY_ACCESS_<MODULE>` (required) and `BUDDY_ROLE_<MODULE>_<ROLE>` in `infra/config.env`, accepting emails, `users/<id>`, `domain:example.com` | A user without access never sees the module: not in `/help`, commands refused, tools never sent to Claude. Tests prove it |
-| R2 | **Assistant module**: move free-form Claude chat out of core into `modules/assistant` with its own access rule | People without assistant access get a short help reply; no Claude cost |
+| R2 | ✅ **Assistant module**: free-form Claude chat is the `assistant` module with its own access rule (`BUDDY_ACCESS_ASSISTANT`); Claude-only modules marked `needsConversation` | People without assistant access get a free "here's what I can help with" card; no Claude cost |
 | R3 | ✅ **Direct message handlers**: contract hook `handleMessage(ctx, message)` for exact matches (kudos votes, "who is out") that run before Claude | Ordered, one winner, isolated like other hooks |
 | R4 | ✅ **Mentions in context**: pass Chat user mentions (name, email, id) to modules | Kudos can read tagged teammates without parsing text |
 | R5 | **Google API access pattern**: modules read/write Sheets and Calendar as `buddy-bot`, with only specific files/calendars shared to it. No keys | Documented in `docs/ADDING_A_MODULE.md` |
@@ -88,7 +88,7 @@ R6 (scheduled jobs) and Chat dialogs are built together with K8–K9, their firs
 
 | # | Item | Acceptance |
 |---|---|---|
-| C1 | Decide who gets the assistant (free-form Claude) | Decision recorded in `docs/decisions/` |
+| C1 | Decide who gets the assistant (free-form Claude): set `BUDDY_ACCESS_ASSISTANT` | Decision recorded in `docs/decisions/` |
 | C2 | Deploy with kudos + ooo + asana + assistant, per-module access configured | `deploy.sh` checks pass |
 | C3 | Rename Chat app **Buddy-Asana → Buddy**; visibility whole company (code enforces module access) | Asana still limited to its list; verified with a non-listed user |
 | C4 | Add new Buddy to every space where the old one lives; remove the old one | Kudos space works end to end |
