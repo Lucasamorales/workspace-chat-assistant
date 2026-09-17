@@ -138,8 +138,9 @@ function renderFields(fields) {
  * @param opts.expiresAt  Date the request expires
  * @param opts.timeZone   the user's IANA time zone, if Chat provided it
  * @param opts.requestId  saved original message, so an expired card can offer "Try again"
+ * @param opts.finished   Buddy has finished its follow-up, so the header stops saying it's working
  */
-function approvalCard(pendingId, items, { expiresAt, timeZone, requestId } = {}) {
+function approvalCard(pendingId, items, { expiresAt, timeZone, requestId, finished = false } = {}) {
   const total = items.length;
   const pending = items.filter(it => it.state === 'pending').length;
   const ids = { pendingId, requestId };
@@ -178,7 +179,7 @@ function approvalCard(pendingId, items, { expiresAt, timeZone, requestId } = {})
 
   const cardHeader = pending
     ? header('Quick check before I make changes', total > 1 ? `${total} changes to look at` : '1 change to look at', 'thinking')
-    : header('All sorted!', 'Just finishing up…', 'talking');
+    : header('All sorted!', finished ? 'Done' : 'Just finishing up…', finished ? 'happy' : 'talking');
 
   return {
     text: 'Quick check before I make changes.',

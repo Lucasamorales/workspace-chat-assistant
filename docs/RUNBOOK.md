@@ -77,7 +77,7 @@ In a DM with Buddy:
 - [ ] "What are my tasks due this week?" → answer, **no** approval card (read-only)
 - [ ] `/asana tools` lists actions split into "runs without asking" and "asks for approval"
 - [ ] "Create a task called Buddy test" → card shows Task title / Description / Due date / Assignee by name → **Cancel** → nothing created
-- [ ] "Create two tasks A and B" → one section per task → **Approve** A, **Cancel** B → only A exists; Buddy summarises
+- [ ] "Create two tasks A and B" → one section per task → **Approve** A, **Cancel** B → only A exists; no "finishing up" message; the card header ends on **All sorted! · Done** and Buddy adds at most one short line (or something new, like a link)
 - [ ] "Create tasks C and D" → **Approve all** → both exist; clicking again changes nothing
 - [ ] "Move task A's due date to Friday" → card says "changes something that already exists" (not "can't be undone")
 - [ ] "Delete the task A" → card says "can't be undone" → Approve → gone
@@ -117,7 +117,7 @@ Checklist (in the test space unless noted):
 - [ ] Chat app shows the pixel avatar (Avatar URL set in the console)
 - [ ] `hello` in a DM → reply in Buddy's voice ("Hey…", Toni-isms now and then)
 - [ ] A review card shows thinking Buddy in the header and an orange **Approve** button
-- [ ] Do Buddy's gears **move** on the review card? Yes → GIFs work in Chat. No → first frame only (fine; see BACKLOG V2)
+- [ ] Buddy's gears **move** on the review card (confirmed 2026-09-17, BACKLOG V2)
 - [ ] Asana connect page (browser) shows Buddy, black border and orange accent
 
 ## 6. After Buddy is verified: remove the old bot

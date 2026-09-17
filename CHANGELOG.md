@@ -34,6 +34,12 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
   mentions, space and sender.
 
 ### Fixed
+- **No double "done" after approvals.** Buddy no longer posts a separate "Sure thing, finishing up…"
+  message, and Claude doesn't repeat the results the approval card already shows: it only adds
+  something new (a link, a next step, another approval), otherwise one short line. The card header
+  switches from "Just finishing up…" to "Done" when Buddy has finished, so it never looks like it's
+  still working. A second approval card that comes up afterwards is posted as its own message.
+  Approvals, buttons and Asana actions are unchanged.
 - Kudos: "above & beyond" and "above n beyond" count as Go beyond.
 - Kudos: Sheet access problems (Viewer share, missing Sheet or tab, Google busy) now explain what
   to do instead of "something went wrong".

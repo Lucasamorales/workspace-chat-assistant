@@ -119,15 +119,38 @@ function createEventHandler(deps) {
     return oauthFlows.createLink({ userId: base.userId, userEmail: base.userEmail, moduleName });
   }
 
-  function systemFor(scope, notes) {
+  function systemFor(scope, notes, extra = []) {
     const where = scope.kind === 'DM'
       ? 'You are in a private direct message with the user.'
       : 'You are in a shared space: everyone in it can read your replies. Some features, like Asana, only work in a '
         + `private chat; if someone asks for them, tell them to open a private chat with ${appName}.`;
     return [
       { type: 'text', text: [BASE_PROMPT, where, ...registry.instructions(scope)].join('\n\n') },
-      { type: 'text', text: [`Today is ${new Date(now()).toISOString().slice(0, 10)}.`, ...notes.map(n => `- ${n}`)].join('\n') },
+      { type: 'text', text: [`Today is ${new Date(now()).toISOString().slice(0, 10)}.`, ...notes.map(n => `- ${n}`), ...extra].join('\n') },
     ];
+  }
+
+  // After an approval the card already shows every result, so Claude only adds what's new.
+  const AFTER_APPROVAL = 'The user has just decided on the changes shown on the approval card, and that card already '
+    + 'shows each result (done, skipped or failed). Do not repeat or list those results. Reply only with something new: '
+    + 'a link, a next step, a problem, or the next part of the request. If there is nothing new, reply with one short '
+    + 'line of at most six words.';
+
+  /** Replace a placeholder message, or post a new one when there is none. Returns the message name. */
+  async function showText(base, messageName, text) {
+    if (messageName) {
+      await chat.replaceText(messageName, base.space, base.thread, text);
+      return messageName;
+    }
+    return chat.postText(base.space, base.thread, text);
+  }
+
+  async function showCard(base, messageName, card) {
+    if (messageName) {
+      await chat.replaceWithCard(messageName, card.text, card.cardsV2);
+      return messageName;
+    }
+    return chat.postCard(base.space, base.thread, card.text, card.cardsV2);
   }
 
   /* ---------- saved requests (Try again / continue after connecting) ---------- */
@@ -211,7 +234,7 @@ function createEventHandler(deps) {
       const requestId = await saveRequest(base, request);
       const url = await startOAuth(base, result.module);
       const card = connectCard({ label: result.label, reason: result.reason, url, requestId, module: result.module });
-      await chat.replaceWithCard(messageName, card.text, card.cardsV2);
+      await showCard(base, messageName, card);
       return;
     }
 
@@ -234,7 +257,11 @@ function createEventHandler(deps) {
         expireAt,
       });
       const card = approvalCard(id, result.items, { expiresAt: expireAt, timeZone: base.timeZone, requestId });
-      await chat.replaceWithCard(messageName, card.text, card.cardsV2);
+      const shown = await showCard(base, messageName, card);
+      if (shown !== messageName) {
+        // No placeholder to replace (after an approval): remember the new card so clicks can update it.
+        await pendingCol.update(id, doc => (doc ? { ...doc, cardMessage: shown } : undefined));
+      }
       return;
     }
 
@@ -242,10 +269,12 @@ function createEventHandler(deps) {
     if (result.stopReason === 'refusal') reply = 'Sorry, that\'s not one I can help with.';
     if (result.stopReason === 'max_tokens') reply += '\n\n_(Oops, I got cut off. Just ask me to carry on.)_';
     if (result.stopReason === 'max_steps') reply = `${reply ? `${reply}\n\n` : ''}_(That took a few too many steps. Try asking for one thing at a time?)_`;
+    // A normal request always gets an answer; a follow-up after an approval may have nothing to add.
+    if (!reply && !messageName) return;
     if (!reply) reply = '_(no reply)_';
 
     await threads.append(base.threadKey, request.historyText || historyTextOf(request), reply);
-    await chat.replaceText(messageName, base.space, base.thread, reply);
+    await showText(base, messageName, reply);
   }
 
   async function postReply(base, reply) {
@@ -362,26 +391,35 @@ function createEventHandler(deps) {
       await chat.replaceWithCard(claimed.cardMessage, card.text, card.cardsV2).catch(error => log.warn('could not update approval card', { error }));
     }
     await pendingCol.delete(id);
-    await resume(claimed);
+    await resume(claimed, { cardId: expire ? null : id });
   }
 
-  async function resume(record) {
+  /**
+   * Lets Claude continue after every change was decided. No "finishing up" message: the card
+   * says so while Claude works, and switches to "Done" when it has finished.
+   * @param opts.cardId  the approval card to mark as done afterwards (none when it expired)
+   */
+  async function resume(record, { cardId = null } = {}) {
     const base = baseOfRecord(record);
-    let messageName;
     try {
-      messageName = await chat.postText(base.space, base.thread, '_Sure thing, finishing up…_');
       await withToolset(base, async toolset => {
         const result = await resumeLoop({
           claude, toolset, log,
           budget: usage.forUser(base.userId),
-          system: systemFor(scopeOf(base), toolset.notes),
+          system: systemFor(scopeOf(base), toolset.notes, [AFTER_APPROVAL]),
           saved: JSON.parse(record.loop),
           items: record.items,
         });
-        await finish(base, messageName, { text: record.historyText, historyText: record.historyText, attachments: [] }, result);
+        await finish(base, null, { text: record.historyText, historyText: record.historyText, attachments: [] }, result);
       });
     } catch (error) {
-      await fail(base, messageName, error);
+      await fail(base, null, error);
+    } finally {
+      if (cardId && record.cardMessage) {
+        const card = approvalCard(cardId, record.items, { finished: true });
+        await chat.replaceWithCard(record.cardMessage, card.text, card.cardsV2)
+          .catch(error => log.warn('could not mark approval card as done', { error }));
+      }
     }
   }
 

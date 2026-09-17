@@ -17,8 +17,8 @@ function fakeChat() {
   let n = 0;
   return {
     log,
-    postText: async (space, thread, text) => { log.push({ op: 'post', text }); return `${space}/messages/${++n}`; },
-    postCard: async (space, thread, text, cardsV2) => { log.push({ op: 'card', text, cardsV2 }); return `${space}/messages/${++n}`; },
+    postText: async (space, thread, text) => { const posted = `${space}/messages/${++n}`; log.push({ op: 'post', text, posted }); return posted; },
+    postCard: async (space, thread, text, cardsV2) => { const posted = `${space}/messages/${++n}`; log.push({ op: 'card', text, cardsV2, posted }); return posted; },
     replaceText: async (name, space, thread, text) => { log.push({ op: 'replace', name, text }); },
     replaceWithCard: async (name, text, cardsV2) => { log.push({ op: 'card', name, text, cardsV2 }); },
     download: async () => Buffer.from(''),
@@ -263,7 +263,14 @@ test('approve one, cancel the other: only the approved task is created, then Cla
   await handle(click(ROBIN, ACTIONS.CANCEL, { ...ids, item: 1 }));
   await settle();
   assert.equal(executed.length, 1);
-  assert.equal(chat.log.at(-1).text, 'Created Report; skipped the other.');
+  const posts = chat.log.filter(l => l.op === 'post');
+  assert.equal(posts.at(-1).text, 'Created Report; skipped the other.');
+  assert.ok(!chat.log.some(l => /finishing up/i.test(l.text || '') && l.op !== 'card'), 'no separate "finishing up" message');
+  const done = lastCard(chat);
+  assert.equal(done.header.title, 'All sorted!');
+  assert.equal(done.header.subtitle, 'Done', 'card stops saying Buddy is still working');
+  assert.equal(chat.log.at(-1).op, 'card', 'the card is marked done after the reply');
+  assert.match(claudeCalls[1].system.map(b => b.text).join(' '), /already shows each result/);
   const result = claudeCalls[1].messages.at(-1).content[0].content;
   assert.match(result, /Part 1 of 2.*create ok/s);
   assert.match(result, /Part 2 of 2.*declined/s);
@@ -282,7 +289,7 @@ test('approve all creates every task exactly once; cancel all creates nothing', 
   await a.handle(click(ROBIN, ACTIONS.APPROVE_ALL, idsA));
   await a.settle();
   assert.deepEqual(a.executed.map(e => e.input.tasks[0].name), ['Report', 'Burn after reading']);
-  assert.equal(a.chat.log.at(-1).text, 'Both created.');
+  assert.equal(a.chat.log.filter(l => l.op === 'post').at(-1).text, 'Both created.');
 
   const b = setup([{ stop_reason: 'tool_use', content: [CREATE_TWO] }, textReply('OK, nothing created.')]);
   await b.handle(message(ROBIN, DM, 'create two tasks'));
@@ -290,7 +297,31 @@ test('approve all creates every task exactly once; cancel all creates nothing', 
   await b.handle(click(ROBIN, ACTIONS.CANCEL_ALL, { pendingId: param(buttonsOf(lastCard(b.chat))[0], 'pendingId') }));
   await b.settle();
   assert.equal(b.executed.length, 0);
-  assert.equal(b.chat.log.at(-1).text, 'OK, nothing created.');
+  assert.equal(b.chat.log.filter(l => l.op === 'post').at(-1).text, 'OK, nothing created.');
+});
+
+test('a second approval after the first is posted as its own card, and its clicks update that card', async () => {
+  const { handle, settle, chat, executed } = setup([
+    { stop_reason: 'tool_use', content: [toolUse('w1', 'tasks__create', { tasks: [{ name: 'Report' }] })] },
+    { stop_reason: 'tool_use', content: [toolUse('w2', 'tasks__create', { tasks: [{ name: 'Follow-up' }] })] },
+    textReply('Sorted!'),
+  ]);
+  await handle(message(ROBIN, DM, 'create a report task and then a follow-up'));
+  await settle();
+  const firstCard = chat.log.filter(l => l.op === 'card').at(-1).name;
+  await handle(click(ROBIN, ACTIONS.APPROVE, { pendingId: param(buttonsOf(lastCard(chat))[0], 'pendingId'), item: 0 }));
+  await settle();
+
+  const second = chat.log.find(l => l.op === 'card' && !l.name);
+  assert.ok(second, 'the follow-up approval is a new message, not a replacement of the first card');
+  assert.equal(chat.log.filter(l => l.op === 'card' && l.name === firstCard).at(-1).cardsV2[0].card.header.subtitle, 'Done');
+
+  const pendingId = param(buttonsOf(second.cardsV2[0].card)[0], 'pendingId');
+  await handle(click(ROBIN, ACTIONS.APPROVE, { pendingId, item: 0 }));
+  await settle();
+  assert.deepEqual(executed.map(e => e.input.tasks[0].name), ['Report', 'Follow-up']);
+  assert.ok(chat.log.some(l => l.op === 'card' && l.name === second.posted), 'clicks on the second card update it');
+  assert.equal(chat.log.filter(l => l.op === 'post').at(-1).text, 'Sorted!');
 });
 
 test('an expired approval offers Try again only if nothing was applied yet', async () => {
