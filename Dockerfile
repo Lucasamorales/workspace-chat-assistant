@@ -6,6 +6,7 @@ COPY packages/core/package.json packages/core/
 COPY modules/basics/package.json modules/basics/
 COPY modules/files/package.json modules/files/
 COPY modules/asana/package.json modules/asana/
+COPY modules/kudos/package.json modules/kudos/
 COPY apps/chat-gateway/package.json apps/chat-gateway/
 COPY apps/oauth-gateway/package.json apps/oauth-gateway/
 RUN npm ci --omit=dev --no-audit --no-fund
