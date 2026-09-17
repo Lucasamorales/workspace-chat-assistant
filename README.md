@@ -138,7 +138,7 @@ legacy/bot-rev23/     the original bot, kept read-only for reference
 | **basics** | DMs + spaces | everyone @example.com | — | — |
 | **files** | DMs + spaces | everyone @example.com | — | nothing (files are processed in memory) |
 | **asana** | DMs only | robin@, remy@ | `ASANA_CLIENT_ID`, `ASANA_CLIENT_SECRET` | `m_asana__tokens` (KMS-encrypted) |
-| **kudos** | *planned* ([backlog](docs/BACKLOG.md)) | everyone; admins for audits | | |
+| **kudos** | spaces (votes), DMs (`/kudos`) | pilot: robin@, remy@; admins for setup commands | `KUDOS_SHEET_ID`, `KUDOS_SPACES` | appends to the Kudos Google Sheet; leadership list in `m_kudos__settings` |
 
 ### Permissions per module
 Two layers, both checked on every event:

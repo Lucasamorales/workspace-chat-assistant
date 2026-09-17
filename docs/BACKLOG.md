@@ -59,12 +59,12 @@ Decisions: [0002-kudos.md](decisions/0002-kudos.md). Source of truth: the Apps S
 
 | # | Item | Acceptance |
 |---|---|---|
-| K1 | Vote parsing: human mentions from Chat annotations, per-nominee text slices, stricter value matching (Own it, Think big, Go beyond, Be curious) | Same results as the live script on real messages; known false positives ("down with it") rejected |
-| K2 | Append to `Raw Data`: A–F unchanged (Date, Voter, Value, Nominee, Space, Raw text) + G–H voter/nominee Chat IDs; dates in Argentina time | Existing reports keep working |
-| K3 | Votes only in "Team - Kudos"; DMs rejected with the current message | Test |
-| K4 | Block self-votes; enforce 5 given/month and 3 per nominee/month (leadership voters exempt) | Friendly reply naming the rule; partial votes logged for the allowed nominees |
-| K5 | `/kudos leadership @…` (admin): link leadership emails to Chat IDs; leadership can't win | Stored in module storage; audits exclude by ID, and by exact name for old rows |
-| K6 | `/kudos mine` (everyone), `/kudos leaderboard` (admin) | Buttons on the help card |
+| K1 | ✅ Vote parsing: human mentions from Chat annotations, per-nominee text slices, stricter value matching (Own it, Think big, Go beyond, Be curious) | Same results as the live script on real messages; known false positives ("down with it") rejected |
+| K2 | ✅ Append to `Raw Data`: A–F unchanged (Date, Voter, Value, Nominee, Space, Raw text) + G–H voter/nominee Chat IDs; dates in Argentina time | Existing reports keep working |
+| K3 | ✅ Votes only in "Team - Kudos"; DMs rejected with the current message | Test |
+| K4 | ✅ Block self-votes; enforce 5 given/month and 3 per nominee/month (leadership voters exempt) | Friendly reply naming the rule; partial votes logged for the allowed nominees |
+| K5 | ✅ `/kudos leadership @…` (admin): link leadership emails to Chat IDs; leadership can't win | Stored in module storage; audits exclude by ID, and by exact name for old rows |
+| K6 | ✅ `/kudos` (everyone) and `/kudos check` (admin); `/kudos leaderboard` moves to K7 | Buttons on the help card |
 | K7 | Monthly / quarterly / yearly audits: same thresholds, ties, trade-in eligibility, £ values and house tone | Output matches Apps Script on July 2026 data |
 | K8 | Approval card to Kudos admins: Publish as-is / Edit first (Chat dialog) / Skip; publish once, as Buddy, with real @mentions; record winner in Summary | Only admins can see/click; no web app, no webhook |
 | K9 | Scheduled jobs on the 1st (Cloud Scheduler → authenticated `/jobs/kudos/*`) | Quarterly only in Jan/Apr/Jul/Oct, yearly only in Jan |

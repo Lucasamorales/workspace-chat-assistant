@@ -87,6 +87,28 @@ In a space with Buddy:
 - [ ] `@Buddy hello` works; `@Buddy /asana connect` → "only works in a direct message"
 - [ ] `@Buddy list my Asana tasks` → Buddy says Asana is DM-only
 
+## 5b. Kudos test (test Sheet copy + test space)
+
+One-time:
+1. `gcloud services enable sheets.googleapis.com --project=your-gcp-project`
+2. The **test copy** of the Kudos Sheet is shared as Editor with
+   `buddy-bot@your-gcp-project.iam.gserviceaccount.com` (`KUDOS_SHEET_ID` in `infra/config.env`).
+3. Deploy, then in the test space send `@Buddy-Asana /kudos check`. It replies with the space id.
+4. Put that id in `KUDOS_SPACES` in `infra/config.env`, commit, deploy again.
+5. `@Buddy-Asana /kudos check` again → "✅ Votes count here" and "✅ Sheet reachable".
+
+Checklist (in the test space unless noted):
+- [ ] `@Buddy-Asana kudos to @Remy for thinking big` → "✅ Got it! Logged 1 vote(s)…"; a row appears in the **test** Sheet with G–H filled
+- [ ] Two people, two values in one message → two rows with the right values
+- [ ] Tag yourself → "can't give kudos to yourself", no row
+- [ ] Same person a 4th time this month → "limit per person", no row
+- [ ] `@Buddy-Asana kudos for being curious` (no one tagged) → "didn't see any humans tagged"
+- [ ] `@Buddy-Asana summarise this thread for @Remy` → normal Claude reply, no row
+- [ ] Vote in a DM with Buddy-Asana → "Nice try!" reply, no row
+- [ ] `/kudos` in a DM → your month's received/given
+- [ ] `@Buddy-Asana /kudos leadership @Charlie @Toni …` (admin) → list saved
+- [ ] The **real** Kudos Sheet is unchanged
+
 ## 6. After Buddy is verified: remove the old bot
 
 ```bash
