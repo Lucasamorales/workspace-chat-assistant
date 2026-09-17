@@ -15,9 +15,9 @@ Status: `todo` · `doing` · `done` · `blocked`
 | A3 | Tune `ASANA_READONLY_TOOLS` if reads ask for approval | todo |
 | A4 | After A2 passes: `feat:` commit marking the build verified | todo |
 | A5 | Remove the old bot: `CONFIRM=yes bash infra/decommission-legacy.sh` | todo |
-| A6 | Remy's feedback: one card section per task (title, description, due date, assignee by name), Approve/Cancel each, Approve all/Cancel all; update ≠ "cannot be undone" | built, awaiting deploy |
-| A7 | `/asana tools` command listing free vs approval-gated actions | built, awaiting deploy |
-| A8 | Friendlier UX: Connect button on the first Asana request + "I've connected, continue"; Reconnect card when the connection stops working; welcome/help/status as button cards; disconnect asks first; Try again on errors and expired approvals; approval card copy with expiry time in the user's time zone; "Checking your Asana…" progress; 1 h connect links | built, awaiting deploy |
+| A6 | Remy's feedback: one card section per task (title, description, due date, assignee by name), Approve/Cancel each, Approve all/Cancel all; update ≠ "cannot be undone" | deployed |
+| A7 | `/asana tools` command listing free vs approval-gated actions | deployed |
+| A8 | Friendlier UX: Connect button on the first Asana request + "I've connected, continue"; Reconnect card when the connection stops working; welcome/help/status as button cards; disconnect asks first; Try again on errors and expired approvals; approval card copy with expiry time in the user's time zone; "Checking your Asana…" progress; 1 h connect links | deployed |
 
 ## Later
 
@@ -33,6 +33,27 @@ Status: `todo` · `doing` · `done` · `blocked`
 |---|---|---|
 | S1 | Rotate the `leave-bot@your-leave-project` service account key that is hard-coded in `LeaveDates.gs` | New key stored in Script Properties (not code); old key deleted in GCP; local copy scrubbed; leave menu still works |
 | S2 | Review who can edit the Leave Dates Apps Script and its Sheet | Only people who should manage leave |
+| S3 | Delete and recreate the Chat **webhook** hard-coded in `kudos announcement.gs`; store the new one in Script Properties | Old webhook URL no longer posts |
+| S4 | Restrict the Kudos Apps Script **web app** to "Only myself" (its approve link publishes without authentication) | Link fails for anyone else |
+| S5 | Remove **Editor** from the default compute service account (part of A5, tracked separately) | `gcloud projects get-iam-policy` shows no Editor for `*-compute@` |
+
+## Operations
+
+| # | Item | Acceptance |
+|---|---|---|
+| P1 | Push to GitHub regularly (`your-github-org/Buddy`, private) | `git log origin/main..main` is empty after each work session |
+| P2 | **GitHub Actions**: `npm ci`, `npm test`, `npm audit --omit=dev` on every push and PR | Red check blocks merging |
+| P3 | **Budget alerts** on the GCP billing account + monthly **spend limit** on the Anthropic workspace | Alert emails at 50/90/100 %; backs up the per-user cap |
+| P4 | **Error alert**: email when `buddy-bot` logs ERROR (Cloud Logging alert policy) | A failing module is noticed without manual testing |
+| P5 | Read-only log access for Claude Code (`gcloud logging read` allowed in settings) | Diagnosing a failure doesn't need logs pasted by hand |
+
+## Docs
+
+| # | Item | Acceptance |
+|---|---|---|
+| D1 | `SECURITY.md`: per-module access, assistant permission, Kudos (Sheet access, vote policy) | Controls table covers them |
+| D2 | RUNBOOK checklist: assistant permission (someone without it gets "here's what I can help with") | Checklist item |
+| D3 | Non-technical overview of what Buddy does, for the team | Shared doc |
 
 ## Epic 1: Prepare the repo for many modules
 
@@ -68,7 +89,10 @@ Decisions: [0002-kudos.md](decisions/0002-kudos.md). Source of truth: the Apps S
 | K7 | Monthly / quarterly / yearly audits: same thresholds, ties, trade-in eligibility, £ values and house tone | Output matches Apps Script on July 2026 data |
 | K8 | Approval card to Kudos admins: Publish as-is / Edit first (Chat dialog) / Skip; publish once, as Buddy, with real @mentions; record winner in Summary | Only admins can see/click; no web app, no webhook |
 | K9 | Scheduled jobs on the 1st (Cloud Scheduler → authenticated `/jobs/kudos/*`) | Quarterly only in Jan/Apr/Jul/Oct, yearly only in Jan |
-| K10 | Test against a **copy** of the Sheet in a test space; cutover with Epic 4 | Real Sheet untouched until cutover |
+| K10 | Test against a **copy** of the Sheet in a test space; cutover with Epic 4 | Real Sheet untouched until cutover · **doing** (space "Buddy testing ground") |
+| K11 | `/kudos check` also verifies Buddy can **write** to the Sheet | A Viewer share shows ❌ in the check |
+| K12 | Headers for columns G–H ("Giver ID", "Receiver ID") in the test Sheet now, the real Sheet at cutover | Headers present |
+| K13 | Cutover: share the **real** Sheet with buddy-bot as **Editor**, set `KUDOS_SHEET_ID` and `KUDOS_SPACES` to "Team - Kudos" | `/kudos check` all ✅ in Team - Kudos |
 
 Core work this depends on: R1 (per-module access + roles), R3 (message handlers), R4 (mentions);
 R6 (scheduled jobs) and Chat dialogs are built together with K8–K9, their first users.
@@ -77,6 +101,7 @@ R6 (scheduled jobs) and Chat dialogs are built together with K8–K9, their firs
 
 | # | Item | Acceptance |
 |---|---|---|
+| O0 | Share the `accounts@` calendar with `buddy-bot@your-gcp-project.iam.gserviceaccount.com` ("See all event details"); if Workspace blocks external sharing, get admin approval | Blocks the rest of this epic |
 | O1 | Port "who is out" lookups: today, tomorrow, this/next week, this/next month | Same answers as the live script for the same calendar data |
 | O2 | Read `accounts@example.com` calendar as `buddy-bot` (calendar shared with "See all event details") | No per-user calendar subscription hack, no keys |
 | O3 | Keep de-duplication and ARG time formatting | Test |
