@@ -11,11 +11,11 @@ module.exports = {
         const examples = ctx.core.examples();
         const where = ctx.spaceKind === 'DM'
           ? ''
-          : '\n\nIn this space, mention me to ask something. Asana only works in a private chat with me.';
+          : '\n\nIn here, just mention me. Asana only works in a private chat with me.';
         const commands = ctx.core.listCommands().map(c => c.usage || `/${c.name}`).join(' · ');
         return {
-          title: 'What Buddy can do',
-          text: `${examples.map(e => `• ${e}`).join('\n')}${where}\n\nPrefer typing? ${commands}`,
+          title: 'Here\'s what I can do',
+          text: `${examples.map(e => `• ${e}`).join('\n')}${where}\n\nPrefer typing? Sure thing: ${commands}`,
           buttons: [
             ...(await ctx.core.quickActions()),
             { text: 'My usage', command: 'usage' },
@@ -29,7 +29,7 @@ module.exports = {
       description: 'Your Claude spend this month',
       async run(ctx) {
         const u = await ctx.core.usage();
-        return `This month: $${u.usd.toFixed(2)} of $${u.capUsd} `
+        return `This month you've used $${u.usd.toFixed(2)} of your $${u.capUsd} allowance `
           + `(${u.inputTokens + u.cacheReadTokens + u.cacheWriteTokens} tokens in, ${u.outputTokens} out).`;
       },
     },
@@ -38,7 +38,7 @@ module.exports = {
       description: 'Forget this thread\'s conversation',
       async run(ctx) {
         await ctx.core.resetThread();
-        return 'Done — I\'ve forgotten this conversation. What would you like to do next?';
+        return 'Fresh start! I\'ve forgotten this conversation. What\'s next?';
       },
     },
 
@@ -46,7 +46,7 @@ module.exports = {
       description: 'Which connections are active',
       async run(ctx) {
         const lines = await ctx.core.moduleStatuses();
-        return lines.length ? lines.join('\n') : 'Nothing to connect here.';
+        return lines.length ? lines.join('\n') : 'Nothing to connect here, chap.';
       },
     },
   },

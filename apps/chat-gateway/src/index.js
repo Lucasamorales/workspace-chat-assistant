@@ -11,6 +11,7 @@ const { chat: chatApi } = require('@googleapis/chat');
 const core = require('@buddy/core');
 const { createApp } = require('./app');
 const { createEventHandler } = require('./handler');
+const { setAssetsUrl } = require('./cards');
 
 const config = core.loadConfig({
   PORT: { type: 'number', default: 8080 },
@@ -46,6 +47,9 @@ const sealer = core.createKmsSealer({ kmsClient: new KeyManagementServiceClient(
 const chat = core.createChatClient({
   api: chatApi({ version: 'v1', auth: new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/chat.bot'] }) }),
 });
+
+// Buddy's pixel-art images are served publicly by buddy-oauth.
+setAssetsUrl(`${config.OAUTH_BASE_URL}/assets`);
 
 const handleEvent = createEventHandler({
   registry,

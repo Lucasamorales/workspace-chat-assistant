@@ -76,7 +76,7 @@ test('module satisfies the contract and declares the admin role', () => {
 test('a valid vote appends one row per nominee with A–F as before plus Chat ids, in Argentina time', async () => {
   const { mod, sheets, ctxFor } = setup();
   const reply = await mod.handleMessage(ctxFor(ROBIN), vote(ROBIN, '@Buddy kudos to @Eve for thinking big'));
-  assert.equal(reply, '✅ Got it! Logged 1 vote(s) from Robin:\n• Eve: "Think big"');
+  assert.equal(reply, 'Yessss! Logged 1 kudos from Robin:\n• Eve: "Think big"');
 
   const append = sheets.calls.find(c => c[0] === 'append')[1];
   assert.equal(append.spreadsheetId, 'sheet123');
@@ -92,14 +92,14 @@ test('votes outside the Kudos space or in DMs are not logged', async () => {
   const elsewhere = await mod.handleMessage(ctxFor(ROBIN), vote(ROBIN, '@Buddy kudos to @Eve for thinking big', { name: 'spaces/random', displayName: 'Random', kind: 'SPACE' }));
   assert.match(elsewhere, /only count in the official Kudos space/);
   const dm = await mod.handleMessage(ctxFor(ROBIN), vote(ROBIN, 'kudos to @Eve for thinking big', { name: 'spaces/dm', kind: 'DM' }));
-  assert.match(dm, /Nice try! Kudos votes must be cast publicly/);
+  assert.match(dm, /Nice try, chap! Kudos only count when they're given in the Kudos channel/);
   assert.equal(sheets.calls.filter(c => c[0] === 'append').length, 0);
 });
 
 test('normal requests pass through to Claude; forgetting to tag someone gets a hint', async () => {
   const { mod, ctxFor } = setup();
   assert.equal(await mod.handleMessage(ctxFor(ROBIN), vote(ROBIN, '@Buddy summarise what @Eve said')), null);
-  assert.match(await mod.handleMessage(ctxFor(ROBIN), vote(ROBIN, '@Buddy kudos for thinking big')), /didn't see any humans tagged/);
+  assert.match(await mod.handleMessage(ctxFor(ROBIN), vote(ROBIN, '@Buddy kudos for thinking big')), /didn't spot anyone tagged/);
 });
 
 test('limits count this month only (Argentina time) and use the Sheet, including older name-only rows', async () => {
@@ -122,7 +122,7 @@ test('leadership (by email) is exempt from the giving limits', async () => {
   const serial = (Date.UTC(2026, 8, 1) - Date.UTC(1899, 11, 30)) / 86_400_000;
   const rows = Array.from({ length: 6 }, () => [serial, 'Charlie', 'Own it', 'Eve', 'Team - Kudos', '', 'users/444', 'users/333']);
   const { mod, ctxFor } = setup({ rows });
-  assert.match(await mod.handleMessage(ctxFor(CHARLIE), vote(CHARLIE, '@Buddy kudos to @Eve for owning it')), /Logged 1 vote/);
+  assert.match(await mod.handleMessage(ctxFor(CHARLIE), vote(CHARLIE, '@Buddy kudos to @Eve for owning it')), /Logged 1 kudos/);
 });
 
 test('/kudos shows your own month; /kudos check and leadership are admin-only', async () => {
@@ -139,8 +139,8 @@ test('/kudos shows your own month; /kudos check and leadership are admin-only', 
   assert.match(mine.text, /Received: 2 \(Think big ×1, Own it ×1\)/);
   assert.match(mine.text, /Given: 0 of 5/);
 
-  assert.equal(await run(EVE, 'check', vote(EVE, '/kudos check')), 'Only Kudos admins can do that.');
-  assert.equal(await run(EVE, 'leadership', vote(EVE, '/kudos leadership @Charlie')), 'Only Kudos admins can do that.');
+  assert.equal(await run(EVE, 'check', vote(EVE, '/kudos check')), 'Sorry, chap, only Kudos admins can do that.');
+  assert.equal(await run(EVE, 'leadership', vote(EVE, '/kudos leadership @Charlie')), 'Sorry, chap, only Kudos admins can do that.');
 
   const check = await run(ROBIN, 'check', vote(ROBIN, '/kudos check'));
   assert.match(check.text, /id spaces\/kudos[\s\S]*Votes count here[\s\S]*Sheet reachable: "Kudos TEST"/);
@@ -163,7 +163,7 @@ test('Sheet access problems give a specific, actionable reply instead of a gener
     { status: 403, op: 'append', expect: /can read the Kudos Sheet but isn't allowed to add rows\. Share the Sheet as Editor/ },
     { status: 403, op: 'get', expect: /isn't allowed to open the Kudos Sheet/ },
     { status: 404, op: 'get', expect: /Kudos Sheet wasn't found/ },
-    { status: 503, op: 'append', expect: /Google Sheets is busy/ },
+    { status: 503, op: 'append', expect: /Google Sheets is a bit busy/ },
   ];
   for (const c of cases) {
     const { mod, sheets, ctxFor } = setup();

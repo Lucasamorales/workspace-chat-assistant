@@ -40,7 +40,7 @@ module.exports = {
           // Ask first: disconnecting by accident means re-doing the Asana consent.
           return {
             title: 'Disconnect Asana?',
-            text: 'Buddy will no longer be able to see or change Asana for you. You can connect again at any time.',
+            text: 'I won\'t be able to see or change your Asana any more. You can reconnect any time.',
             buttons: [
               { text: 'Yes, disconnect', command: 'asana', args: 'disconnect confirm', replace: true },
               { text: 'Keep it', command: 'asana', args: 'status', replace: true },
@@ -50,8 +50,8 @@ module.exports = {
         if (action === 'disconnect confirm') {
           const had = await tokens.disconnect(ctx);
           return {
-            title: had ? 'Asana disconnected' : 'Asana was not connected',
-            text: had ? 'Buddy\'s access was also removed in Asana.' : 'There was nothing to disconnect.',
+            title: had ? 'Done, Asana\'s disconnected' : 'Asana wasn\'t connected',
+            text: had ? 'I\'ve also removed my access in Asana. Thanks, chap!' : 'Nothing to disconnect.',
             buttons: [{ text: 'Connect again', url: await ctx.core.startOAuth() }],
           };
         }
@@ -91,18 +91,18 @@ function whoIs(t) {
 
 async function connectReply(ctx) {
   return {
-    title: 'Connect your Asana',
-    text: 'I need your permission to see and update Asana as you. It takes a few seconds and you only do it once. The button works for 1 hour.',
+    title: 'Let\'s connect your Asana',
+    text: 'I need your permission to see and update Asana as you. Takes a few seconds, and you only do it once. The button works for an hour.',
     buttons: [{ text: 'Connect Asana', url: await ctx.core.startOAuth() }],
   };
 }
 
 async function statusReply(ctx) {
   const t = await tokens.load(ctx);
-  if (!t) return { ...(await connectReply(ctx)), title: 'Asana is not connected' };
+  if (!t) return { ...(await connectReply(ctx)), title: 'Asana isn\'t connected yet' };
   return {
-    title: 'Asana is connected',
-    text: `Connected${whoIs(t)}. Just ask me about your tasks and projects.`,
+    title: 'Yessss, Asana\'s connected',
+    text: `Connected${whoIs(t)}. Ask me anything about your tasks and projects.`,
     buttons: [
       { text: 'What can you do in Asana?', command: 'asana', args: 'tools' },
       { text: 'Disconnect', command: 'asana', args: 'disconnect', replace: true },

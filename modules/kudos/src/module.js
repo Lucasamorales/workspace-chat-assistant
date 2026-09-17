@@ -54,14 +54,14 @@ function createKudosModule({ sheetsApi, now = () => new Date() } = {}) {
   async function vote(ctx, message) {
     const cfg = config(ctx);
     if (message.space.kind === 'DM') {
-      return '❌ Nice try! Kudos votes must be cast publicly in the official Kudos channel, not in private DMs.';
+      return 'Nice try, chap! Kudos only count when they\'re given in the Kudos channel, not in private chats.';
     }
     if (!cfg.spaces.includes(message.space.name)) {
-      return 'Kudos only count in the official Kudos space, so this one wasn\'t logged.';
+      return 'Ah, kudos only count in the official Kudos space, so this one wasn\'t logged. Pop it in there!';
     }
 
     const nominations = nominationsFrom(message);
-    if (!nominations.length) return '❌ I didn\'t see any humans tagged in that message!';
+    if (!nominations.length) return 'Hmm, I didn\'t spot anyone tagged! Type @ and pick your teammate from the list.';
 
     const { monthRows } = await thisMonthRows(ctx);
     const { accepted, rejected } = applyPolicy({
@@ -100,7 +100,7 @@ function createKudosModule({ sheetsApi, now = () => new Date() } = {}) {
     };
   }
 
-  const adminOnly = 'Only Kudos admins can do that.';
+  const adminOnly = 'Sorry, chap, only Kudos admins can do that.';
 
   async function leadership(ctx, message) {
     if (!ctx.hasRole('admin')) return adminOnly;

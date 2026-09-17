@@ -112,7 +112,7 @@ const CREATE_TWO = toolUse('w', 'tasks__create', { tasks: [{ name: 'Report' }, {
 test('people not on the allowlist get nothing', async () => {
   const { handle, chat } = setup([]);
   const res = await handle(message({ name: 'users/999', email: 'stranger@gmail.com', type: 'HUMAN' }, DM, 'hi'));
-  assert.match(res.text, /isn't enabled/);
+  assert.match(res.text, /isn't switched on/);
   assert.equal(chat.log.length, 0);
 });
 
@@ -128,7 +128,7 @@ test('a redelivered event is processed only once', async () => {
 
 test('DM-only commands are refused in spaces with a friendly pointer to a private chat', async () => {
   const { handle, settle, store } = setup([textReply('no tools here')]);
-  assert.match((await handle(message(ROBIN, SPACE, '/tasks'))).text, /private chat with me\. Open a chat with Buddy-Asana/);
+  assert.match((await handle(message(ROBIN, SPACE, '/tasks'))).text, /private chat with me, for privacy\. Open a chat with Buddy-Asana/);
   await handle(message(ROBIN, SPACE, 'delete everything'));
   await settle();
   assert.deepEqual(store.dump().core__pending || {}, {});
@@ -138,7 +138,7 @@ test('welcome in a DM is a card with buttons, not instructions to type commands'
   const { handle } = setup([], { connected: false });
   const res = await handle({ type: 'ADDED_TO_SPACE', user: ROBIN, space: DM });
   const card = res.cardsV2[0].card;
-  assert.equal(card.header.title, 'Hi, I\'m Buddy-Asana 👋');
+  assert.equal(card.header.title, 'Hey, I\'m Buddy-Asana!');
   const [help, connect] = buttonsOf(card);
   assert.equal(param(help, 'command'), 'help');
   assert.match(connect.onClick.openLink.url, /^https:\/\/oauth\.test\/auth\/tasks\/start\?s=/);
@@ -169,7 +169,7 @@ test('first request needing a service shows a Connect card; continue re-runs the
   assert.ok(claudeCalls[0].tools.some(t => t.name === 'tasks__connect_account'));
 
   const card = lastCard(chat);
-  assert.equal(card.header.title, 'Connect your Tasks first');
+  assert.equal(card.header.title, 'Let\'s connect your Tasks first');
   const [connect, cont] = buttonsOf(card);
   assert.match(connect.onClick.openLink.url, /^https:\/\/oauth\.test\/auth\/tasks\/start\?s=/);
   const requestId = param(cont, 'requestId');
@@ -179,15 +179,15 @@ test('first request needing a service shows a Connect card; continue re-runs the
   assert.match(cardText(early.cardsV2), /can't see your Tasks connection yet/);
 
   const stolen = await handle(click(REMY, ACTIONS.CONTINUE, { requestId, module: 'tasks' }));
-  assert.match(stolen.text, /Only the person who asked/);
+  assert.match(stolen.text, /only the person who asked/i);
 
   state.connected = true;
   const ok = await handle(click(ROBIN, ACTIONS.CONTINUE, { requestId, module: 'tasks' }));
-  assert.match(ok.cardsV2[0].card.header.title, /Tasks connected/);
+  assert.match(ok.cardsV2[0].card.header.title, /Tasks's connected/);
   const again = await handle(click(ROBIN, ACTIONS.CONTINUE, { requestId, module: 'tasks' }));
   await settle();
 
-  assert.match(cardText(again.cardsV2), /expired|already/);
+  assert.match(cardText(again.cardsV2), /expired|[Aa]lready/);
   assert.equal(claudeCalls.length, 2, 'the original request ran exactly once more');
   assert.deepEqual(claudeCalls[1].messages.at(-1).content.at(-1), { type: 'text', text: 'check my tasks for today' });
   assert.equal(chat.log.at(-1).text, 'You have 3 tasks due today.');
@@ -199,7 +199,7 @@ test('a connection that stopped working gets Reconnect wording', async () => {
   ], { connected: false, reason: 'expired' });
   await handle(message(ROBIN, DM, 'check my tasks'));
   await settle();
-  assert.equal(lastCard(chat).header.title, 'Reconnect your Tasks');
+  assert.equal(lastCard(chat).header.title, 'Let\'s reconnect your Tasks');
   assert.match(cardText(lastCard(chat)), /stopped working/);
 });
 
@@ -210,10 +210,10 @@ test('an unexpected error offers Try again, which re-runs the message once', asy
   await handle(message(ROBIN, DM, 'hello'));
   await settle();
   const card = lastCard(chat);
-  assert.equal(card.header.title, 'That didn\'t work');
+  assert.equal(card.header.title, 'That didn\'t quite work');
   const requestId = param(buttonsOf(card)[0], 'requestId');
 
-  assert.match((await handle(click(REMY, ACTIONS.RETRY, { requestId }))).text, /Only the person who asked/);
+  assert.match((await handle(click(REMY, ACTIONS.RETRY, { requestId }))).text, /only the person who asked/i);
   await handle(click(ROBIN, ACTIONS.RETRY, { requestId }));
   await handle(click(ROBIN, ACTIONS.RETRY, { requestId }));
   await settle();
@@ -229,8 +229,8 @@ test('approval card: plain-language header, one section per task, expiry time in
 
   assert.equal(executed.length, 0, 'nothing runs before a click');
   const card = lastCard(chat);
-  assert.equal(card.header.title, 'Review before Buddy makes changes');
-  assert.match(cardText(card), /Nothing will change until you click <b>Approve<\/b>/);
+  assert.equal(card.header.title, 'Quick check before I make changes');
+  assert.match(cardText(card), /Nothing changes until you hit <b>Approve<\/b>/);
   assert.match(cardText(card.sections[1]), /Task title:<\/b> Report/);
   assert.match(cardText(card.sections[2]), /Burn after reading/);
   assert.deepEqual(buttonsOf(card).map(b => b.text), ['Approve', 'Cancel', 'Approve', 'Cancel', 'Approve all', 'Cancel all']);
@@ -247,11 +247,11 @@ test('approve one, cancel the other: only the approved task is created, then Cla
   const first = buttonsOf(lastCard(chat))[0];
   const ids = { pendingId: param(first, 'pendingId'), requestId: param(first, 'requestId') };
 
-  assert.match((await handle(click(REMY, ACTIONS.APPROVE, { ...ids, item: 0 }))).text, /Only the person who asked/);
+  assert.match((await handle(click(REMY, ACTIONS.APPROVE, { ...ids, item: 0 }))).text, /only the person who asked/i);
 
   const approved = await handle(click(ROBIN, ACTIONS.APPROVE, { ...ids, item: 0 }));
   assert.equal(approved.actionResponse.type, 'UPDATE_MESSAGE');
-  assert.match(cardText(approved.cardsV2), /Working on it/);
+  assert.match(cardText(approved.cardsV2), /On it/);
   await settle();
   assert.deepEqual(executed, [{ name: 'create', input: { tasks: [{ name: 'Report' }] } }]);
   assert.equal(claudeCalls.length, 1, 'Claude waits until every item is decided');
@@ -269,7 +269,7 @@ test('approve one, cancel the other: only the approved task is created, then Cla
   assert.match(result, /Part 2 of 2.*declined/s);
 
   const stale = await handle(click(ROBIN, ACTIONS.APPROVE, { ...ids, item: 1 }));
-  assert.equal(stale.text, 'This request expired');
+  assert.equal(stale.text, 'This one\'s expired');
   assert.deepEqual(store.dump().core__pending, {});
 });
 
@@ -306,7 +306,7 @@ test('an expired approval offers Try again only if nothing was applied yet', asy
 
   clock += 16 * 60 * 1000;
   const res = await handle(click(ROBIN, ACTIONS.APPROVE, { pendingId: param(first, 'pendingId'), requestId: param(first, 'requestId'), item: 0 }));
-  assert.equal(res.text, 'This request expired');
+  assert.equal(res.text, 'This one\'s expired');
   const [tryAgain] = buttonsOf(res.cardsV2[0].card);
   assert.equal(tryAgain.text, 'Try again');
   await settle();
@@ -332,7 +332,7 @@ test('progress message names the service being checked', async () => {
   ]);
   await handle(message(ROBIN, DM, 'what is due?'));
   await settle();
-  assert.ok(chat.log.some(l => l.op === 'replace' && l.text === '_Checking your Tasks…_'));
+  assert.ok(chat.log.some(l => l.op === 'replace' && l.text === '_Having a look at your Tasks…_'));
   assert.equal(chat.log.at(-1).text, 'Here you go.');
 });
 
@@ -355,5 +355,27 @@ test('HTTP layer rejects requests that are not signed by Google Chat', async () 
     assert.equal(ok.headers.get('x-powered-by'), null);
   } finally {
     server.close();
+  }
+});
+
+/* ---------- look and feel ---------- */
+
+test('look: Buddy\'s face in card headers and orange main buttons, only when images are configured', () => {
+  const cards = require('../src/cards');
+  const plainCard = cards.noticeCard('Oh no', 'text', 'r'.repeat(24)).cardsV2[0].card;
+  assert.equal(plainCard.header.imageUrl, undefined, 'no images unless an assets address is set');
+
+  cards.setAssetsUrl('https://oauth.test/assets/');
+  try {
+    const approval = cards.approvalCard('p'.repeat(24), [{ state: 'pending', title: 'Create task', fields: [], module: 'tasks' }], {}).cardsV2[0].card;
+    assert.equal(approval.header.imageUrl, 'https://oauth.test/assets/buddy-thinking.gif');
+    assert.equal(approval.header.imageType, 'CIRCLE');
+    const [approve, cancel] = buttonsOf(approval);
+    assert.equal(approve.type, 'FILLED');
+    assert.deepEqual(approve.color, { red: 244 / 255, green: 122 / 255, blue: 42 / 255, alpha: 1 });
+    assert.equal(cancel.type, undefined, 'secondary buttons keep the default style');
+    assert.equal(approve.onClick.action.function, ACTIONS.APPROVE, 'buttons still do exactly the same thing');
+  } finally {
+    cards.setAssetsUrl(null);
   }
 });

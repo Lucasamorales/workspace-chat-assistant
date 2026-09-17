@@ -8,7 +8,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 class BudgetExceededError extends Error {
   constructor(capUsd, now = new Date()) {
     const reset = MONTHS[(now.getUTCMonth() + 1) % 12];
-    super(`You've reached this month's limit ($${capUsd}). It resets on 1 ${reset}.`);
+    super(`You've used this month's allowance ($${capUsd}). I'm back on 1 ${reset}. Thanks for keeping me busy!`);
     this.expose = true;
   }
 }

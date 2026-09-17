@@ -109,7 +109,7 @@ test('without assistant access: no Claude, no cost — a card with what they can
 
   assert.equal(seen.length, 0);
   assert.equal(claudeCount(), 0);
-  assert.equal(posted.at(-1).text, 'Here\'s what I can help with');
+  assert.equal(posted.at(-1).text, 'Here\'s what I can help you with');
   assert.doesNotMatch(JSON.stringify(posted.at(-1).cardsV2), /Ask me anything|Asana/, 'no chat or Claude-only features offered');
 
   const cmd = await handle(chatEvent(EVE, '/votes-audit'));

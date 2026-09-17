@@ -25,16 +25,24 @@ const SECURITY_HEADERS = {
   'Referrer-Policy': 'no-referrer', // the callback URL carries an authorisation code
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
-  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+  // img-src 'self' lets the pages show Buddy's own picture; everything else stays blocked.
+  'Content-Security-Policy': "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
   'Strict-Transport-Security': 'max-age=31536000',
 };
 
-function page(title, body) {
+/** A small page in the Buddy widget's retro style: pixel Buddy, black borders, hard shadow, orange accent. */
+function page(title, body, mood = 'neutral') {
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const image = { happy: 'buddy-happy.png', thinking: 'buddy-thinking.png', neutral: 'buddy-neutral.png' }[mood] || 'buddy-neutral.png';
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)}</title>
-<body style="font:16px/1.5 system-ui,sans-serif;max-width:34rem;margin:15vh auto;padding:0 16px">
-<h1 style="font-size:1.3rem">${esc(title)}</h1><p>${esc(body)}</p></body></html>`;
+<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f4f4f4;font:17px/1.5 system-ui,sans-serif;color:#111">
+<main style="max-width:30rem;margin:16px;padding:28px;background:#fff;border:3px solid #000;border-radius:8px;box-shadow:8px 8px 0 #000;text-align:center">
+<img src="/assets/${image}" alt="Buddy" width="112" height="112" style="image-rendering:pixelated;border:3px solid #000;border-radius:50%;background:#F47A2A">
+<h1 style="font-size:1.4rem;margin:16px 0 8px">${esc(title)}</h1>
+<p style="margin:0">${esc(body)}</p>
+<div style="height:6px;background:#F47A2A;margin-top:20px;border-radius:3px"></div>
+</main></body></html>`;
 }
 
 function createOAuthApp({ registry, flows, makeModuleContext, env = process.env, log }) {
@@ -50,14 +58,14 @@ function createOAuthApp({ registry, flows, makeModuleContext, env = process.env,
 
   app.get('/assets/:file', (req, res) => {
     const type = ASSETS.get(req.params.file);
-    if (!type) return res.status(404).send(page('Not found', ''));
+    if (!type) return res.status(404).send(page('Hmm, nothing here', 'This link isn\'t valid.'));
     res.set({ 'Content-Type': type, 'Cache-Control': 'public, max-age=86400', 'Cross-Origin-Resource-Policy': 'cross-origin' });
     res.sendFile(path.join(ASSET_DIR, req.params.file));
   });
 
   app.get('/auth/:module/start', async (req, res) => {
     const mod = oauthModule(req.params.module);
-    if (!mod) return res.status(404).send(page('Not found', 'This link is not valid.'));
+    if (!mod) return res.status(404).send(page('Hmm, nothing here', 'This link isn\'t valid.'));
     try {
       const url = await flows.authorizeUrl({
         moduleName: mod.name,
@@ -68,18 +76,18 @@ function createOAuthApp({ registry, flows, makeModuleContext, env = process.env,
       res.redirect(302, url);
     } catch (error) {
       log.warn('oauth start rejected', { module: mod.name, reason: error.message });
-      res.status(400).send(page('This link has expired',
-        `Connect links work once, for 1 hour. Go back to Google Chat and click "Connect ${mod.oauth.label}" again.`));
+      res.status(400).send(page('Oh no, this link has expired',
+        `Connect links work once, for an hour. Pop back to Google Chat and click "Connect ${mod.oauth.label}" again.`, 'thinking'));
     }
   });
 
   app.get('/auth/:module/callback', async (req, res) => {
     const mod = oauthModule(req.params.module);
-    if (!mod) return res.status(404).send(page('Not found', 'This link is not valid.'));
+    if (!mod) return res.status(404).send(page('Hmm, nothing here', 'This link isn\'t valid.'));
 
     if (req.query.error) {
-      return res.status(400).send(page(`${mod.oauth.label} was not connected`,
-        `You cancelled the request, so nothing was connected. You can close this tab, or go back to Google Chat and click "Connect ${mod.oauth.label}" to try again.`));
+      return res.status(400).send(page('No worries, nothing was connected',
+        `You cancelled, so nothing changed. Close this tab, or pop back to Google Chat and click "Connect ${mod.oauth.label}" to try again.`));
     }
 
     try {
@@ -93,16 +101,16 @@ function createOAuthApp({ registry, flows, makeModuleContext, env = process.env,
       });
       const ctx = makeModuleContext(mod, { userId, userEmail, spaceKind: 'DM' });
       await mod.oauth.saveTokens(ctx, tokenResponse);
-      res.send(page(`✅ ${mod.oauth.label} connected`,
-        'You can close this tab. Go back to Google Chat and click "I\'ve connected, continue" to carry on with your request.'));
+      res.send(page(`Yessss, ${mod.oauth.label}'s connected!`,
+        'Thank you, chap! You can close this tab. Pop back to Google Chat and click "I\'ve connected, continue" and I\'ll carry on.', 'happy'));
     } catch (error) {
       log.warn('oauth callback failed', { module: mod.name, reason: error.message });
-      res.status(400).send(page(`${mod.oauth.label} was not connected`,
-        error.expose ? error.message : `This link has expired or was already used. Go back to Google Chat and click "Connect ${mod.oauth.label}" again.`));
+      res.status(400).send(page(`Oh no, ${mod.oauth.label} wasn't connected`,
+        error.expose ? error.message : `This link has expired or was already used. Pop back to Google Chat and click "Connect ${mod.oauth.label}" again.`, 'thinking'));
     }
   });
 
-  app.use((req, res) => res.status(404).send(page('Not found', '')));
+  app.use((req, res) => res.status(404).send(page('Hmm, nothing here', 'This link isn\'t valid.')));
   return app;
 }
 

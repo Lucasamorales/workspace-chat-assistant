@@ -125,7 +125,7 @@ test('disconnect asks first, then confirms with a Connect again button', async (
   assert.equal(await asana.connected(ctx), true, 'asking does not disconnect');
 
   const done = await asana.commands.asana.run(ctx, 'disconnect confirm');
-  assert.equal(done.title, 'Asana disconnected');
+  assert.equal(done.title, 'Done, Asana\'s disconnected');
   assert.equal(done.buttons[0].text, 'Connect again');
   assert.equal(await asana.connected(ctx), false);
 });

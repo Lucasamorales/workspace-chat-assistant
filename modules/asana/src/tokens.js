@@ -54,7 +54,7 @@ async function saveFromOAuth(ctx, tokenResponse) {
   if (requireMatch && asanaEmail && asanaEmail.toLowerCase() !== String(ctx.userEmail).toLowerCase()) {
     await revoke(ctx, tokens.refresh_token || tokens.access_token);
     ctx.log.warn('asana account email does not match chat user', { userId: ctx.userId });
-    throw expose(`That Asana account (${asanaEmail}) doesn't match your Google account. `
+    throw expose(`Oh no, that Asana account (${asanaEmail}) doesn't match your Google account. `
       + 'Sign in to Asana with your own work account and try again.');
   }
   if (requireMatch && !asanaEmail) ctx.log.warn('asana token response had no email; could not check account match', { userId: ctx.userId });

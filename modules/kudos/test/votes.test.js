@@ -79,7 +79,7 @@ test('policy: 5 per month, counting votes in this same message', () => {
   const r = applyPolicy({ nominations, sender, monthRows, isLeader: false });
   assert.deepEqual(r.accepted.map(a => a.name), ['Eve']);
   assert.deepEqual(r.rejected, [{ name: 'Fay', reason: 'month_limit' }]);
-  assert.match(replyText({ voterName: 'Robin', ...r }), /Logged 1 vote[\s\S]*already given 5 kudos this month[\s\S]*Fay/);
+  assert.match(replyText({ voterName: 'Robin', ...r }), /Logged 1 kudos[\s\S]*That's your 5 kudos for this month already[\s\S]*Fay/);
 });
 
 test('policy: 3 per person per month, matching old rows by name when they have no ids', () => {
@@ -101,10 +101,10 @@ test('policy: leadership voters are exempt from the limits, but not from the sel
 test('reply wording matches the original bot for the common cases', () => {
   assert.equal(
     replyText({ voterName: 'Robin', accepted: [{ name: 'Eve', value: 'Think big' }], rejected: [{ name: 'Leo', reason: 'no_value' }] }),
-    '✅ Got it! Logged 1 vote(s) from Robin:\n• Eve: "Think big"\n\n⚠️ Could not detect a valid value for: Leo',
+    'Yessss! Logged 1 kudos from Robin:\n• Eve: "Think big"\n\nCouldn\'t spot a value for: Leo',
   );
   assert.equal(
     replyText({ voterName: 'Robin', accepted: [], rejected: [{ name: 'Leo', reason: 'no_value' }] }),
-    '❌ I couldn\'t detect a valid company value (Own it, Think big, Go beyond, Be curious) in your message.',
+    'Oh no, I couldn\'t spot a company value in there. Try Own it, Think big, Go beyond or Be curious.',
   );
 });

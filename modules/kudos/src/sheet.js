@@ -42,12 +42,12 @@ function explain(error, action, tab) {
   const wrap = message => Object.assign(new Error(message), { expose: true, cause: error });
   if (status === 403) {
     return wrap(action === 'write'
-      ? `⚠️ Your vote wasn't logged: Buddy can read the Kudos Sheet but isn't allowed to add rows. Share the Sheet as Editor with ${SA_EMAIL}.`
-      : `⚠️ Your vote wasn't logged: Buddy isn't allowed to open the Kudos Sheet. Share it as Editor with ${SA_EMAIL}.`);
+      ? `Oh no, your vote wasn't logged: Buddy can read the Kudos Sheet but isn't allowed to add rows. Share the Sheet as Editor with ${SA_EMAIL}.`
+      : `Oh no, your vote wasn't logged: Buddy isn't allowed to open the Kudos Sheet. Share it as Editor with ${SA_EMAIL}.`);
   }
-  if (status === 404) return wrap('⚠️ Your vote wasn\'t logged: the Kudos Sheet wasn\'t found. Check KUDOS_SHEET_ID.');
-  if (status === 400) return wrap(`⚠️ Your vote wasn't logged: the Kudos Sheet has no "${tab}" tab.`);
-  if (status === 429 || status >= 500) return wrap('⚠️ Your vote wasn\'t logged: Google Sheets is busy right now. Please try again in a minute.');
+  if (status === 404) return wrap('Oh no, your vote wasn\'t logged: the Kudos Sheet wasn\'t found. Check KUDOS_SHEET_ID.');
+  if (status === 400) return wrap(`Oh no, your vote wasn't logged: the Kudos Sheet has no "${tab}" tab.`);
+  if (status === 429 || status >= 500) return wrap('Oh no, your vote wasn\'t logged: Google Sheets is a bit busy right now. Give it a minute and try again?');
   return error;
 }
 

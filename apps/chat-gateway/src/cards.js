@@ -1,6 +1,9 @@
 /**
  * Every Google Chat card Buddy sends. Module text is treated as plain text: it is escaped
  * here, so names or descriptions coming from Asana can never inject card formatting.
+ *
+ * Look and feel: pixel-art Buddy in card headers and brand orange on main buttons.
+ * Google Chat allows no custom fonts or backgrounds, so images and button colour carry the style.
  */
 
 const ACTIONS = Object.freeze({
@@ -13,13 +16,42 @@ const ACTIONS = Object.freeze({
   RETRY: 'buddy.retry',
 });
 
+// brand orange (#F47A2A) as Chat's 0–1 RGB colour.
+const BRAND_ORANGE = { red: 244 / 255, green: 122 / 255, blue: 42 / 255, alpha: 1 };
+
+// Buddy's expressions, served publicly by buddy-oauth. GIFs animate where Chat supports it
+// and otherwise show their first frame.
+const MOOD_IMAGES = {
+  neutral: 'buddy-idle.gif',
+  talking: 'buddy-talking.gif',
+  thinking: 'buddy-thinking.gif',
+  happy: 'buddy-happy.png',
+};
+
+let assetsUrl = null;
+
+/** Called once at startup with the public assets address; without it cards have no images. */
+function setAssetsUrl(url) {
+  assetsUrl = url ? String(url).replace(/\/$/, '') : null;
+}
+
 const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const plain = s => esc(s).replace(/\n/g, '<br>');
 
+function header(title, subtitle, mood) {
+  const image = assetsUrl && MOOD_IMAGES[mood]
+    ? { imageUrl: `${assetsUrl}/${MOOD_IMAGES[mood]}`, imageType: 'CIRCLE', imageAltText: 'Buddy' }
+    : {};
+  return { title, ...(subtitle ? { subtitle } : {}), ...image };
+}
+
 const EFFECT_NOTE = {
-  delete: ' <font color="#d93025">— cannot be undone</font>',
+  delete: ' <font color="#d93025">— can\'t be undone</font>',
   update: ' <i>— changes something that already exists</i>',
 };
+
+/** The main action on a card gets the brand colour. */
+const primary = button => ({ ...button, type: 'FILLED', color: BRAND_ORANGE });
 
 function actionButton(text, fn, params) {
   const parameters = Object.entries(params).filter(([, v]) => v !== undefined).map(([key, value]) => ({ key, value: String(value) }));
@@ -35,21 +67,23 @@ function toChatButton(b) {
 const buttonList = buttons => ({ buttonList: { buttons } });
 
 /** A title/text/buttons card as a Chat message body. */
-function simpleCard(cardId, { title, subtitle, text, buttons = [] }) {
+function simpleCard(cardId, { title, subtitle, text, buttons = [], image }) {
   const widgets = [];
   if (text) widgets.push({ textParagraph: { text: plain(text) } });
   if (buttons.length) widgets.push(buttonList(buttons));
   if (!widgets.length) widgets.push({ textParagraph: { text: ' ' } });
   return {
     text: title || text || '',
-    cardsV2: [{ cardId, card: { ...(title ? { header: { title, ...(subtitle ? { subtitle } : {}) } } : {}), sections: [{ widgets }] } }],
+    cardsV2: [{ cardId, card: { ...(title ? { header: header(title, subtitle, image) } : {}), sections: [{ widgets }] } }],
   };
 }
 
 /** A module Reply (string or {title, text, buttons}) → a Chat message body. */
 function renderReply(reply) {
   if (reply && typeof reply === 'object') {
-    return simpleCard('reply', { title: reply.title, text: reply.text, buttons: (reply.buttons || []).map(toChatButton) });
+    const buttons = (reply.buttons || []).map(toChatButton);
+    if (buttons.length) buttons[0] = primary(buttons[0]);
+    return simpleCard('reply', { title: reply.title, text: reply.text, buttons, image: reply.image || 'happy' });
   }
   return { text: String(reply || 'Done.') };
 }
@@ -68,28 +102,29 @@ function clockTime(date, timeZone) {
 function connectCard({ label, reason, url, requestId, module, note }) {
   const lost = reason === 'expired';
   return simpleCard('connect', {
-    title: lost ? `Reconnect your ${label}` : `Connect your ${label} first`,
+    title: lost ? `Let's reconnect your ${label}` : `Let's connect your ${label} first`,
+    image: 'neutral',
     text: [
       lost
-        ? `Your ${label} connection stopped working (it may have been removed in ${label}). Reconnect and I'll carry on with your request.`
-        : `To do this I need permission to see and update ${label} as you. It takes a few seconds and you only do it once.`,
+        ? `Oh no, your ${label} connection stopped working (it may have been removed in ${label}). Reconnect and I'll pick up right where we left off.`
+        : `To help with this, I need permission to see and update ${label} as you. Takes a few seconds, and you only do it once.`,
       `1. Click "Connect ${label}" and approve.`,
-      '2. Come back here and click "I\'ve connected, continue".',
+      '2. Pop back here and click "I\'ve connected, continue".',
       ...(note ? ['', note] : []),
     ].join('\n'),
     buttons: [
-      { text: `Connect ${label}`, onClick: { openLink: { url } } },
+      primary({ text: `Connect ${label}`, onClick: { openLink: { url } } }),
       actionButton('I\'ve connected, continue', ACTIONS.CONTINUE, { requestId, module }),
     ],
   });
 }
 
 function statusText(item) {
-  if (item.state === 'running') return '⏳ Working on it…';
+  if (item.state === 'running') return '⏳ On it…';
   if (item.state === 'declined') return '❌ Skipped — nothing was changed';
   if (item.state === 'done') {
-    if (!item.result || !item.result.isError) return '✅ Done';
-    return `⚠️ This didn't work: ${String(item.result.content || '').slice(0, 150)}`;
+    if (!item.result || !item.result.isError) return '✅ Done!';
+    return `⚠️ Oh no, that didn't work: ${String(item.result.content || '').slice(0, 150)}`;
   }
   return '';
 }
@@ -111,7 +146,7 @@ function approvalCard(pendingId, items, { expiresAt, timeZone, requestId } = {})
 
   const sections = [];
   if (pending) {
-    sections.push({ widgets: [{ textParagraph: { text: 'Nothing will change until you click <b>Approve</b>.' } }] });
+    sections.push({ widgets: [{ textParagraph: { text: 'Nothing changes until you hit <b>Approve</b>.' } }] });
   }
 
   items.forEach((item, i) => sections.push({
@@ -125,7 +160,7 @@ function approvalCard(pendingId, items, { expiresAt, timeZone, requestId } = {})
       },
       { textParagraph: { text: renderFields(item.fields) } },
       item.state === 'pending'
-        ? buttonList([actionButton('Approve', ACTIONS.APPROVE, { ...ids, item: i }), actionButton('Cancel', ACTIONS.CANCEL, { ...ids, item: i })])
+        ? buttonList([primary(actionButton('Approve', ACTIONS.APPROVE, { ...ids, item: i })), actionButton('Cancel', ACTIONS.CANCEL, { ...ids, item: i })])
         : { decoratedText: { text: esc(statusText(item)), wrapText: true } },
     ],
   }));
@@ -133,21 +168,21 @@ function approvalCard(pendingId, items, { expiresAt, timeZone, requestId } = {})
   if (pending) {
     const widgets = [];
     if (pending > 1) {
-      widgets.push(buttonList([actionButton('Approve all', ACTIONS.APPROVE_ALL, ids), actionButton('Cancel all', ACTIONS.CANCEL_ALL, ids)]));
+      widgets.push(buttonList([primary(actionButton('Approve all', ACTIONS.APPROVE_ALL, ids)), actionButton('Cancel all', ACTIONS.CANCEL_ALL, ids)]));
     }
     if (expiresAt) {
-      widgets.push({ textParagraph: { text: `<i>This request expires at ${esc(clockTime(expiresAt, timeZone))} (15 minutes). After that, just send your message again.</i>` } });
+      widgets.push({ textParagraph: { text: `<i>This one expires at ${esc(clockTime(expiresAt, timeZone))} (15 minutes). After that, just send your message again.</i>` } });
     }
     if (widgets.length) sections.push({ widgets });
   }
 
-  const header = pending
-    ? { title: 'Review before Buddy makes changes', subtitle: total > 1 ? `${total} changes to review` : '1 change to review' }
-    : { title: 'All changes reviewed', subtitle: 'Buddy is finishing up.' };
+  const cardHeader = pending
+    ? header('Quick check before I make changes', total > 1 ? `${total} changes to look at` : '1 change to look at', 'thinking')
+    : header('All sorted!', 'Just finishing up…', 'talking');
 
   return {
-    text: 'Buddy needs your approval before making changes.',
-    cardsV2: [{ cardId: 'approval', card: { header, sections } }],
+    text: 'Quick check before I make changes.',
+    cardsV2: [{ cardId: 'approval', card: { header: cardHeader, sections } }],
   };
 }
 
@@ -156,7 +191,8 @@ function noticeCard(title, text, retryRequestId) {
   return simpleCard('notice', {
     title,
     text,
-    buttons: retryRequestId ? [actionButton('Try again', ACTIONS.RETRY, { requestId: retryRequestId })] : [],
+    image: 'neutral',
+    buttons: retryRequestId ? [primary(actionButton('Try again', ACTIONS.RETRY, { requestId: retryRequestId }))] : [],
   });
 }
 
@@ -165,5 +201,5 @@ const newMessage = body => ({ actionResponse: { type: 'NEW_MESSAGE' }, ...body }
 
 module.exports = {
   ACTIONS, approvalCard, connectCard, noticeCard, renderReply, simpleCard, renderFields,
-  clockTime, updateMessage, newMessage,
+  clockTime, updateMessage, newMessage, setAssetsUrl, MOOD_IMAGES,
 };

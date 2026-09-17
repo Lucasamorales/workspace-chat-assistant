@@ -82,23 +82,23 @@ function applyPolicy({ nominations, sender, monthRows, isLeader, limits = DEFAUL
 function replyText({ voterName, accepted, rejected, limits = DEFAULT_LIMITS }) {
   const lines = [];
   if (accepted.length) {
-    lines.push(`✅ Got it! Logged ${accepted.length} vote(s) from ${voterName}:`);
+    lines.push(`Yessss! Logged ${accepted.length} kudos from ${voterName}:`);
     for (const a of accepted) lines.push(`• ${a.name}: "${a.value}"`);
   }
 
   const names = reason => rejected.filter(r => r.reason === reason).map(r => r.name);
   const notes = [];
-  if (names('self').length) notes.push('🚫 Nice try! You can\'t give kudos to yourself.');
+  if (names('self').length) notes.push('Nice try, chap! You can\'t give kudos to yourself.');
   if (names('month_limit').length) {
-    notes.push(`🚫 You've already given ${limits.perMonth} kudos this month (the limit), so these weren't logged: ${names('month_limit').join(', ')}.`);
+    notes.push(`That's your ${limits.perMonth} kudos for this month already, so these weren't logged: ${names('month_limit').join(', ')}. Save some love for next month!`);
   }
   if (names('person_limit').length) {
-    notes.push(`🚫 You've already given ${limits.perPerson} kudos this month to: ${names('person_limit').join(', ')} (the limit per person).`);
+    notes.push(`You've already given ${limits.perPerson} kudos this month to: ${names('person_limit').join(', ')}. That's the max per person, so spread the love!`);
   }
   if (names('no_value').length) {
     notes.push(accepted.length || notes.length
-      ? `⚠️ Could not detect a valid value for: ${names('no_value').join(', ')}`
-      : '❌ I couldn\'t detect a valid company value (Own it, Think big, Go beyond, Be curious) in your message.');
+      ? `Couldn't spot a value for: ${names('no_value').join(', ')}`
+      : 'Oh no, I couldn\'t spot a company value in there. Try Own it, Think big, Go beyond or Be curious.');
   }
 
   return [lines.join('\n'), notes.join('\n')].filter(Boolean).join('\n\n');
