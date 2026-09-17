@@ -155,3 +155,25 @@ test('sheet dates: serial numbers, text dates and Argentina wall-clock stamps', 
   // 1 Oct 01:30 UTC is still 30 Sep in Buenos Aires: the vote belongs to September.
   assert.deepEqual(zonedParts(new Date('2026-10-01T01:30:00Z'), 'America/Argentina/Buenos_Aires'), { year: 2026, month: 9, stamp: '2026-09-30 22:30:00' });
 });
+
+test('Sheet access problems give a specific, actionable reply instead of a generic error', async () => {
+  const cases = [
+    { status: 403, op: 'append', expect: /can read the Kudos Sheet but isn't allowed to add rows\. Share the Sheet as Editor/ },
+    { status: 403, op: 'get', expect: /isn't allowed to open the Kudos Sheet/ },
+    { status: 404, op: 'get', expect: /Kudos Sheet wasn't found/ },
+    { status: 503, op: 'append', expect: /Google Sheets is busy/ },
+  ];
+  for (const c of cases) {
+    const { mod, sheets, ctxFor } = setup();
+    const original = sheets.spreadsheets.values[c.op];
+    sheets.spreadsheets.values[c.op] = async params => {
+      if (c.op === 'get' && params.range.endsWith('A1:H1')) return original(params);
+      throw Object.assign(new Error('Google says no'), { status: c.status });
+    };
+    await assert.rejects(
+      mod.handleMessage(ctxFor(ROBIN), vote(ROBIN, '@Buddy id like to give a kudos to @Eve for going above and beyond')),
+      e => e.expose === true && c.expect.test(e.message),
+      `${c.op} ${c.status}`,
+    );
+  }
+});

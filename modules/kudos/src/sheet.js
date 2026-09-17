@@ -31,11 +31,32 @@ function zonedParts(date, timeZone) {
   return { year: Number(get('year')), month: Number(get('month')), stamp: `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}` };
 }
 
+const SA_EMAIL = 'the buddy-bot service account';
+
+/**
+ * Turns Google API failures into messages people can act on. The original error is still
+ * logged by the registry; users only see the explanation.
+ */
+function explain(error, action, tab) {
+  const status = Number(error.status || error.code || (error.response && error.response.status));
+  const wrap = message => Object.assign(new Error(message), { expose: true, cause: error });
+  if (status === 403) {
+    return wrap(action === 'write'
+      ? `⚠️ Your vote wasn't logged: Buddy can read the Kudos Sheet but isn't allowed to add rows. Share the Sheet as Editor with ${SA_EMAIL}.`
+      : `⚠️ Your vote wasn't logged: Buddy isn't allowed to open the Kudos Sheet. Share it as Editor with ${SA_EMAIL}.`);
+  }
+  if (status === 404) return wrap('⚠️ Your vote wasn\'t logged: the Kudos Sheet wasn\'t found. Check KUDOS_SHEET_ID.');
+  if (status === 400) return wrap(`⚠️ Your vote wasn't logged: the Kudos Sheet has no "${tab}" tab.`);
+  if (status === 429 || status >= 500) return wrap('⚠️ Your vote wasn\'t logged: Google Sheets is busy right now. Please try again in a minute.');
+  return error;
+}
+
 function createKudosSheet({ sheetsApi, spreadsheetId, tab = 'Raw Data' }) {
   const range = cols => `'${tab.replace(/'/g, "''")}'!${cols}`;
+  const guarded = (action, fn) => fn().catch(error => { throw explain(error, action, tab); });
 
   return {
-    async readVotes() {
+    readVotes: () => guarded('read', async () => {
       const res = await sheetsApi.spreadsheets.values.get({
         spreadsheetId,
         range: range('A2:H'),
@@ -53,10 +74,10 @@ function createKudosSheet({ sheetsApi, spreadsheetId, tab = 'Raw Data' }) {
           voterId: r[6] ? String(r[6]) : '',
           nomineeId: r[7] ? String(r[7]) : '',
         }));
-    },
+    }),
 
     /** Appends whole rows at the bottom; never edits existing rows or headers. */
-    async appendVotes(rows) {
+    appendVotes: rows => guarded('write', async () => {
       if (!rows.length) return;
       await sheetsApi.spreadsheets.values.append({
         spreadsheetId,
@@ -66,7 +87,7 @@ function createKudosSheet({ sheetsApi, spreadsheetId, tab = 'Raw Data' }) {
         insertDataOption: 'INSERT_ROWS',
         requestBody: { values: rows },
       });
-    },
+    }),
 
     /** For /kudos check: can Buddy reach the Sheet and the tab, and what do the headers say? */
     async describe() {
@@ -82,4 +103,4 @@ function createKudosSheet({ sheetsApi, spreadsheetId, tab = 'Raw Data' }) {
   };
 }
 
-module.exports = { createKudosSheet, monthOfCell, zonedParts };
+module.exports = { createKudosSheet, monthOfCell, zonedParts, explain };
