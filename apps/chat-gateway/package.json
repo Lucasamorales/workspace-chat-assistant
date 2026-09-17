@@ -16,6 +16,7 @@
     "google-auth-library": "^11.1.0",
     "@buddy/module-basics": "*",
     "@buddy/module-files": "*",
-    "@googleapis/chat": "^51.0.0"
+    "@googleapis/chat": "^51.0.0",
+    "@buddy/module-kudos": "*"
   }
 }

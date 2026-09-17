@@ -81,6 +81,7 @@ function createEventHandler(deps) {
     return {
       userId: String(event.user.name || '').split('/').pop(),
       userEmail: String(event.user.email || '').toLowerCase(),
+      userDisplayName: String(event.user.displayName || ''),
       spaceKind: spaceKindOf(event.space),
       space: event.space && event.space.name,
       thread,
@@ -90,7 +91,7 @@ function createEventHandler(deps) {
   }
 
   const baseOfRecord = r => ({
-    userId: r.userId, userEmail: r.userEmail, spaceKind: r.spaceKind,
+    userId: r.userId, userEmail: r.userEmail, userDisplayName: r.userDisplayName || '', spaceKind: r.spaceKind,
     space: r.space, thread: r.thread, threadKey: r.threadKey, timeZone: r.timeZone || null,
   });
 
@@ -502,13 +503,14 @@ function createEventHandler(deps) {
 
   /* ---------- messages ---------- */
 
-  async function runCommand(base, name, args) {
+  /** @param message  the typed message, so commands can read mentions; absent for button clicks */
+  async function runCommand(base, name, args, message) {
     if (!/^[a-z][a-z0-9-]*$/.test(name)) return 'Send /help to see what I can do.';
     // Commands someone may not use look exactly like unknown ones.
     const found = registry.findCommand(name, scopeOf(base));
     if (!found) return `I don't know /${name}. Send /help to see what I can do.`;
     if (!found.placeAllowed) return privateOnly;
-    const ctx = { ...contextsFor(base)(found.module), commandName: name };
+    const ctx = { ...contextsFor(base)(found.module), commandName: name, ...(message ? { message } : {}) };
     const r = await registry.runCommand(found, ctx, args);
     if (r.ok) return r.value || 'Done.';
     return r.error.expose ? r.error.message : `Sorry, /${name} failed. Please try again.`;
@@ -528,16 +530,17 @@ function createEventHandler(deps) {
     const raw = base.spaceKind === 'SPACE' && msg.argumentText !== undefined ? msg.argumentText : msg.text;
     const text = String(raw || '').trim();
 
-    const command = /^\/([a-z][a-z0-9-]*)(?:\s+([\s\S]*))?$/i.exec(text);
-    if (command) return renderReply(await runCommand(base, command[1].toLowerCase(), (command[2] || '').trim()));
-
     const chatMessage = {
       text: String(msg.text || ''),
       argumentText: String(msg.argumentText !== undefined ? msg.argumentText : msg.text || ''),
       mentions: mentionsOf(msg),
       space: { name: base.space, displayName: String(event.space.displayName || ''), kind: base.spaceKind },
-      sender: { userId: String(event.user.name || ''), email: base.userEmail, displayName: String(event.user.displayName || '') },
+      sender: { userId: String(event.user.name || ''), email: base.userEmail, displayName: base.userDisplayName },
     };
+
+    const command = /^\/([a-z][a-z0-9-]*)(?:\s+([\s\S]*))?$/i.exec(text);
+    if (command) return renderReply(await runCommand(base, command[1].toLowerCase(), (command[2] || '').trim(), chatMessage));
+
     defer(converse(base, { text, attachments: (msg.attachment || []).map(attachmentMeta) }, chatMessage));
     return {};
   }

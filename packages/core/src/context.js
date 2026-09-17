@@ -18,6 +18,7 @@ function createContextFactory({ store, sealer, env = process.env, log, fetchImpl
     return Object.freeze({
       userId: base.userId,
       userEmail: base.userEmail,
+      userDisplayName: base.userDisplayName || '',
       spaceKind: base.spaceKind,
       store: scopeStore(store, `m_${mod.name}`),
       seal: value => sealer.seal(value, context),
