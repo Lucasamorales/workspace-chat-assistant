@@ -50,18 +50,28 @@ Status: `todo` · `doing` · `done` · `blocked`
 
 ## Epic 2: Kudos module
 
-Source of truth: `Leave Dates Automation/KudosBotCode.gs` (live), not `Kudos automation/Code.gs` (older).
+Decisions: [0002-kudos.md](decisions/0002-kudos.md). Source of truth: the Apps Script `kudos.gs` +
+`kudos announcement.gs` currently attached to the Kudos Sheet.
+
+**P0 outside the repo (do now):** delete and recreate the Chat webhook hard-coded in
+`kudos announcement.gs`, store the new one in Script Properties; restrict the Apps Script web app
+(its approve link publishes without authentication).
 
 | # | Item | Acceptance |
 |---|---|---|
-| K1 | Port vote parsing: human mentions, per-nominee text slices, value regex (Own it, Think big, Go beyond, Be curious) | Same results as the live script on a shared set of test messages |
-| K2 | Write to Sheet `YOUR_KUDOS_SHEET_ID`, tab `Raw Data`, columns A–F unchanged | Existing reports keep working |
-| K3 | Share the Sheet with `buddy-bot@your-gcp-project.iam.gserviceaccount.com` (Editor) | Buddy can append; no other Drive access |
-| K4 | Spaces only; DMs rejected with the current message | Test |
-| K5 | *Proposed:* block self-votes | Decision needed |
-| K6 | *Proposed:* only accept votes in the official Kudos space(s) (`KUDOS_SPACES`) | Decision needed; space ids listed |
-| K7 | *Proposed:* add voter and nominee email as columns G–H | Decision needed; A–F untouched |
-| K8 | Access: everyone @example.com | Via R1 |
+| K1 | Vote parsing: human mentions from Chat annotations, per-nominee text slices, stricter value matching (Own it, Think big, Go beyond, Be curious) | Same results as the live script on real messages; known false positives ("down with it") rejected |
+| K2 | Append to `Raw Data`: A–F unchanged (Date, Voter, Value, Nominee, Space, Raw text) + G–H voter/nominee Chat IDs; dates in Argentina time | Existing reports keep working |
+| K3 | Votes only in "Team - Kudos"; DMs rejected with the current message | Test |
+| K4 | Block self-votes; enforce 5 given/month and 3 per nominee/month (leadership voters exempt) | Friendly reply naming the rule; partial votes logged for the allowed nominees |
+| K5 | `/kudos leadership @…` (admin): link leadership emails to Chat IDs; leadership can't win | Stored in module storage; audits exclude by ID, and by exact name for old rows |
+| K6 | `/kudos mine` (everyone), `/kudos leaderboard` (admin) | Buttons on the help card |
+| K7 | Monthly / quarterly / yearly audits: same thresholds, ties, trade-in eligibility, £ values and house tone | Output matches Apps Script on July 2026 data |
+| K8 | Approval card to Kudos admins: Publish as-is / Edit first (Chat dialog) / Skip; publish once, as Buddy, with real @mentions; record winner in Summary | Only admins can see/click; no web app, no webhook |
+| K9 | Scheduled jobs on the 1st (Cloud Scheduler → authenticated `/jobs/kudos/*`) | Quarterly only in Jan/Apr/Jul/Oct, yearly only in Jan |
+| K10 | Test against a **copy** of the Sheet in a test space; cutover with Epic 4 | Real Sheet untouched until cutover |
+
+Core work this depends on: R1 (per-module access + roles), R3 (message handlers), R4 (mentions);
+R6 (scheduled jobs) and Chat dialogs are built together with K8–K9, their first users.
 
 ## Epic 3: OOO module (who's out)
 
