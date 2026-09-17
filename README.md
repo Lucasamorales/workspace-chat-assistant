@@ -4,18 +4,20 @@ Your company's assistant inside **Google Chat**. People talk to Buddy like a col
 questions, send files, and work in **Asana** as themselves — with every change shown for
 approval before it happens.
 
-Buddy is a small core plus independent **modules**. Each module (Asana, files, …) has its own
-code, data, settings and tests, so a change to one can't break another. Kudos and OOO are
-next ([backlog](docs/BACKLOG.md)).
+Buddy is a small core plus independent **modules**. Each module (assistant, files, Asana, Kudos,
+…) has its own code, data, settings, permissions and tests, so a change to one can't break
+another. OOO ("who's out") is next ([backlog](docs/BACKLOG.md)).
 
-> **Status:** pilot, live as the Chat app **Buddy-Asana** for robin@ and remy@. It will be
-> renamed **Buddy** when Kudos and OOO move in.
+> **Status:** pilot, live as the Chat app **Buddy-Asana** for robin@ and remy@. Kudos is being
+> tested against a copy of the Kudos Sheet. The app will be renamed **Buddy** for the whole team
+> once Kudos and OOO are ready. What changed and when: [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
 ## Contents
 
 - [What users can do](#what-users-can-do)
+- [Voice and look](#voice-and-look)
 - [How it works](#how-it-works)
 - [Repository layout](#repository-layout)
 - [Modules](#modules)
@@ -38,6 +40,7 @@ Everything works with buttons; slash commands are still there for power users.
 | Ask anything | ✅ | ✅ |
 | Send a PDF, image, spreadsheet or text file and ask about it | ✅ | ✅ |
 | Asana: read, create, update, delete — as yourself | ✅ | ❌ (privacy: replies are visible to everyone) |
+| Kudos: `@Buddy kudos to @Eve for thinking big` | ❌ (votes only count in the Kudos space) | ✅ in the Kudos space |
 
 ### Connecting Asana
 The first time a request needs Asana, Buddy replies with a card: **Connect Asana** opens
@@ -49,8 +52,8 @@ an error.
 Anything that could change Asana stops first and shows a card:
 
 ```
-Review before Buddy makes changes
-Nothing will change until you click Approve.
+[thinking Buddy] Quick check before I make changes
+Nothing changes until you hit Approve.
 
 Change 1 of 2 · Create task
   Task title:   Prepare Q4 report
@@ -63,11 +66,11 @@ Change 2 of 2 · Create task
   [Approve] [Cancel]
 
 [Approve all] [Cancel all]
-This request expires at 14:32 (15 minutes). After that, just send your message again.
+This one expires at 14:32 (15 minutes). After that, just send your message again.
 ```
 
 Reads (searching tasks, "what's due today") run without asking. Deletes are marked
-*cannot be undone*. Only the person who asked can approve, and each change runs at most once.
+*can't be undone*. Only the person who asked can approve, and each change runs at most once.
 
 ### Commands (optional)
 | Command | What it does |
@@ -77,6 +80,27 @@ Reads (searching tasks, "what's due today") run without asking. Deletes are mark
 | `/usage` | Your Claude spend this month |
 | `/status` | Which connections are active |
 | `/reset` | Forget the current conversation |
+| `/kudos` | Your kudos this month (admins: `/kudos check`, `/kudos leadership @…`) |
+
+---
+
+## Voice and look
+
+Buddy sounds and looks like the original Buddy widget (the `Internal-RAG` repo), within what
+Google Chat allows. Changing any of this changes personality only, never behaviour.
+
+| What | Where | Notes |
+|---|---|---|
+| **Tone of voice** for Claude | `apps/chat-gateway/src/voice.js` | Toni's tone-of-voice guide with all Toni-isms, used sparingly. Clarity always wins for approvals, limits, errors, dates and numbers |
+| **Fixed messages** (welcome, errors, Kudos replies, cards) | Next to the code that sends them: `apps/chat-gateway/src/handler.js` and `cards.js`, each module's `src/`, `apps/oauth-gateway/src/app.js` | Same voice |
+| **Pixel-art images** | `apps/oauth-gateway/public/`, served at `https://buddy-oauth-…/assets/<file>` | Avatar (512 px on orange), neutral/happy/thinking faces (256 px), animated idle/talking/thinking GIFs |
+| **Card faces** | `MOOD_IMAGES` in `cards.js` | Thinking on review cards, happy on success and module replies, neutral on notices |
+| **Brand colour** | `BRAND_ORANGE` in `cards.js` | `#F47A2A` on the main button of each card |
+| **Chat app avatar** | Chat app console → Avatar URL | `https://buddy-oauth-000000000000.europe-west1.run.app/assets/buddy-avatar.png` |
+
+Google Chat limits: no custom fonts, sizes or backgrounds. Style comes from images, emoji,
+button colours and wording. The Asana connect pages are normal web pages, so they use the full
+retro style (black borders, hard shadow, orange accent).
 
 ---
 
@@ -110,7 +134,9 @@ One Docker image serves both services; the start command is chosen at deploy tim
 ```
 apps/
   chat-gateway/        buddy-bot: Google Chat webhook, cards, approvals, button handling
-  oauth-gateway/       buddy-oauth: /auth/<module>/start and /callback, nothing else
+    src/voice.js         Buddy's tone of voice (instructions for Claude)
+  oauth-gateway/       buddy-oauth: /auth/<module>/start and /callback, plus Buddy's images at /assets
+    public/              pixel-art avatar, faces and GIFs
 packages/
   core/                shared building blocks — the only code modules and apps share
     src/agent-loop.js    Claude tool loop with the approval pause/resume
@@ -309,6 +335,8 @@ Services validate settings at startup and refuse to run with a missing or malfor
 - **Comments** explain *why*, not what.
 - **No AI attribution** anywhere in code, docs or commit messages.
 - **Terminal:** Windows PowerShell 5.1 by default — no `&&`; use `;` or separate commands.
+- **Every change updates the docs:** add a [CHANGELOG.md](CHANGELOG.md) entry, and update this
+  README, the RUNBOOK and the BACKLOG where they are affected.
 
 Details: [CLAUDE.md](CLAUDE.md).
 
@@ -318,8 +346,9 @@ Details: [CLAUDE.md](CLAUDE.md).
 
 | Doc | What's in it |
 |---|---|
+| [CHANGELOG.md](CHANGELOG.md) | What changed and when |
 | [docs/RUNBOOK.md](docs/RUNBOOK.md) | Setup, Asana app, deploy, Chat console, acceptance checklist, operations, troubleshooting |
 | [docs/SECURITY.md](docs/SECURITY.md) | Threats, controls, data flows, known limits |
-| [docs/BACKLOG.md](docs/BACKLOG.md) | What's next: Kudos, OOO, per-module permissions, App Home |
+| [docs/BACKLOG.md](docs/BACKLOG.md) | What's next: Kudos results, OOO, merge into one Buddy, operations |
 | [docs/decisions/](docs/decisions/) | Recorded decisions (scope, security, naming) |
 | [legacy/bot-rev23/](legacy/bot-rev23/) | The original bot and its docs, for reference |

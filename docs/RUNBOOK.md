@@ -53,6 +53,7 @@ only) with every setting, then checks: `buddy-bot` is not public, an anonymous c
 |---|---|
 | Build as Workspace add-on | **unticked** |
 | App name | Buddy-Asana (renamed to Buddy at the merge, see `docs/BACKLOG.md` Epic 4) |
+| Avatar URL | `https://buddy-oauth-000000000000.europe-west1.run.app/assets/buddy-avatar.png` (works after the first deploy that includes the images) |
 | Functionality | Receive 1:1 messages; Join spaces and group conversations |
 | Connection | HTTP endpoint URL → `https://buddy-bot-000000000000.europe-west1.run.app` |
 | Triggers | Use a common HTTP endpoint URL for all triggers |
@@ -66,25 +67,25 @@ Saving this switches traffic from the old bot to Buddy. To roll back, put the ol
 ## 5. Acceptance checklist
 
 In a DM with Buddy:
-- [ ] `hello` → a reply replaces "_Buddy is thinking…_"
+- [ ] `hello` → a reply replaces "_Hmm, give me a sec…_"
 - [ ] `/help` → card with examples and buttons (Connect Asana, My usage, Start fresh)
-- [ ] While not connected: "what's due today in Asana?" → **Connect your Asana first** card
-- [ ] **Connect Asana** → Asana consent → "✅ Asana connected" page
+- [ ] While not connected: "what's due today in Asana?" → **Let's connect your Asana first** card
+- [ ] **Connect Asana** → Asana consent → "Yessss, Asana's connected!" page
 - [ ] Back in Chat → **I've connected, continue** → Buddy answers the original question without retyping
-- [ ] Open the same connect link again → "This link has expired"
+- [ ] Open the same connect link again → "Oh no, this link has expired"
 - [ ] `/asana status` → **Disconnect** → asks first → **Yes, disconnect** → "Connect again" button
 - [ ] "What are my tasks due this week?" → answer, **no** approval card (read-only)
 - [ ] `/asana tools` lists actions split into "runs without asking" and "asks for approval"
 - [ ] "Create a task called Buddy test" → card shows Task title / Description / Due date / Assignee by name → **Cancel** → nothing created
 - [ ] "Create two tasks A and B" → one section per task → **Approve** A, **Cancel** B → only A exists; Buddy summarises
 - [ ] "Create tasks C and D" → **Approve all** → both exist; clicking again changes nothing
-- [ ] "Move task A's due date to Friday" → card says "changes something that already exists" (not "cannot be undone")
-- [ ] "Delete the task A" → card says "cannot be undone" → Approve → gone
+- [ ] "Move task A's due date to Friday" → card says "changes something that already exists" (not "can't be undone")
+- [ ] "Delete the task A" → card says "can't be undone" → Approve → gone
 - [ ] Upload a PDF, an image and an .xlsx with a question each
 - [ ] `/asana disconnect` → Buddy no longer appears under Asana → Settings → Apps
 
 In a space with Buddy:
-- [ ] `@Buddy hello` works; `@Buddy /asana connect` → "only works in a direct message"
+- [ ] `@Buddy hello` works; `@Buddy /asana connect` → "only works in a private chat with me"
 - [ ] `@Buddy list my Asana tasks` → Buddy says Asana is DM-only
 
 ## 5b. Kudos test (test Sheet copy + test space)
@@ -98,16 +99,26 @@ One-time:
 5. `@Buddy-Asana /kudos check` again → "✅ Votes count here" and "✅ Sheet reachable".
 
 Checklist (in the test space unless noted):
-- [ ] `@Buddy-Asana kudos to @Remy for thinking big` → "✅ Got it! Logged 1 vote(s)…"; a row appears in the **test** Sheet with G–H filled
+- [ ] `@Buddy-Asana kudos to @Remy for thinking big` → "Yessss! Logged 1 kudos from…"; a row appears in the **test** Sheet with G–H filled
 - [ ] Two people, two values in one message → two rows with the right values
 - [ ] Tag yourself → "can't give kudos to yourself", no row
-- [ ] Same person a 4th time this month → "limit per person", no row
-- [ ] `@Buddy-Asana kudos for being curious` (no one tagged) → "didn't see any humans tagged"
+- [ ] Same person a 4th time this month → "max per person", no row
+- [ ] `@Buddy-Asana kudos for being curious` (no one tagged) → "didn't spot anyone tagged"
 - [ ] `@Buddy-Asana summarise this thread for @Remy` → normal Claude reply, no row
-- [ ] Vote in a DM with Buddy-Asana → "Nice try!" reply, no row
+- [ ] Vote in a DM with Buddy-Asana → "Nice try, chap!" reply, no row
 - [ ] `/kudos` in a DM → your month's received/given
+- [ ] `/kudos check` (admin) → "✅ Buddy can add rows"
 - [ ] `@Buddy-Asana /kudos leadership @Charlie @Toni …` (admin) → list saved
 - [ ] The **real** Kudos Sheet is unchanged
+
+## 5c. Voice and look check
+
+- [ ] Open `https://buddy-oauth-000000000000.europe-west1.run.app/assets/buddy-avatar.png` → pixel Buddy on orange
+- [ ] Chat app shows the pixel avatar (Avatar URL set in the console)
+- [ ] `hello` in a DM → reply in Buddy's voice ("Hey…", Toni-isms now and then)
+- [ ] A review card shows thinking Buddy in the header and an orange **Approve** button
+- [ ] Do Buddy's gears **move** on the review card? Yes → GIFs work in Chat. No → first frame only (fine; see BACKLOG V2)
+- [ ] Asana connect page (browser) shows Buddy, black border and orange accent
 
 ## 6. After Buddy is verified: remove the old bot
 

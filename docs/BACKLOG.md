@@ -53,7 +53,16 @@ Status: `todo` · `doing` · `done` · `blocked`
 |---|---|---|
 | D1 | `SECURITY.md`: per-module access, assistant permission, Kudos (Sheet access, vote policy) | Controls table covers them |
 | D2 | RUNBOOK checklist: assistant permission (someone without it gets "here's what I can help with") | Checklist item |
-| D3 | Non-technical overview of what Buddy does, for the team | Shared doc |
+| D3 | ✅ Non-technical overview of what Buddy does, organised by module | Shared doc |
+
+## Voice and look
+
+| # | Item | Acceptance |
+|---|---|---|
+| V1 | ✅ Toni's tone of voice for Claude and all fixed messages; pixel Buddy on cards; orange main buttons; retro connect pages | Deployed; RUNBOOK §5c passes |
+| V2 | Check whether animated GIFs animate in Chat cards; if not, switch card faces to the still PNGs | Decision after the §5c check |
+| V3 | Custom Buddy emoji in replies (approved): get the emoji names/ids, test whether `:name:` renders from an app, add to Kudos replies and welcome | Emoji visible in the test space |
+| V4 | Set the Chat app **Avatar URL** in the console | Pixel avatar visible in Chat |
 
 ## Epic 1: Prepare the repo for many modules
 

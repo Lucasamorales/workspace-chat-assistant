@@ -16,6 +16,14 @@
 
 - Quality gate: use `feat`, `fix` or `devops` only once the change is verified working or explicitly approved. Otherwise `wip:`.
 
+## Documentation
+- Every change gets a `CHANGELOG.md` entry (newest first, grouped by date: Added / Changed / Fixed / Security / Infrastructure / Docs).
+- Keep `README.md`, `docs/RUNBOOK.md`, `docs/BACKLOG.md` and module READMEs in step with the change, in the same push.
+
+## Scope agreements
+- Voice and look work changes wording, images and colours only: never behaviour, rules, permissions or button actions.
+- Other repos (e.g. `Internal-RAG`) are read-only references: never edit, copy code from, or mix folders with them.
+
 ## Terminal
 - Default shell is Windows PowerShell 5.1. Never chain with `&&`; use `;` or separate commands.
 - Commands run from the repo root. Don't `cd` with absolute paths; use relative paths for subfolders.
