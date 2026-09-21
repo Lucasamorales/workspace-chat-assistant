@@ -8,6 +8,8 @@ COPY modules/files/package.json modules/files/
 COPY modules/asana/package.json modules/asana/
 COPY modules/kudos/package.json modules/kudos/
 COPY modules/assistant/package.json modules/assistant/
+COPY modules/ooo/package.json modules/ooo/
+COPY modules/leave/package.json modules/leave/
 COPY apps/chat-gateway/package.json apps/chat-gateway/
 COPY apps/oauth-gateway/package.json apps/oauth-gateway/
 RUN npm ci --omit=dev --no-audit --no-fund

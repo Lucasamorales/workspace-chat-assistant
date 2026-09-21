@@ -18,6 +18,8 @@
     "@buddy/module-files": "*",
     "@googleapis/chat": "^51.0.0",
     "@buddy/module-kudos": "*",
-    "@buddy/module-assistant": "*"
+    "@buddy/module-assistant": "*",
+    "@buddy/module-ooo": "*",
+    "@buddy/module-leave": "*"
   }
 }

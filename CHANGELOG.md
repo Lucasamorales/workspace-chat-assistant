@@ -32,6 +32,7 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
 
 ### Infrastructure
 - `setup.sh` enables the Calendar and IAM Credentials APIs, needed by `ooo` and `leave`.
+- `ooo` and `leave` added to `MODULES`, to the gateway's dependencies and to the Docker build.
 
 ### Docs
 - **Out of office planned as two modules**, `ooo` (read-only "who's out", unblocked by a calendar
