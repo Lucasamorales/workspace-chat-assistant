@@ -103,6 +103,60 @@ test('an HR admin can book for someone else, and the card says whose calendar it
   assert.equal(calendar.created[0].subject, 'remy@example.com');
 });
 
+/* ---------- the accounts team booking for colleagues ---------- */
+
+test('a colleague\'s leave uses THEIR name and shift, never the person doing the booking', async () => {
+  const { mod, ctx, calendar } = setup({ role: true });
+  const tools = await mod.tools(ctx);
+  await tools.execute('book_leave', {
+    person: 'remy.lee@example.com',
+    shift: 'UK_9_5',
+    leaves: [{ from: '2026-10-12', type: 'am' }],
+  });
+
+  const [own] = calendar.created;
+  assert.equal(own.subject, 'remy.lee@example.com');
+  assert.equal(own.event.summary, 'Remy Lee (OOO)', 'their name, not Robin');
+  assert.equal(own.event.start.dateTime, '2026-10-12T09:00:00+01:00', 'their London hours, not ARG');
+});
+
+test('a colleague\'s shift is remembered, so it is typed once', async () => {
+  const { mod, ctx, calendar } = setup({ role: true });
+  const tools = await mod.tools(ctx);
+  await tools.execute('book_leave', { person: 'riley@example.com', shift: 'UK_9_5', nickname: 'Riley', leaves: [{ from: '2026-10-12', type: 'am' }] });
+  await tools.execute('book_leave', { person: 'riley@example.com', leaves: [{ from: '2026-10-20', type: 'pm' }] });
+
+  const second = calendar.created.at(-2);
+  assert.equal(second.event.summary, 'Riley (OOO)');
+  assert.equal(second.event.start.dateTime, '2026-10-20T13:00:00+01:00', 'still on the UK shift');
+});
+
+test('a half-day for someone whose hours are unknown asks, rather than guessing', async () => {
+  const { mod, ctx, calendar } = setup({ role: true });
+  const tools = await mod.tools(ctx);
+  await assert.rejects(
+    tools.execute('book_leave', { person: 'charlie@example.com', leaves: [{ from: '2026-10-12', type: 'pm' }] }),
+    err => { assert.match(err.message, /don't know what hours they work/); return true; },
+  );
+  assert.equal(calendar.created.length, 0);
+
+  // A full day is unaffected: it runs 00:00–23:59 whatever the shift.
+  await tools.execute('book_leave', { person: 'charlie@example.com', leaves: [{ from: '2026-10-12', type: 'full' }] });
+  assert.equal(calendar.created.length, 2);
+});
+
+test('the team invite can be skipped, and the card stops promising it', async () => {
+  const { mod, ctx, calendar } = setup({ role: true });
+  const tools = await mod.tools(ctx);
+  const input = { leaves: [{ from: '2026-10-12', type: 'full' }], team_invite: false };
+  const card = await tools.describe('book_leave', input);
+  assert.ok(!card.fields.some(f => f.label === 'Team invite'));
+
+  const { content } = await tools.execute('book_leave', input);
+  assert.equal(calendar.created.length, 1, 'only the personal block');
+  assert.match(content, /no team invite/);
+});
+
 test('cancelling clears exactly the days asked for, not two days more', async () => {
   const calendar = fakeCalendar([{ subject: ROBIN, event: { id: 'a', summary: 'Robin (OOO)', start: { date: '2026-10-12' } } }]);
   const { mod, ctx } = setup({ calendar });

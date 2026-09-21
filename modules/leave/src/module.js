@@ -50,12 +50,39 @@ function createLeaveModule({ impersonator, calendar, now = () => new Date() } = 
   const teamEmail = ctx => ctx.settings.LEAVE_TEAM_EMAIL || DEFAULT_TEAM_EMAIL;
   const profiles = ctx => ctx.store.collection('profiles');
 
-  async function profileOf(ctx) {
-    const saved = (await profiles(ctx).get(ctx.userId)) || {};
+  const key = email => String(email || '').toLowerCase();
+
+  /** "remy.lee" → "Remy Lee", so a colleague's name is never just an email stem. */
+  const nameFromEmail = email => key(email).split('@')[0].split(/[._-]+/)
+    .filter(Boolean).map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+
+  /**
+   * Whose hours and name go on the event — the person the leave is for, never the person
+   * asking. An admin booking for a UK colleague must not stamp their own shift on it.
+   */
+  async function profileOf(ctx, subject = ctx.userEmail, given = {}) {
+    const saved = (await profiles(ctx).get(key(subject))) || {};
+    const self = key(subject) === key(ctx.userEmail);
+    const asked = String(given.shift || '').toUpperCase();
     return {
-      shift: SHIFTS[saved.shift] ? saved.shift : (SHIFTS[ctx.settings.LEAVE_DEFAULT_SHIFT] ? ctx.settings.LEAVE_DEFAULT_SHIFT : DEFAULT_SHIFT),
-      nickname: saved.nickname || ctx.userDisplayName || (ctx.userEmail || '').split('@')[0],
+      shift: SHIFTS[asked] ? asked : (SHIFTS[saved.shift] ? saved.shift : null),
+      nickname: given.nickname || saved.nickname || (self ? (ctx.userDisplayName || nameFromEmail(subject)) : nameFromEmail(subject)),
+      known: Boolean(SHIFTS[saved.shift]),
+      self,
     };
+  }
+
+  const defaultShift = ctx => (SHIFTS[ctx.settings.LEAVE_DEFAULT_SHIFT] ? ctx.settings.LEAVE_DEFAULT_SHIFT : DEFAULT_SHIFT);
+
+  /**
+   * Half-days depend on the shift, so guessing one for a colleague would put the wrong hours
+   * in their calendar. Full days run 00:00–23:59 whatever the shift, so a default is safe there.
+   */
+  function shiftFor(ctx, profile, leave) {
+    if (profile.shift) return profile.shift;
+    if (leave.type === 'full' || profile.self) return defaultShift(ctx);
+    throw bad('I don\'t know what hours they work, so I\'d get a half-day wrong. Tell me their shift ('
+      + `${Object.keys(SHIFTS).join(', ')}) and I'll remember it.`);
   }
 
   /**
@@ -81,10 +108,14 @@ function createLeaveModule({ impersonator, calendar, now = () => new Date() } = 
     return events.find(ev => ev.summary === event.summary && startOf(ev) === want);
   }
 
-  async function book(ctx, leave, person) {
-    const subject = subjectFor(ctx, person);
-    const { shift: shiftKey, nickname } = await profileOf(ctx);
+  async function book(ctx, leave, input) {
+    const subject = subjectFor(ctx, input.person);
+    const profile = await profileOf(ctx, subject, input);
+    const shiftKey = shiftFor(ctx, profile, leave);
+    const { nickname } = profile;
     const shift = SHIFTS[shiftKey];
+    // Remember it, so the accounts team types a colleague's details once, not every time.
+    if (input.shift || input.nickname) await profiles(ctx).set(key(subject), { shift: shiftKey, nickname });
     const { start, end } = timesFor(leave, shift);
     const window = { timeMin: start, timeMax: end };
 
@@ -94,15 +125,17 @@ function createLeaveModule({ impersonator, calendar, now = () => new Date() } = 
     }
 
     await calendarFor().create(subject, personal);
-    await calendarFor().create(subject, teamEvent(leave, shift, nickname, teamEmail(ctx)));
+    if (input.team_invite !== false) await calendarFor().create(subject, teamEvent(leave, shift, nickname, teamEmail(ctx)));
     ctx.log.info('leave booked', { by: ctx.userEmail, subject, from: leave.from, to: leave.to, type: leave.type, shift: shiftKey });
-    return `Booked: ${nickname} out ${leave.from}${leave.to !== leave.from ? ` to ${leave.to}` : ''} (${TYPES[leave.type].toLowerCase()}), and the team is invited.`;
+    const span = leave.to !== leave.from ? `${leave.from} to ${leave.to}` : leave.from;
+    const invited = input.team_invite === false ? 'no team invite' : 'the team is invited';
+    return `Booked: ${nickname} out ${span} (${TYPES[leave.type].toLowerCase()}), ${invited}.`;
   }
 
   async function cancel(ctx, { from, to, person }) {
     const subject = subjectFor(ctx, person);
-    const { shift: shiftKey } = await profileOf(ctx);
-    const { tz } = SHIFTS[shiftKey];
+    const profile = await profileOf(ctx, subject);
+    const { tz } = SHIFTS[profile.shift || defaultShift(ctx)];
     // Exactly the days asked for: the Apps Script searched two days past the end and deleted
     // leave the person never asked to cancel.
     const events = await calendarFor().listOoo(subject, {
@@ -143,9 +176,11 @@ function createLeaveModule({ impersonator, calendar, now = () => new Date() } = 
     settings: ['LEAVE_TEAM_EMAIL'],
     examples: ['I\'m off next Thursday', 'Book me out 12–16 October', 'Cancel my leave on the 3rd'],
     instructions: 'Leave is booked with the book_leave tool and removed with cancel_leave. Dates are YYYY-MM-DD, '
-      + 'type is full, am or pm. Never guess dates: if the person is vague, ask. You cannot book leave for anyone '
-      + 'but the person talking to you unless they are an HR admin, so do not offer to. Working hours come from '
-      + 'their shift, which they set with /leave shift — never invent hours.',
+      + 'type is full, am or pm. Never guess dates: if the person is vague, ask. This module is used by the accounts '
+      + 'team to record leave for colleagues, so "person" is usually someone else: pass their work email. People '
+      + 'without the admin role can only book their own leave, so do not offer to book for others. Working hours '
+      + 'come from each person\'s saved shift; if a half-day is asked for and I do not know theirs, ask which shift '
+      + 'they work instead of inventing hours. It is remembered afterwards.',
 
     commands: {
       leave: {
@@ -156,23 +191,24 @@ function createLeaveModule({ impersonator, calendar, now = () => new Date() } = 
           const [sub, ...rest] = text.split(/\s+/);
           const value = rest.join(' ').trim();
           const saved = await profileOf(ctx);
+          const savedShift = saved.shift || defaultShift(ctx);
 
           if (sub === 'shift') {
-            const key = value.toUpperCase();
-            if (!SHIFTS[key]) {
+            const wanted = value.toUpperCase();
+            if (!SHIFTS[wanted]) {
               return {
                 title: 'Which shift?',
                 text: Object.entries(SHIFTS).map(([k, s]) => `• <b>${k}</b> — ${s.label}`).join('\n')
                   + '\n\nSet it with /leave shift ARG_8_5',
               };
             }
-            await profiles(ctx).set(ctx.userId, { ...saved, shift: key });
-            return `Righto, your half-days now run on ${SHIFTS[key].label}.`;
+            await profiles(ctx).set(key(ctx.userEmail), { shift: wanted, nickname: saved.nickname });
+            return `Righto, your half-days now run on ${SHIFTS[wanted].label}.`;
           }
 
           if (sub === 'name') {
             if (!value) return 'Tell me the name to show on the calendar: /leave name Robin';
-            await profiles(ctx).set(ctx.userId, { ...saved, nickname: value });
+            await profiles(ctx).set(key(ctx.userEmail), { shift: saved.shift || undefined, nickname: value });
             return `Sorted, your leave will show as "${value} (OOO)".`;
           }
 
@@ -180,22 +216,22 @@ function createLeaveModule({ impersonator, calendar, now = () => new Date() } = 
             const lines = [];
             try {
               await calendarFor().listOoo(ctx.userEmail, {
-                timeMin: at('2026-01-01', '00:00:00', SHIFTS[saved.shift].tz),
-                timeMax: at('2026-01-02', '00:00:00', SHIFTS[saved.shift].tz),
+                timeMin: at('2026-01-01', '00:00:00', SHIFTS[savedShift].tz),
+                timeMax: at('2026-01-02', '00:00:00', SHIFTS[savedShift].tz),
               });
               lines.push('✅ Buddy can act on your calendar.');
             } catch (error) {
               ctx.log.warn('leave check failed', { error });
               lines.push(`❌ ${error.expose ? error.message : 'Buddy can\'t reach your calendar.'}`);
             }
-            lines.push(`Shift: ${SHIFTS[saved.shift].label} · Shown as: ${saved.nickname} · Team invite: ${teamEmail(ctx)}`);
+            lines.push(`Shift: ${SHIFTS[savedShift].label} · Shown as: ${saved.nickname} · Team invite: ${teamEmail(ctx)}`);
             return { title: 'Leave setup check', text: lines.join('\n') };
           }
 
           return {
             title: 'Booking leave',
             text: [
-              `Shift: <b>${SHIFTS[saved.shift].label}</b> · shown as <b>${saved.nickname} (OOO)</b>`,
+              `Shift: <b>${SHIFTS[savedShift].label}</b> · shown as <b>${saved.nickname} (OOO)</b>`,
               '',
               'Just tell me, e.g. "I\'m off next Thursday" or "book me out 12–16 October, mornings only".',
               'I\'ll show you exactly what I\'m about to put in your calendar before anything happens.',
@@ -232,6 +268,13 @@ function createLeaveModule({ impersonator, calendar, now = () => new Date() } = 
                   },
                 },
                 person: { type: 'string', description: 'HR admins only: whose calendar. Leave empty for the person asking' },
+                shift: {
+                  type: 'string',
+                  enum: Object.keys(SHIFTS),
+                  description: 'Their working hours, needed for a half-day when I don\'t know them yet. Remembered afterwards',
+                },
+                nickname: { type: 'string', description: 'The name to show on the calendar, if it should differ from theirs' },
+                team_invite: { type: 'boolean', description: 'Set false to skip inviting the team. Defaults to true' },
               },
               required: ['leaves'],
             },
@@ -260,8 +303,11 @@ function createLeaveModule({ impersonator, calendar, now = () => new Date() } = 
           : [input]),
 
         async describe(name, input) {
-          const { shift: shiftKey, nickname } = await profileOf(ctx);
-          const shift = SHIFTS[shiftKey];
+          // The card must show the details of the person the leave is FOR, so an approver
+          // can catch a wrong name or the wrong hours before anything is written.
+          const subject = subjectFor(ctx, input.person);
+          const profile = await profileOf(ctx, subject, input);
+          const { nickname } = profile;
           if (name === 'cancel_leave') {
             if (!DATE.test(String(input.from)) || !DATE.test(String(input.to))) throw bad('I need dates as YYYY-MM-DD to cancel leave.');
             return {
@@ -274,6 +320,7 @@ function createLeaveModule({ impersonator, calendar, now = () => new Date() } = 
             };
           }
           const leave = checkLeave((input.leaves || [])[0] || {});
+          const shift = SHIFTS[shiftFor(ctx, profile, leave)];
           const { start, end } = timesFor(leave, shift);
           return {
             title: 'Book out-of-office',
@@ -284,7 +331,7 @@ function createLeaveModule({ impersonator, calendar, now = () => new Date() } = 
               { label: 'Dates', value: leave.from === leave.to ? leave.from : `${leave.from} to ${leave.to}` },
               { label: 'Type', value: TYPES[leave.type] },
               ...(leave.type === 'full' ? [] : [{ label: 'Hours', value: `${start.slice(11, 16)}–${end.slice(11, 16)} (${shift.label})` }]),
-              { label: 'Team invite', value: teamEmail(ctx) },
+              ...(input.team_invite === false ? [] : [{ label: 'Team invite', value: teamEmail(ctx) }]),
             ],
           };
         },
@@ -299,7 +346,7 @@ function createLeaveModule({ impersonator, calendar, now = () => new Date() } = 
           if (!leaves.length) throw bad('Tell me which days you\'re taking off.');
           if (leaves.length > MAX_BLOCKS) throw bad(`That's a lot at once — ${MAX_BLOCKS} blocks of leave is my limit per request.`);
           const done = [];
-          for (const raw of leaves) done.push(await book(ctx, checkLeave(raw), input.person));
+          for (const raw of leaves) done.push(await book(ctx, checkLeave(raw), input));
           return { content: done.join('\n') };
         },
       };
