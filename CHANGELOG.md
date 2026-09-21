@@ -10,6 +10,14 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
 
 ## 2026-09-21
 
+### Docs
+- **OOO module planned.** Decision record `0003-ooo.md`: `buddy-bot` gets domain-wide delegation
+  with no key file (it signs its own tokens), the `calendar.events` scope only, impersonating just
+  the Chat-verified sender unless they hold `ooo.admin`, with every write behind an approval click.
+  Remy's Apps Script is kept for reference in `legacy/ooo-appsscript/` with its private key removed;
+  that key allowed impersonating anyone in the domain and needs rotating.
+- Backlog Epic 3 rewritten: admin prerequisites, leave creation first, announcer second.
+
 ### Changed
 - **Files is pilot-only.** Reading uploaded files is limited to Robin and Remy
   (`BUDDY_ACCESS_FILES`) until it has been tested properly, instead of the whole domain.

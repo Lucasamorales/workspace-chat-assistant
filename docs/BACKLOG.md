@@ -107,16 +107,41 @@ Decisions: [0002-kudos.md](decisions/0002-kudos.md). Source of truth: the Apps S
 Core work this depends on: R1 (per-module access + roles), R3 (message handlers), R4 (mentions);
 R6 (scheduled jobs) and Chat dialogs are built together with K8–K9, their first users.
 
-## Epic 3: OOO module (who's out)
+## Epic 3: OOO module (leave + who's out)
+
+Decision: `docs/decisions/0003-ooo.md`. Reference: `legacy/ooo-appsscript/`.
+Order agreed 2026-09-21: **leave creation first**, announcer second.
+
+### Prerequisites (admin, blocks everything)
 
 | # | Item | Acceptance |
 |---|---|---|
-| O0 | Share the `accounts@` calendar with `buddy-bot@your-gcp-project.iam.gserviceaccount.com` ("See all event details"); if Workspace blocks external sharing, get admin approval | Blocks the rest of this epic |
+| O0 | Share the team calendar (`wholeteam@`, confirm which) with `buddy-bot@your-gcp-project.iam.gserviceaccount.com` ("See all event details") | Blocks the announcer half |
+| O0a | Enable `iamcredentials.googleapis.com`; grant `buddy-bot` `roles/iam.serviceAccountTokenCreator` on itself | `buddy-bot` can sign its own tokens, no key file |
+| O0b | Admin console → API controls → Domain-wide delegation: add `buddy-bot`'s OAuth client id with scope `https://www.googleapis.com/auth/calendar.events` only | Buddy can act as the requester on their own calendar |
+| O0c | Rotate the exposed `leave-bot` key; remove its delegation once Buddy replaces the script | Old key no longer works |
+
+### Leave creation (first)
+
+| # | Item | Acceptance |
+|---|---|---|
+| O10 | `ooo` module: impersonate **only** the Chat-verified sender, unless `BUDDY_ROLE_OOO_ADMIN` | Test: a normal user cannot book for anyone else |
+| O11 | Create leave: full days, AM and PM half-days, from the shift table (UK 9–17, ARG 6–15 / 7–16 / 8–17); personal `outOfOffice` block with auto-decline + transparent team invite | Same events as the Apps Script for the same input |
+| O12 | Per-user shift and nickname remembered, defaulting to the Chat display name | Second booking does not ask again |
+| O13 | Every create/cancel through the approval card, one section per leave block | Test |
+| O14 | Cancel leave in a date range — **without** the +2 day over-reach of the script | Test proves events outside the range survive |
+| O15 | De-duplicate: booking the same block twice does not create two events | Test |
+| O16 | Audit log: requester, subject, dates, result | Visible in `core__events` |
+
+### Announcer (second)
+
+| # | Item | Acceptance |
+|---|---|---|
 | O1 | Port "who is out" lookups: today, tomorrow, this/next week, this/next month | Same answers as the live script for the same calendar data |
 | O2 | Read `accounts@example.com` calendar as `buddy-bot` (calendar shared with "See all event details") | No per-user calendar subscription hack, no keys |
 | O3 | Keep de-duplication and ARG time formatting | Test |
 | O4 | Friendly error instead of printing raw exception text | Test |
-| O5 | DMs and spaces; access everyone @example.com | Via R1 |
+| O5 | DMs and spaces; reading open to everyone @example.com, writing to the pilot until tested | Via R1 |
 | O6 | *Optional:* expose "who is out" as a read-only tool so the assistant can answer naturally | Only for users with both assistant and ooo access |
 
 ## Epic 4: Merge and cutover
