@@ -1,0 +1,119 @@
+/**
+ * OOO: who's out of the office, read from the `accounts@` calendar.
+ *
+ * Read-only by design. It answers commands without Claude, so anyone in the domain can use it,
+ * and offers the same lookup as a tool so the assistant can answer naturally.
+ * Booking and cancelling leave is the separate `leave` module.
+ *
+ * Built by a factory so tests can inject a fake Calendar client and clock.
+ */
+
+const { createOooCalendar } = require('./calendar');
+const { WHEN, rangeFor, instantsFor } = require('./range');
+const { entriesFrom, replyFor, textFor } = require('./present');
+
+const DEFAULT_CALENDAR = 'accounts@example.com';
+const DEFAULT_TZ = 'America/Argentina/Buenos_Aires';
+const DEFAULT_TZ_LABEL = 'ARG';
+
+function defaultCalendarApi() {
+  // Required lazily so tests and other modules never load the Google client.
+  const { calendar } = require('@googleapis/calendar');
+  const { GoogleAuth } = require('google-auth-library');
+  return calendar({ version: 'v3', auth: new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/calendar.readonly'] }) });
+}
+
+/** "next week please" → "next week"; anything unrecognised falls back to today. */
+function whenFrom(text) {
+  const t = String(text || '').toLowerCase();
+  if (/\bnext week\b/.test(t)) return 'next week';
+  if (/\bnext month\b/.test(t)) return 'next month';
+  if (/\btomorrow\b/.test(t)) return 'tomorrow';
+  if (/\b(this )?month\b/.test(t)) return 'month';
+  if (/\b(this )?week\b/.test(t)) return 'week';
+  return 'today';
+}
+
+function createOooModule({ calendarApi, now = () => new Date() } = {}) {
+  let api = calendarApi;
+  const calendarFor = ctx => {
+    if (!api) api = defaultCalendarApi();
+    return createOooCalendar({ calendarApi: api, calendarId: ctx.settings.OOO_CALENDAR_ID || DEFAULT_CALENDAR });
+  };
+  const zone = ctx => ({
+    timeZone: ctx.settings.OOO_TIMEZONE || DEFAULT_TZ,
+    tzLabel: ctx.settings.OOO_TIMEZONE_LABEL || DEFAULT_TZ_LABEL,
+  });
+
+  async function lookup(ctx, when) {
+    const { timeZone, tzLabel } = zone(ctx);
+    const range = rangeFor(when, now(), timeZone);
+    const events = await calendarFor(ctx).list(instantsFor(range, timeZone));
+    return { entries: entriesFrom(events, timeZone, tzLabel), label: range.label };
+  }
+
+  async function check(ctx) {
+    const cal = calendarFor(ctx);
+    const lines = [];
+    try {
+      const info = await cal.describe();
+      lines.push(`✅ Calendar reachable: "${info.title}" (time zone ${info.timeZone})`);
+      const { entries, label } = await lookup(ctx, 'week');
+      lines.push(`✅ I can read events: ${entries.length} OOO entr${entries.length === 1 ? 'y' : 'ies'} ${label}.`);
+    } catch (error) {
+      ctx.log.warn('ooo calendar check failed', { error });
+      lines.push(error.expose ? `❌ ${error.message}` : '❌ I can\'t read the OOO calendar.');
+    }
+    lines.push(`Calendar: ${cal.calendarId} · shown in ${zone(ctx).timeZone}`);
+    return { title: 'OOO setup check', text: lines.join('\n') };
+  }
+
+  return {
+    name: 'ooo',
+    description: 'See who\'s out of the office',
+    settings: ['OOO_CALENDAR_ID'],
+    examples: ['Who\'s out today?', 'Who\'s off next week?'],
+    instructions: 'Out-of-office information comes from the who_is_out tool: use it instead of guessing, and '
+      + 'never invent absences. Buddy can only read leave; booking or cancelling it is done elsewhere.',
+
+    commands: {
+      ooo: {
+        description: 'Who\'s out of the office',
+        usage: '/ooo [today|tomorrow|week|next week|month|next month|check]',
+        async run(ctx, args) {
+          const arg = String(args || '').trim().toLowerCase();
+          if (arg === 'check') return check(ctx);
+          const { entries, label } = await lookup(ctx, arg ? whenFrom(arg) : 'today');
+          return replyFor(entries, label);
+        },
+      },
+    },
+
+    quickActions: async () => [
+      { text: 'Out today', command: 'ooo', args: 'today' },
+      { text: 'Out this week', command: 'ooo', args: 'week' },
+    ],
+
+    async tools(ctx) {
+      return {
+        definitions: [{
+          name: 'who_is_out',
+          description: 'List who is out of the office for a period. Read-only.',
+          input_schema: {
+            type: 'object',
+            properties: { when: { type: 'string', enum: WHEN, description: 'Which period to look at' } },
+            required: ['when'],
+          },
+        }],
+        // Reading a calendar changes nothing, so it never interrupts the user for approval.
+        needsApproval: () => false,
+        execute: async (name, input) => {
+          const { entries, label } = await lookup(ctx, WHEN.includes(input.when) ? input.when : 'today');
+          return { content: textFor(entries, label) };
+        },
+      };
+    },
+  };
+}
+
+module.exports = { createOooModule, whenFrom };

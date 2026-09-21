@@ -111,6 +111,18 @@ Checklist (in the test space unless noted):
 - [ ] `@Buddy-Asana /kudos leadership @Charlie @Toni …` (admin) → list saved
 - [ ] The **real** Kudos Sheet is unchanged
 
+## 5d. OOO check (after the calendar is shared)
+
+1. Add `ooo` to `MODULES` in `infra/config.env`, commit, deploy.
+2. `/ooo check` in a DM → "✅ Calendar reachable" and "✅ I can read events".
+
+- [ ] `/ooo` → who's out today; `/ooo week` → Monday to Sunday
+- [ ] Someone on a half-day shows hours in ARG; someone on multi-day leave shows the real last day
+- [ ] The same person is listed once, not twice (own block + team invite)
+- [ ] A day with nobody out → "Nobody's out today · Full house! 🎉"
+- [ ] Answers match Remy's Apps Script bot for the same day
+- [ ] Someone outside the pilot (basics-only) can use `/ooo` — it needs no Claude
+
 ## 5c. Voice and look check
 
 - [ ] Open `https://buddy-oauth-000000000000.europe-west1.run.app/assets/buddy-avatar.png` → pixel Buddy on orange

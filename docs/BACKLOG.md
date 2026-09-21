@@ -123,12 +123,12 @@ Separate from Epic 5: this module only reads. No delegation, no writes.
 
 | # | Item | Acceptance |
 |---|---|---|
-| O1 | Port "who is out" lookups: today, tomorrow, this/next week, this/next month | Same answers as the live script for the same calendar data |
+| O1 | ✅ Port "who is out" lookups: today, tomorrow, this/next week, this/next month | Built and tested; verify against the live script once O0 lands |
 | O2 | Read `accounts@example.com` as `buddy-bot`, filtering to `(OOO)` events (calendar shared with "See all event details") | No per-user calendar subscription hack, no keys |
-| O3 | Keep de-duplication and ARG time formatting | Test |
-| O4 | Friendly error instead of printing raw exception text | Test |
-| O5 | DMs and spaces; access everyone @example.com (read-only module) | Via R1 |
-| O6 | *Optional:* expose "who is out" as a read-only tool so the assistant can answer naturally | Only for users with both assistant and ooo access |
+| O3 | ✅ Keep de-duplication and ARG time formatting | Tests |
+| O4 | ✅ Friendly error instead of printing raw exception text, plus `/ooo check` | Tests |
+| O5 | ✅ DMs and spaces; access everyone @example.com (read-only module) | `BUDDY_ACCESS_OOO` set; module enabled after O0 |
+| O6 | ✅ `who_is_out` tool, never asks for approval | Only for users with both assistant and ooo access |
 
 ## Epic 4: Merge and cutover
 

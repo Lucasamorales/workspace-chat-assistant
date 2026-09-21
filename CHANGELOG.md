@@ -10,6 +10,16 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
 
 ## 2026-09-21
 
+### Added
+- **`ooo` module (not enabled yet).** `/ooo` answers who's out today, tomorrow, this or next week,
+  this or next month, from the `accounts@` calendar, plus a `who_is_out` tool so the assistant can
+  answer naturally. Read-only (`calendar.readonly`), open to the whole domain, no Claude needed.
+  Keeps the Apps Script's behaviour — Monday-to-Sunday weeks, ARG times, one line per absence — and
+  fixes what it got wrong: all-day leave shows its real last day, personal block and team invite
+  count as one absence, and "today" is the day the team is living in rather than UTC's. Missing
+  calendar access explains what to share instead of failing obscurely; `/ooo check` proves it.
+  Enable by adding `ooo` to `MODULES` once the calendar is shared.
+
 ### Docs
 - **Out of office planned as two modules**, `ooo` (read-only "who's out", unblocked by a calendar
   share) and `leave` (books and cancels, the only code touching the delegation). Decision record
