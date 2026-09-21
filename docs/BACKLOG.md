@@ -159,7 +159,7 @@ Separate module from Epic 3 so the delegation is fenced to this code alone.
 | # | Item | Acceptance |
 |---|---|---|
 | L1 | ✅ Decided: an own `leave` module, not the Sheet menu | `0003-ooo.md` |
-| L2 | ✅ Access: pilot (robin@, remy@) while testing, HR after; `BUDDY_ROLE_LEAVE_ADMIN` to book for someone else | Set in `infra/config.env` |
+| L2 | ✅ Access: pilot (robin@, remy@) while testing; the **accounts team** at cutover, with `BUDDY_ROLE_LEAVE_ADMIN` so they can book for colleagues | Set in `infra/config.env` |
 | L3 | ✅ Impersonate **only** the Chat-verified sender, unless `BUDDY_ROLE_LEAVE_ADMIN` | Tests, including that nothing is written when refused |
 | L4 | ✅ Create leave: full days, AM and PM half-days, from the shift table; personal `outOfOffice` block with auto-decline + transparent invite to `wholeteam@` | Tests; verify against the live script at cutover |
 | L5 | ✅ Per-user shift and nickname remembered (`/leave shift`, `/leave name`), defaulting to the Chat display name | Tests |
@@ -168,3 +168,5 @@ Separate module from Epic 3 so the delegation is fenced to this code alone.
 | L8 | ✅ De-duplicate: booking the same block twice does not create two events | Test |
 | L9 | ✅ Audit log: requester, subject, dates, result, on booking and cancelling | In Cloud Logging |
 | L10 | Switch off Remy's Sheet dialog and delete the `leave-bot` service account once this is live | Only Buddy books leave |
+| L11 | ✅ Parity with the Sheet dialog: book for a colleague using **their** name and shift, remembered per person; optional skip of the team invite | Tests |
+| L12 | At cutover: swap `BUDDY_ACCESS_LEAVE` and `BUDDY_ROLE_LEAVE_ADMIN` to the accounts team | Accounts can book; nobody outside it can book for others |

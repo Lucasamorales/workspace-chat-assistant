@@ -169,12 +169,12 @@ function createLeaveModule({ impersonator, calendar, now = () => new Date() } = 
 
   return {
     name: 'leave',
-    description: 'Book or cancel your out-of-office',
+    description: 'Record leave: book or cancel out-of-office',
     allowedIn: ['DM'],
     roles: ['admin'],
     needsConversation: true,
     settings: ['LEAVE_TEAM_EMAIL'],
-    examples: ['I\'m off next Thursday', 'Book me out 12–16 October', 'Cancel my leave on the 3rd'],
+    examples: ['Book Remy out 12–16 October', 'Riley is off Friday morning', 'Cancel Charlie\'s leave on the 3rd'],
     instructions: 'Leave is booked with the book_leave tool and removed with cancel_leave. Dates are YYYY-MM-DD, '
       + 'type is full, am or pm. Never guess dates: if the person is vague, ask. This module is used by the accounts '
       + 'team to record leave for colleagues, so "person" is usually someone else: pass their work email. People '
