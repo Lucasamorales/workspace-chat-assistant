@@ -30,6 +30,9 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
   calendar access explains what to share instead of failing obscurely; `/ooo check` proves it.
   Enable by adding `ooo` to `MODULES` once the calendar is shared.
 
+### Infrastructure
+- `setup.sh` enables the Calendar and IAM Credentials APIs, needed by `ooo` and `leave`.
+
 ### Docs
 - **Out of office planned as two modules**, `ooo` (read-only "who's out", unblocked by a calendar
   share) and `leave` (books and cancels, the only code touching the delegation). Decision record
