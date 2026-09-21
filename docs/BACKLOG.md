@@ -18,6 +18,7 @@ Status: `todo` · `doing` · `done` · `blocked`
 | A6 | Remy's feedback: one card section per task (title, description, due date, assignee by name), Approve/Cancel each, Approve all/Cancel all; update ≠ "cannot be undone" | deployed |
 | A7 | `/asana tools` command listing free vs approval-gated actions | deployed |
 | A8 | Friendlier UX: Connect button on the first Asana request + "I've connected, continue"; Reconnect card when the connection stops working; welcome/help/status as button cards; disconnect asks first; Try again on errors and expired approvals; approval card copy with expiry time in the user's time zone; "Checking your Asana…" progress; 1 h connect links | deployed |
+| A9 | Test the files module properly (PDF, image, .xlsx, .csv, over the size limit, Drive attachment), then widen `BUDDY_ACCESS_FILES` from the pilot to `domain:example.com` | todo |
 
 ## Later
 

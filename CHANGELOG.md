@@ -8,6 +8,15 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
 
 ---
 
+## 2026-09-21
+
+### Changed
+- **Files is pilot-only.** Reading uploaded files is limited to Robin and Remy
+  (`BUDDY_ACCESS_FILES`) until it has been tested properly, instead of the whole domain.
+  Basics stays open to everyone at example.com.
+
+---
+
 ## 2026-09-17
 
 ### Added
