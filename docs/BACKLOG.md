@@ -116,15 +116,15 @@ Separate from Epic 5: this module only reads. No delegation, no writes.
 
 | # | Item | Acceptance |
 |---|---|---|
-| O0 | Share `accounts@example.com` with `buddy-bot@your-gcp-project.iam.gserviceaccount.com` ("See all event details"). The service account is an external address, so an admin must first allow external calendar sharing **for that account only**, via a configuration group or sub-OU — not domain-wide | Blocks this epic |
-| O0a | *Fallback if the admin is slow:* read the calendar's secret iCal address, stored in Secret Manager. Weaker (a bearer URL, no audit trail, rotating it breaks other subscribers) — only if stuck | Decision recorded before use |
+| O0 | Give `buddy-bot@your-gcp-project.iam.gserviceaccount.com` read access to `wholeteam@example.com` — the address every OOO invite is sent to, so it holds the whole company's leave. If it is a **Google Group**: add the service account as a member (a group manager can, unless the domain blocks external members). If it is a **calendar**: share it "See all event details", which needs external sharing allowed for that account alone (configuration group or sub-OU, never domain-wide) | Blocks this epic |
+| O0b | *Fallback if the admin is slow:* read the calendar's secret iCal address, stored in Secret Manager. Weaker (a bearer URL, no audit trail, rotating it breaks other subscribers) — only if stuck | Decision recorded before use |
 
 ### Module
 
 | # | Item | Acceptance |
 |---|---|---|
 | O1 | Port "who is out" lookups: today, tomorrow, this/next week, this/next month | Same answers as the live script for the same calendar data |
-| O2 | Read `accounts@example.com` as `buddy-bot` (calendar shared with "See all event details") | No per-user calendar subscription hack, no keys |
+| O2 | Read `wholeteam@example.com` as `buddy-bot`, filtering to `(OOO)` events (calendar shared with "See all event details") | No per-user calendar subscription hack, no keys |
 | O3 | Keep de-duplication and ARG time formatting | Test |
 | O4 | Friendly error instead of printing raw exception text | Test |
 | O5 | DMs and spaces; access everyone @example.com (read-only module) | Via R1 |
