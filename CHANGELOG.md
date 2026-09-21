@@ -11,6 +11,16 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
 ## 2026-09-21
 
 ### Added
+- **`leave` module (not enabled yet).** Books and cancels out-of-office by chat: "I'm off next
+  Thursday" shows an approval card with the exact dates, hours and team invite, and only then
+  writes. Creates the same two events as the Apps Script — the person's own `outOfOffice` block
+  that auto-declines meetings, plus a transparent invite to `wholeteam@` — with per-person shifts
+  (UK and three ARG) for half-days. Fixes the old script's cancel window (it reached two days past
+  the range and deleted leave nobody asked to cancel), double bookings, and deletes that failed
+  silently. Security: no key anywhere (`buddy-bot` has Google sign each assertion), the
+  `calendar.events` scope only, the calendar is always the Chat-verified sender's unless the asker
+  holds `leave.admin`, and every write is approved and logged. Enable by adding `leave` to
+  `MODULES` once the delegation exists.
 - **`ooo` module (not enabled yet).** `/ooo` answers who's out today, tomorrow, this or next week,
   this or next month, from the `accounts@` calendar, plus a `who_is_out` tool so the assistant can
   answer naturally. Read-only (`calendar.readonly`), open to the whole domain, no Claude needed.

@@ -159,11 +159,12 @@ Separate module from Epic 3 so the delegation is fenced to this code alone.
 | # | Item | Acceptance |
 |---|---|---|
 | L1 | ✅ Decided: an own `leave` module, not the Sheet menu | `0003-ooo.md` |
-| L2 | Access: pilot (robin@, remy@) while testing, HR after; `BUDDY_ROLE_LEAVE_ADMIN` to book for someone else | Via R1 |
-| L3 | Impersonate **only** the Chat-verified sender, unless `BUDDY_ROLE_LEAVE_ADMIN` | Test: a normal user cannot book for anyone else |
-| L4 | Create leave: full days, AM and PM half-days, from the shift table (UK 9–17, ARG 6–15 / 7–16 / 8–17); personal `outOfOffice` block with auto-decline + transparent invite to `wholeteam@example.com` | Same events as the Apps Script for the same input |
-| L5 | Per-user shift and nickname remembered, defaulting to the Chat display name | Second booking does not ask again |
-| L6 | Every create/cancel through the approval card, one section per leave block | Test |
-| L7 | Cancel leave in a date range — **without** the +2 day over-reach of the script | Test proves events outside the range survive |
-| L8 | De-duplicate: booking the same block twice does not create two events | Test |
-| L9 | Audit log: requester, subject, dates, result | Visible in `core__events` |
+| L2 | ✅ Access: pilot (robin@, remy@) while testing, HR after; `BUDDY_ROLE_LEAVE_ADMIN` to book for someone else | Set in `infra/config.env` |
+| L3 | ✅ Impersonate **only** the Chat-verified sender, unless `BUDDY_ROLE_LEAVE_ADMIN` | Tests, including that nothing is written when refused |
+| L4 | ✅ Create leave: full days, AM and PM half-days, from the shift table; personal `outOfOffice` block with auto-decline + transparent invite to `wholeteam@` | Tests; verify against the live script at cutover |
+| L5 | ✅ Per-user shift and nickname remembered (`/leave shift`, `/leave name`), defaulting to the Chat display name | Tests |
+| L6 | ✅ Every create/cancel through the approval card, one section per leave block | Tests |
+| L7 | ✅ Cancel leave in a date range, stopping at the last day asked for | Test asserts the exact window |
+| L8 | ✅ De-duplicate: booking the same block twice does not create two events | Test |
+| L9 | ✅ Audit log: requester, subject, dates, result, on booking and cancelling | In Cloud Logging |
+| L10 | Switch off Remy's Sheet dialog and delete the `leave-bot` service account once this is live | Only Buddy books leave |

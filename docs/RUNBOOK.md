@@ -123,6 +123,22 @@ Checklist (in the test space unless noted):
 - [ ] Answers match Remy's Apps Script bot for the same day
 - [ ] Someone outside the pilot (basics-only) can use `/ooo` — it needs no Claude
 
+## 5e. Leave check (after the delegation is in place)
+
+1. Add `leave` to `MODULES` in `infra/config.env`, commit, deploy.
+2. `/leave check` in a DM → "✅ Buddy can act on your calendar".
+
+- [ ] `/leave shift ARG_8_5` → remembered; `/leave` shows it
+- [ ] "I'm off next Thursday" → card shows whose calendar, dates, type, team invite → **Approve**
+- [ ] Your calendar has the out-of-office block; a meeting invite for that day is auto-declined
+- [ ] `wholeteam@` shows the leave, and it does **not** block anyone's availability
+- [ ] Book the same day again → "Already booked", no duplicate
+- [ ] "Off Friday afternoon" → half-day with your shift's hours
+- [ ] "Cancel my leave on <that day>" → card says it cannot be undone → **Approve** → both events gone
+- [ ] Cancel a range → leave on the day *after* the range is still there
+- [ ] Ask Buddy to book leave for someone else → refused (unless you hold `leave.admin`)
+- [ ] Remy (no `leave.admin`) tries the same → refused
+
 ## 5c. Voice and look check
 
 - [ ] Open `https://buddy-oauth-000000000000.europe-west1.run.app/assets/buddy-avatar.png` → pixel Buddy on orange
