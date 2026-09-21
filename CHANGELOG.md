@@ -19,6 +19,7 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
   Remy's Apps Script is kept for reference in `legacy/ooo-appsscript/` with its private key removed;
   that key allowed impersonating anyone in the domain and needs rotating.
 - Backlog: Epic 3 is the `ooo` module, Epic 5 the `leave` module, each with its own prerequisites.
+  The calendar to read is `accounts@example.com` (Remy's newer script reads `wholeteam@`).
 
 ### Changed
 - **Files is pilot-only.** Reading uploaded files is limited to Robin and Remy

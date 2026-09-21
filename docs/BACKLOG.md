@@ -116,14 +116,15 @@ Separate from Epic 5: this module only reads. No delegation, no writes.
 
 | # | Item | Acceptance |
 |---|---|---|
-| O0 | Share the team calendar (`wholeteam@`, confirm which) with `buddy-bot@your-gcp-project.iam.gserviceaccount.com` ("See all event details"). No admin rights needed: the calendar owner can do it | Blocks this epic |
+| O0 | Share `accounts@example.com` with `buddy-bot@your-gcp-project.iam.gserviceaccount.com` ("See all event details"). The service account is an external address, so an admin must first allow external calendar sharing **for that account only**, via a configuration group or sub-OU — not domain-wide | Blocks this epic |
+| O0a | *Fallback if the admin is slow:* read the calendar's secret iCal address, stored in Secret Manager. Weaker (a bearer URL, no audit trail, rotating it breaks other subscribers) — only if stuck | Decision recorded before use |
 
 ### Module
 
 | # | Item | Acceptance |
 |---|---|---|
 | O1 | Port "who is out" lookups: today, tomorrow, this/next week, this/next month | Same answers as the live script for the same calendar data |
-| O2 | Read the team calendar (`wholeteam@`, confirm which) as `buddy-bot` (calendar shared with "See all event details") | No per-user calendar subscription hack, no keys |
+| O2 | Read `accounts@example.com` as `buddy-bot` (calendar shared with "See all event details") | No per-user calendar subscription hack, no keys |
 | O3 | Keep de-duplication and ARG time formatting | Test |
 | O4 | Friendly error instead of printing raw exception text | Test |
 | O5 | DMs and spaces; access everyone @example.com (read-only module) | Via R1 |
