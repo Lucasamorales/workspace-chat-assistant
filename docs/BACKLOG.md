@@ -116,7 +116,7 @@ Separate from Epic 5: this module only reads. No delegation, no writes.
 
 | # | Item | Acceptance |
 |---|---|---|
-| O0 | Give `buddy-bot@your-gcp-project.iam.gserviceaccount.com` read access to `wholeteam@example.com` — the address every OOO invite is sent to, so it holds the whole company's leave. If it is a **Google Group**: add the service account as a member (a group manager can, unless the domain blocks external members). If it is a **calendar**: share it "See all event details", which needs external sharing allowed for that account alone (configuration group or sub-OU, never domain-wide) | Blocks this epic |
+| O0 | Give `buddy-bot@your-gcp-project.iam.gserviceaccount.com` read access to `accounts@example.com`, the OOO calendar. If it is a **Google Group**: add the service account as a member (a group manager can, unless the domain blocks external members). If it is a **calendar**: share it "See all event details", which needs external sharing allowed for that account alone (configuration group or sub-OU, never domain-wide) | Blocks this epic |
 | O0b | *Fallback if the admin is slow:* read the calendar's secret iCal address, stored in Secret Manager. Weaker (a bearer URL, no audit trail, rotating it breaks other subscribers) — only if stuck | Decision recorded before use |
 
 ### Module
@@ -124,7 +124,7 @@ Separate from Epic 5: this module only reads. No delegation, no writes.
 | # | Item | Acceptance |
 |---|---|---|
 | O1 | Port "who is out" lookups: today, tomorrow, this/next week, this/next month | Same answers as the live script for the same calendar data |
-| O2 | Read `wholeteam@example.com` as `buddy-bot`, filtering to `(OOO)` events (calendar shared with "See all event details") | No per-user calendar subscription hack, no keys |
+| O2 | Read `accounts@example.com` as `buddy-bot`, filtering to `(OOO)` events (calendar shared with "See all event details") | No per-user calendar subscription hack, no keys |
 | O3 | Keep de-duplication and ARG time formatting | Test |
 | O4 | Friendly error instead of printing raw exception text | Test |
 | O5 | DMs and spaces; access everyone @example.com (read-only module) | Via R1 |
@@ -161,7 +161,7 @@ Separate module from Epic 3 so the delegation is fenced to this code alone.
 | L1 | ✅ Decided: an own `leave` module, not the Sheet menu | `0003-ooo.md` |
 | L2 | Access: pilot (robin@, remy@) while testing, HR after; `BUDDY_ROLE_LEAVE_ADMIN` to book for someone else | Via R1 |
 | L3 | Impersonate **only** the Chat-verified sender, unless `BUDDY_ROLE_LEAVE_ADMIN` | Test: a normal user cannot book for anyone else |
-| L4 | Create leave: full days, AM and PM half-days, from the shift table (UK 9–17, ARG 6–15 / 7–16 / 8–17); personal `outOfOffice` block with auto-decline + transparent team invite | Same events as the Apps Script for the same input |
+| L4 | Create leave: full days, AM and PM half-days, from the shift table (UK 9–17, ARG 6–15 / 7–16 / 8–17); personal `outOfOffice` block with auto-decline + transparent invite to `wholeteam@example.com` | Same events as the Apps Script for the same input |
 | L5 | Per-user shift and nickname remembered, defaulting to the Chat display name | Second booking does not ask again |
 | L6 | Every create/cancel through the approval card, one section per leave block | Test |
 | L7 | Cancel leave in a date range — **without** the +2 day over-reach of the script | Test proves events outside the range survive |
