@@ -1,30 +1,46 @@
 # leave
 
-Books and cancels out-of-office on a person's **own** calendar, and invites the team so everyone
-can see it. Replaces the Sheet dialog in `legacy/ooo-appsscript/`. Reading "who's out" is the
-separate, read-only `ooo` module.
+Records out-of-office: the block on the person's **own** calendar, plus the invite that shows the
+team. Replaces the Sheet dialog in `legacy/ooo-appsscript/`. Reading "who's out" is the separate,
+read-only `ooo` module.
 
-DM only, and it works through Claude: you say "I'm off next Thursday", Buddy shows you exactly
-what it is about to create, and nothing happens until you click **Approve**.
+**This is the accounts team's module.** They book leave for everyone, which is why booking *for
+another person* is the main path rather than the exception. People without the `admin` role can
+only book their own.
+
+DM only, and it works through Claude: you say what's happening, Buddy shows exactly what it is
+about to create, and nothing happens until someone clicks **Approve**.
 
 ## Using it
 
 | | |
 |---|---|
-| "I'm off next Thursday" | One full day |
-| "Book me out 12–16 October" | A range; one approval section per block |
-| "Off Friday afternoon" | Half day, using your shift's hours |
-| "Cancel my leave on the 3rd" | Removes the `(OOO)` events in that range |
+| "Book Remy out 12–16 October" | A range on a colleague's calendar; one approval section per block |
+| "Riley is off Friday morning" | Half day, using **her** shift's hours |
+| "Remy is UK 9–5" / `shift: UK_9_5` | Sets a colleague's hours; remembered from then on |
+| "Cancel Charlie's leave on the 3rd" | Removes the `(OOO)` events in that range |
+| "I'm off next Thursday" | Your own leave, for anyone with access |
 | `/leave` | Your shift and display name |
-| `/leave shift UK_9_5` | Set your working hours |
-| `/leave name Lucho` | What the calendar shows |
+| `/leave shift UK_9_5` · `/leave name Lucho` | Your own hours and calendar name |
 | `/leave check` | Proves Buddy can act on your calendar |
+
+## Booking for colleagues
+
+The name and hours come from **the person the leave is for**, never from whoever is booking — an
+ARG booker must not stamp ARG hours on a London colleague's half-day. Each person's shift and
+display name are remembered the first time they're given, so the accounts team types them once.
+
+If a half-day is asked for and that person's hours aren't known yet, Buddy asks which shift they
+work instead of guessing. Full days are unaffected: they run 00:00–23:59 whatever the shift.
+
+The team invite can be skipped ("no team invite"), exactly as blanking the address did in the
+Sheet dialog.
 
 ## The security model
 
 This is the only module that acts **as** a person, so the fence matters more than the feature:
 
-- **The calendar is always the Chat-verified sender's.** The subject comes from Google's signed
+- **The calendar is always the Chat-verified sender's, unless the asker holds `admin`.** The subject comes from Google's signed
   request, never from the tool call — so Claude cannot be talked into booking on someone else's
   calendar, whatever a message says. Anyone else requires the `admin` role
   (`BUDDY_ROLE_LEAVE_ADMIN`), and the approval card names whose calendar it is either way.
@@ -41,7 +57,7 @@ This is the only module that acts **as** a person, so the fence matters more tha
 | Setting | Default | |
 |---|---|---|
 | `LEAVE_TEAM_EMAIL` | `wholeteam@example.com` | Required. Invited so the team sees the leave |
-| `LEAVE_DEFAULT_SHIFT` | `ARG_8_5` | Until someone sets their own with `/leave shift` |
+| `LEAVE_DEFAULT_SHIFT` | `ARG_8_5` | For full days and for people whose shift isn't known yet |
 
 Shifts: `UK_9_5` (9:00–17:00 London), `ARG_6_3`, `ARG_7_4`, `ARG_8_5` (Buenos Aires). Half-days
 use the shift's own time zone, so a UK morning is 09:00–13:00 London wherever Buddy runs.
