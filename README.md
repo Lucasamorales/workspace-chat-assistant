@@ -41,6 +41,9 @@ Everything works with buttons; slash commands are still there for power users.
 | Send a PDF, image, spreadsheet or text file and ask about it | ✅ | ✅ |
 | Asana: read, create, update, delete — as yourself | ✅ | ❌ (privacy: replies are visible to everyone) |
 | Kudos: `@Buddy kudos to @Eve for thinking big` | ❌ (votes only count in the Kudos space) | ✅ in the Kudos space |
+| Who's out: "who's off this week?" | ✅ | ✅ |
+| Leave: "book Remy out 12–16 October" | ✅ | ❌ |
+| Access: "give riley@ access to Kudos" (admins) | ✅ | ❌ |
 
 ### Connecting Asana
 The first time a request needs Asana, Buddy replies with a card: **Connect Asana** opens
@@ -81,6 +84,9 @@ Reads (searching tasks, "what's due today") run without asking. Deletes are mark
 | `/status` | Which connections are active |
 | `/reset` | Forget the current conversation |
 | `/kudos` | Your kudos this month (admins: `/kudos check`, `/kudos leadership @…`) |
+| `/ooo [today|tomorrow|week|next week|month]` | Who's out of the office (`/ooo check` verifies the calendar) |
+| `/leave [shift|name|check]` | Your working hours and calendar name for booking leave |
+| `/access [module]` | Admins: who has been given access from chat |
 
 ---
 
@@ -152,6 +158,9 @@ modules/
   files/               attachments → content Claude can read
   asana/               Asana via MCP: connect, tools, approval descriptions
   kudos/               kudos votes → Kudos Google Sheet, policy limits, admin setup commands
+  ooo/                 who's out: reads the leave calendar, read-only
+  leave/               books and cancels out-of-office on people's own calendars
+  admin/               grants module access from chat (config stays the floor)
 infra/                 setup, deploy and decommission scripts; config.env; Cloud Build
 docs/                  runbook, security model, backlog, decisions
 legacy/bot-rev23/     the original bot, kept read-only for reference
@@ -168,6 +177,9 @@ legacy/bot-rev23/     the original bot, kept read-only for reference
 | **files** | DMs + spaces | everyone @example.com (needs assistant) | — | nothing (files are processed in memory) |
 | **asana** | DMs only | robin@, remy@ (needs assistant) | `ASANA_CLIENT_ID`, `ASANA_CLIENT_SECRET` | `m_asana__tokens` (KMS-encrypted) |
 | **kudos** | spaces (votes), DMs (`/kudos`) | pilot: robin@, remy@; admins for setup commands | `KUDOS_SHEET_ID`, `KUDOS_SPACES` | appends to the Kudos Google Sheet; leadership list in `m_kudos__settings` |
+| **ooo** | DMs + spaces | everyone @example.com | `OOO_CALENDAR_ID`, `OOO_READ_AS` | nothing (read-only) |
+| **leave** | DMs only | pilot: robin@, remy@; the accounts team at cutover (needs assistant) | `LEAVE_TEAM_EMAIL`, domain-wide delegation | each person's shift and display name in `m_leave__profiles` |
+| **admin** | DMs only | `BUDDY_ACCESS_ADMIN` — robin@, remy@ | — | grants in `core__grants` |
 
 ### Permissions per module
 Two layers, both checked on every event:
@@ -176,6 +188,11 @@ Two layers, both checked on every event:
 2. **`BUDDY_ACCESS_<MODULE>`** — who may use each module. **Required** for every enabled module;
    the service refuses to start without it. Modules can also declare **roles** (e.g. Kudos
    `admin`), configured as `BUDDY_ROLE_<MODULE>_<ROLE>`.
+
+**Access can also be granted from chat**, by an admin, through the `admin` module — so
+`infra/config.env` is no longer the whole picture: **`/access` is**. Config is the floor: a grant
+only ever widens it, revoking only removes grants, and `admin`, `leave`, `assistant` and every
+role stay config-only. See `docs/decisions/0004-admin-module.md`.
 
 Entries are comma-separated: `robin@example.com`, `users/<chat id>`, or
 `domain:example.com`. A module (or role-restricted command) someone can't use is

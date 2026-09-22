@@ -48,10 +48,9 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
   amendment to `0003-ooo.md`.
 
 ### Added
-- **`leave` module.** Books and cancels out-of-office by chat — built for the accounts team to
-  record the whole team's leave: "I'm off next
-  Thursday" shows an approval card with the exact dates, hours and team invite, and only then
-  writes. Creates the same two events as the Apps Script — the person's own `outOfOffice` block
+- **`leave` module.** Books and cancels out-of-office by chat, built for the accounts team to
+  record the whole team's leave. "Book Remy out 12–16 October" shows an approval card with the
+  exact dates, hours and team invite, and only then writes. Creates the same two events as the Apps Script — the person's own `outOfOffice` block
   that auto-declines meetings, plus a transparent invite to `wholeteam@` — with per-person shifts
   (UK and three ARG) for half-days. Fixes the old script's cancel window (it reached two days past
   the range and deleted leave nobody asked to cancel), double bookings, and deletes that failed
