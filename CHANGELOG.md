@@ -96,6 +96,8 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
 ### Infrastructure
 - `setup.sh` enables the Calendar, IAM Credentials, Drive and Vertex AI APIs, needed by `ooo`,
   `leave` and `manual`.
+- `setup.sh` also grants `buddy-bot` Service Account Token Creator on itself and Vertex AI User,
+  so a fresh project works without the manual gcloud steps we ran by hand.
 - `ooo` and `leave` added to `MODULES`, to the gateway's dependencies and to the Docker build.
 
 ### Docs

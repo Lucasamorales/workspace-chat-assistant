@@ -30,6 +30,13 @@ for m in "$BOT" "$OAUTH"; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="$m" --role=roles/datastore.user --condition=None >/dev/null
 done
 
+step "Bot: mint its own scoped tokens (leave, manual) and use Vertex AI embeddings (manual)"
+# Acting as a person on their own calendar, and asking Drive for a drive.readonly token, both
+# need the bot to sign tokens as itself. No key is ever created.
+gcloud iam service-accounts add-iam-policy-binding "$(sa_email "$BOT_SA")" \
+  --member="$BOT" --role=roles/iam.serviceAccountTokenCreator $P >/dev/null
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="$BOT" --role=roles/aiplatform.user --condition=None >/dev/null
+
 step "Build account: write images, write build logs, read uploaded source"
 gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="$BUILD" --role=roles/logging.logWriter --condition=None >/dev/null
 gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="$BUILD" --role=roles/storage.objectViewer --condition=None >/dev/null
