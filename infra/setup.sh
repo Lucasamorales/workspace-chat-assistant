@@ -17,7 +17,7 @@ step "Enable APIs"
 gcloud services enable run.googleapis.com chat.googleapis.com firestore.googleapis.com \
   secretmanager.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
   cloudkms.googleapis.com sheets.googleapis.com calendar-json.googleapis.com \
-  iamcredentials.googleapis.com $P
+  iamcredentials.googleapis.com drive.googleapis.com aiplatform.googleapis.com $P
 
 step "Service accounts"
 for sa in "$BOT_SA" "$OAUTH_SA" "$BUILD_SA"; do

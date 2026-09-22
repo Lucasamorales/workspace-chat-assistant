@@ -94,7 +94,8 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
   Enable by adding `ooo` to `MODULES` once the calendar is shared.
 
 ### Infrastructure
-- `setup.sh` enables the Calendar and IAM Credentials APIs, needed by `ooo` and `leave`.
+- `setup.sh` enables the Calendar, IAM Credentials, Drive and Vertex AI APIs, needed by `ooo`,
+  `leave` and `manual`.
 - `ooo` and `leave` added to `MODULES`, to the gateway's dependencies and to the Docker build.
 
 ### Docs

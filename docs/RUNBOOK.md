@@ -146,7 +146,7 @@ One-time: share the manual's Drive folder as **Viewer** with
 `buddy-bot@your-gcp-project.iam.gserviceaccount.com`, then:
 
 ```bash
-gcloud services enable aiplatform.googleapis.com --project=your-gcp-project
+gcloud services enable drive.googleapis.com aiplatform.googleapis.com --project=your-gcp-project
 gcloud projects add-iam-policy-binding your-gcp-project --member="serviceAccount:buddy-bot@your-gcp-project.iam.gserviceaccount.com" --role="roles/aiplatform.user"
 ```
 
