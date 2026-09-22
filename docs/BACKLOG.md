@@ -73,7 +73,7 @@ Status: `todo` · `doing` · `done` · `blocked`
 | R2 | ✅ **Assistant module**: free-form Claude chat is the `assistant` module with its own access rule (`BUDDY_ACCESS_ASSISTANT`); Claude-only modules marked `needsConversation` | People without assistant access get a free "here's what I can help with" card; no Claude cost |
 | R3 | ✅ **Direct message handlers**: contract hook `handleMessage(ctx, message)` for exact matches (kudos votes, "who is out") that run before Claude | Ordered, one winner, isolated like other hooks |
 | R4 | ✅ **Mentions in context**: pass Chat user mentions (name, email, id) to modules | Kudos can read tagged teammates without parsing text |
-| R5 | **Google API access pattern**: modules read/write Sheets and Calendar as `buddy-bot`, with only specific files/calendars shared to it. No keys | Documented in `docs/ADDING_A_MODULE.md` |
+| R5 | ✅ **Google API access pattern**: Sheets as `buddy-bot`; calendars via delegation with no key, fenced in module code | README "Adding a module"; `0003-ooo.md`, `0004-admin-module.md` |
 | R6 | **Scheduled jobs hook** `onSchedule(ctx)` driven by Cloud Scheduler → authenticated endpoint | Not needed for Kudos/OOO; enables future reminders/digests |
 | R7 | **Module template + test helpers** (`@buddy/core/testing`: fake ctx, fake store, fake event) | New module = copy folder, add to config, tests run standalone |
 | R8 | `docs/ADDING_A_MODULE.md` | Covers contract, access, settings, storage, tests, deploy |

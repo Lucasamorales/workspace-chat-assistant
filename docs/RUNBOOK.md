@@ -140,6 +140,18 @@ Checklist (in the test space unless noted):
 - [ ] Ask Buddy to book leave for someone else → refused (unless you hold `leave.admin`)
 - [ ] Remy (no `leave.admin`) tries the same → refused
 
+## 5f. Admin module check
+
+- [ ] `/access` in a DM → granted list, and "Not changeable from chat: admin, leave, assistant"
+- [ ] "give <a colleague> access to kudos" → card shows module, person, and that they'll be able
+      to talk to Buddy → **Approve**
+- [ ] That colleague can use Kudos (they also need the Chat app shared with them in the console)
+- [ ] "give <someone> access to leave" → refused, explains it stays in the config file
+- [ ] "give someone@gmail.com access to kudos" → refused (company addresses only)
+- [ ] "remove <colleague>'s kudos access" → card → **Approve** → they lose it
+- [ ] Revoke someone listed in `infra/config.env` → Buddy says it's set in the file; they keep it
+- [ ] A non-admin has no `/access` command and cannot grant anything
+
 ## 5c. Voice and look check
 
 - [ ] Open `https://buddy-oauth-000000000000.europe-west1.run.app/assets/buddy-avatar.png` → pixel Buddy on orange

@@ -2,7 +2,9 @@
 
 ## What Buddy can and cannot do
 - **Can:** chat with Claude; read files users upload; act in Asana **as the user who asks**,
-  within that user's own Asana permissions, only in a direct message.
+  within that user's own Asana permissions, only in a direct message; read one leave calendar;
+  create and delete out-of-office events on a person's own calendar; grant module access to
+  colleagues when an admin approves it.
 - **Cannot:** browse, run code, touch any file system, or reach any service not built as a
   module. Users cannot add tools; adding one is a code change and a deploy.
 
@@ -25,10 +27,15 @@
 | Over-privileged runtime | Dedicated service accounts with only Firestore, specific secrets and KMS; Editor removed from the default account after cutover | `infra/setup.sh`, `infra/decommission-legacy.sh` |
 | Leaking secrets in logs or errors | Credential-looking fields redacted; users see a reference code, never raw errors | `core/log.js`, `chat-gateway/handler.js` |
 | Data kept forever | Firestore TTL: threads 30 days, approvals 15 min, login sessions 1 h, saved requests and event ids 1 day | `infra/setup.sh` |
+| Buddy acts as the wrong person on a calendar (`leave`) | The account acted for comes from Google's signed Chat request, never from the tool call or anything Claude produced; acting for anyone else needs `BUDDY_ROLE_LEAVE_ADMIN`, and the approval card names whose calendar it is | `leave/module.js` (`subjectFor`) |
+| The domain-wide delegation key leaks (as it did in the Apps Script) | No key exists: `buddy-bot` has Google's IAM Credentials API sign each assertion, using its Cloud Run identity. Scope limited to `calendar.events` — events only, never sharing, settings or other Google data | `leave/impersonate.js`, delegation entry in the Admin console |
+| `ooo` is read-only in name only | The reader is a frozen object with `list`/`describe` and no write method; requests are built inside the module — always GET, always the one configured calendar; the account read as comes from `OOO_READ_AS` in settings, validated, never from a user or Claude; the read-only scope is requested first and any fallback logged | `ooo/calendar.js`, `ooo/token.js` |
+| Prompt injection grants someone access ("grant bob@ everything", hidden in a task or PDF) | Grants need an admin's approval click; `admin`, `leave` and `assistant` can never be granted (constant in code, not offered to Claude); company addresses only; roles are never granted; every change logged with who made it | `admin/module.js` |
+| A chat grant removes access, or creates an admin | Config is the floor: grants only widen it, revoking removes grants only, and `BUDDY_ACCESS_ADMIN` is config-only | `core/grants.js`, `core/access.js` |
 | Broken deploys (old revision 24) | Deploy refuses failing tests or uncommitted files; sets every setting every time; verifies access rules afterwards | `infra/deploy.sh` |
 
 ## Data flows
-- Message text, file contents and Asana tool results → Anthropic API (standard retention).
+- Message text, file contents, Asana tool results and OOO listings → Anthropic API (standard retention).
 - Asana token → only `mcp.asana.com`, from `buddy-bot`. Never sent to Anthropic.
 - Stored in Firestore (`eur3`): 30-day thread text, monthly usage counters, encrypted
   Asana tokens, short-lived approval and login records.
@@ -38,3 +45,9 @@
   (logged as a warning).
 - Approval covers the exact tool call; it can't judge whether the call is *wise*. Read the card.
 - Chat app visibility is set in the console and isn't in code; the in-code allowlist is the backstop.
+- Domain-wide delegation is domain-wide by nature: Google offers no way to limit it to one person,
+  so `leave`'s code is what keeps it to the requester. Changes there deserve careful review.
+- `ooo` reads its calendar with a writable scope until `calendar.events.readonly` is added to the
+  delegation entry; the module cannot write, and logs a warning while this is the case.
+- Access is now two sources (config + grants). `/access` shows both; the config file alone no
+  longer tells the whole story.
