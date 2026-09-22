@@ -11,6 +11,10 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
 ## 2026-09-21
 
 ### Fixed
+- **`ooo` found nobody out.** Real events on the calendar are titled "Ian OOO", not "Ian (OOO)",
+  and the filter required the parentheses the Apps Script writes — so every genuine absence was
+  thrown away. It now matches OOO as a word however it is written, and strips it (with any
+  separator) when showing the name. Checked against the live bot's answer for the same week.
 - **`/ooo check` failed on something the module never uses.** It began by fetching the calendar's
   name and time zone, which needs the `calendar.readonly` scope, while the delegation grants
   `calendar.events` — so Google returned 403 and the check reported "no access" although reading

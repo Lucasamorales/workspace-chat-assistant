@@ -10,7 +10,9 @@
  */
 
 const BASE = 'https://www.googleapis.com/calendar/v3/calendars';
-const OOO_TAG = /\(OOO\)/i;
+// Real events are titled "Ian OOO", "Ella (OOO)", "OOO - Lenny" — the parentheses the Apps
+// Script writes are not there on most of them, so match OOO as a word, however it is written.
+const OOO_TAG = /\bOOO\b/i;
 const SA_EMAIL = 'buddy-bot@your-gcp-project.iam.gserviceaccount.com';
 const MAX_RESULTS = '250';
 

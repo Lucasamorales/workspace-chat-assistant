@@ -21,7 +21,7 @@ function setup(items = [], settings = {}) {
     async list(window) { calls.push(window); return items; },
     async describe() { return { title: 'Accounts', timeZone: TZ }; },
   };
-  const mod = createOooModule({ calendar });
+  const mod = createOooModule({ calendar, now: () => NOW });
   const ctx = {
     settings: { OOO_CALENDAR_ID: 'accounts@example.com', OOO_READ_AS: 'accounts@example.com', ...settings },
     log: { info() {}, warn() {}, error() {} },
@@ -107,14 +107,44 @@ test('the personal block and the team invite are one absence, listed once', asyn
   assert.equal(reply.text.split('\n').length, 1);
 });
 
-test('events without the (OOO) tag are ignored', async () => {
+test('events without the OOO tag are ignored, in any of the ways people write it', async () => {
   const { calendar } = wired([
     ok({ signedJwt: 's' }),
     ok({ access_token: 'reading' }),
-    ok({ items: [allDay('All-hands', '2026-09-23', '2026-09-24'), allDay('Charlie (OOO)', '2026-09-23', '2026-09-24')] }),
+    ok({
+      items: [
+        allDay('All-hands', '2026-09-23', '2026-09-24'),
+        allDay('Charlie (OOO)', '2026-09-23', '2026-09-24'),
+        allDay('Ian OOO', '2026-09-23', '2026-09-24'),      // how the real calendar writes it
+        allDay('OOO - Lenny', '2026-09-23', '2026-09-24'),
+        allDay('Woooo party', '2026-09-23', '2026-09-24'),  // must not match
+      ],
+    }),
   ]);
   const events = await calendar.list({ timeMin: '2026-09-23T00:00:00-03:00', timeMax: '2026-09-23T23:59:59-03:00' });
-  assert.deepEqual(events.map(e => e.summary), ['Charlie (OOO)']);
+  assert.deepEqual(events.map(e => e.summary), ['Charlie (OOO)', 'Ian OOO', 'OOO - Lenny']);
+});
+
+test('the tag is stripped however it was written, leaving just the person', async () => {
+  const { mod, ctx } = setup([
+    allDay('Ian OOO', '2026-09-14', '2026-09-26'),
+    allDay('Ella (OOO)', '2026-09-17', '2026-09-26'),
+    allDay('OOO - Lenny', '2026-09-21', '2026-09-26'),
+  ]);
+  const reply = await mod.commands.ooo.run(ctx, 'today');
+  assert.equal(reply.text, [
+    '• <b>Ian</b>: Sep 14 to Sep 25',
+    '• <b>Ella</b>: Sep 17 to Sep 25',
+    '• <b>Lenny</b>: Sep 21 to Sep 25',
+  ].join('\n'));
+});
+
+test('multi-day leave counts on every day it covers, not just the day it starts', async () => {
+  // The live calendar's answer for "today" on the 23rd includes leave that began on the 14th.
+  const { mod, ctx, calls } = setup([allDay('Ian OOO', '2026-09-14', '2026-09-26')]);
+  const reply = await mod.commands.ooo.run(ctx, 'today');
+  assert.match(reply.text, /<b>Ian<\/b>/);
+  assert.equal(calls.at(-1).timeMin, '2026-09-23T00:00:00-03:00', 'asks Google for the day, and overlaps come back');
 });
 
 /* ---------- guardrails: this module may only ever read ---------- */

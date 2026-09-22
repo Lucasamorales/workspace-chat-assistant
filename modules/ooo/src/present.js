@@ -8,7 +8,13 @@
 
 const { partsAt, dayLabel, addDays } = require('./range');
 
-const nameOf = event => String(event.summary || '').replace(/\(OOO\)/ig, '').trim() || 'Someone';
+/** "Ian OOO" / "Ella (OOO)" / "OOO - Lenny" → the person. Separators around it go too. */
+const nameOf = event => String(event.summary || '')
+  .replace(/\(\s*OOO\s*\)/ig, ' ')
+  .replace(/\bOOO\b/ig, ' ')
+  .replace(/\s*[-–—:|]\s*/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim() || 'Someone';
 
 /** One person's absence, as dates and a readable label. */
 function entryOf(event, timeZone, tzLabel) {

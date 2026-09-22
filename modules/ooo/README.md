@@ -58,4 +58,5 @@ uses its own access and holds no delegation at all.
   to the team address. Same name and same dates is listed once.
 - **Local days.** "Today" is the day the team is living in, not UTC's: at 23:30 in Buenos Aires
   it is still today, though UTC is already tomorrow.
-- **Only `(OOO)` events are listed**, so anything else on the calendar is ignored.
+- **Only events tagged OOO are listed** — "Ian OOO", "Ella (OOO)" and "OOO - Lenny" all count,
+  "Woooo party" does not. The tag and any separator are stripped from the name shown.
