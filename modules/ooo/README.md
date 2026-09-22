@@ -30,10 +30,26 @@ change anything, so there is nothing to restrict beyond reading the calendar.
 | `OOO_TIMEZONE` | `America/Argentina/Buenos_Aires` | Which day "today" means, and how half-day hours are shown |
 | `OOO_TIMEZONE_LABEL` | `ARG` | Suffix on half-day times |
 
-`buddy-bot@your-gcp-project.iam.gserviceaccount.com` needs read access to that calendar — as a
-member of the group, or with the calendar shared "See all event details". Until then `/ooo` says
-exactly that instead of failing obscurely. Buddy asks Google only for
-`calendar.readonly`, so it cannot write even if the sharing were wider.
+| `OOO_READ_AS` | *(unset)* | Read the calendar by acting as this one account |
+
+## How it reads, and why
+
+Workspace only lets an outside address (our service account) see **free/busy** on a calendar, which
+has no names — useless for "who's out". So `ooo` reads the calendar by acting as the one account in
+`OOO_READ_AS`, using the delegation `buddy-bot` already holds for `leave`. That is a workaround,
+recorded as an amendment in `docs/decisions/0003-ooo.md`, and it is fenced:
+
+- **The account comes from settings only**, validated as one ordinary address. Nothing a user, a
+  message or Claude says can change it — the `who_is_out` tool takes a period and nothing else.
+- **The read-only scope is asked for first.** The writable one is used only while the delegation
+  lacks `calendar.events.readonly`, and every fallback is logged with the fix.
+- **There is no write path.** The reader is a frozen object with `list` and `describe`; no create,
+  delete or patch exists. Requests are built inside the module: always GET, always the configured
+  calendar, never a caller-supplied method, body or URL.
+- **Every read is logged** with the account acted as.
+
+Unset `OOO_READ_AS` the day the calendar can be shared with `buddy-bot` directly — the module then
+uses its own access and holds no delegation at all.
 
 ## Behaviour worth knowing
 
