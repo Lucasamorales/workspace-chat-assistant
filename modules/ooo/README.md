@@ -29,8 +29,7 @@ change anything, so there is nothing to restrict beyond reading the calendar.
 | `OOO_CALENDAR_ID` | `accounts@example.com` | Required. The calendar holding the leave |
 | `OOO_TIMEZONE` | `America/Argentina/Buenos_Aires` | Which day "today" means, and how half-day hours are shown |
 | `OOO_TIMEZONE_LABEL` | `ARG` | Suffix on half-day times |
-
-| `OOO_READ_AS` | *(unset)* | Read the calendar by acting as this one account |
+| `OOO_READ_AS` | *(unset)* | Read the calendar by acting as this one account (see below) |
 
 ## How it reads, and why
 
