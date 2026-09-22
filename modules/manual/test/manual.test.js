@@ -300,7 +300,7 @@ test('a long reindex stops, saves, and offers to carry on', async () => {
 
   // Carrying on eventually finishes, without redoing what was already done.
   let reply = first;
-  for (let i = 0; i < 6 && reply.buttons; i += 1) reply = await ticking.commands.manual.run(ctx, 'reindex');
+  for (let i = 0; i < 40 && reply.buttons; i += 1) reply = await ticking.commands.manual.run(ctx, 'reindex');
   assert.equal(reply.title, 'Manual reindexed');
   assert.match(reply.text, /5 new · 0 updated/);
   assert.match(reply.text, /\*\*5 documents\*\*/);
@@ -315,11 +315,12 @@ test('while a reindex is unfinished, answers still come from the previous versio
   const { mod, ctx } = setup({ files, texts: { d1: HOLIDAY } });
   await mod.commands.manual.run(ctx, 'reindex');
 
-  // A new, slow-to-index document arrives; the run will not finish this time.
+  // A long new document arrives — more parts than one slice can embed, so the run cannot finish.
+  const LONG = Array.from({ length: 90 }, (_, i) => `Section ${i}\n\nExpenses rule ${i}. ${'detail '.repeat(40)}`).join('\n\n');
   files.push(file('d2', 'Expenses policy', { modifiedTime: '2026-09-22T09:00:00Z' }));
   let clock = NOW;
   const ticking = createManualModule({
-    drive: fakeDrive(files, { d1: HOLIDAY, d2: EXPENSES }),
+    drive: fakeDrive(files, { d1: HOLIDAY, d2: LONG }),
     embeddings: fakeEmbeddings,
     now: () => { clock += 30_000; return clock; },
   });
@@ -328,4 +329,30 @@ test('while a reindex is unfinished, answers still come from the previous versio
 
   const { content } = await (await mod.tools(ctx)).execute('search_manual', { question: 'holiday' });
   assert.match(content, /25 days of holiday/, 'the old index still answers while the new one is built');
+});
+
+test('a slice always makes progress, even if it starts out of time', async () => {
+  // The clock is already past any budget before work begins: without a guaranteed unit of
+  // work per run, Continue would loop forever without indexing anything.
+  const files = [file('d1', 'Holiday policy'), file('d2', 'Expenses policy')];
+  let clock = NOW;
+  const mod = createManualModule({
+    drive: fakeDrive(files, { d1: HOLIDAY, d2: EXPENSES }),
+    embeddings: fakeEmbeddings,
+    now: () => { clock += 3_600_000; return clock; },
+  });
+  const store = createMemoryStore();
+  const ctx = {
+    userEmail: 'robin@example.com',
+    hasRole: () => true,
+    settings: { MANUAL_FOLDER_ID: 'folder1', MANUAL_PROJECT_ID: 'p' },
+    store: { collection: name => store.collection(`manual__${name}`) },
+    log: { info() {}, warn() {}, error() {} },
+  };
+
+  let reply = await mod.commands.manual.run(ctx, 'reindex');
+  let rounds = 1;
+  while (reply.buttons && rounds < 10) { reply = await mod.commands.manual.run(ctx, 'reindex'); rounds += 1; }
+  assert.equal(reply.title, 'Manual reindexed', `gave up after ${rounds} rounds`);
+  assert.ok(rounds <= 3, 'one document per round even with no time budget at all');
 });

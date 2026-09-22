@@ -21,7 +21,9 @@ const modules = config.BUDDY_MODULES.map(name => {
 });
 const registry = core.createRegistry({ modules, log });
 
-const store = core.createFirestoreStore(new Firestore());
+// ignoreUndefinedProperties: a module leaving an optional field undefined (a Drive file with
+// no link, say) should not take down a write. The field is simply not stored.
+const store = core.createFirestoreStore(new Firestore({ ignoreUndefinedProperties: true }));
 const sealer = core.createKmsSealer({ kmsClient: new KeyManagementServiceClient(), keyName: config.KMS_KEY_NAME });
 
 const app = createOAuthApp({

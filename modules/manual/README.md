@@ -36,8 +36,9 @@ Re-indexing is incremental: a file whose modified time hasn't changed keeps the 
 it already had, so updating one policy costs one document's worth of work, not the manual's.
 
 **It runs in slices.** A Chat command has twenty seconds and forty documents take minutes, so
-`/manual reindex` works for about twelve seconds, saves where it got to, and offers a **Continue**
-button. The live index only changes when a run finishes, so questions keep being answered from the
+`/manual reindex` works for about ten seconds, saves where it got to, and offers a **Continue**
+button. Progress is saved within a document as well as between them — a long policy is embedded a
+part at a time — and every slice does at least one part, so Continue always moves forward. The live index only changes when a run finishes, so questions keep being answered from the
 previous version rather than from half a manual. After the first full index, updates usually
 finish in one go.
 

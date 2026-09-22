@@ -22,14 +22,6 @@ function createIndexStore({ store, now = () => Date.now() }) {
 
   const emptyMeta = () => ({ version: null, files: {}, skipped: [], model: null, chunks: 0, updatedAt: null });
 
-  async function writeParts(fileId, chunks, previousParts = 0) {
-    const parts = [];
-    for (let i = 0; i < chunks.length; i += PER_PART) parts.push(chunks.slice(i, i + PER_PART));
-    for (const [i, group] of parts.entries()) await col.set(partId(fileId, i), { fileId, chunks: group });
-    for (let i = parts.length; i < previousParts; i += 1) await col.delete(partId(fileId, i));
-    return parts.length;
-  }
-
   async function dropParts(fileId, parts) {
     for (let i = 0; i < (parts || 0); i += 1) await col.delete(partId(fileId, i));
   }
@@ -40,8 +32,13 @@ function createIndexStore({ store, now = () => Date.now() }) {
     async saveJob(job) { await col.set(JOB, job); },
     async clearJob() { await col.delete(JOB); },
 
-    /** One document's chunks, replacing whatever was there before. */
-    saveFile: (fileId, chunks, previousParts) => writeParts(fileId, chunks, previousParts),
+    /**
+     * One part of one document. Written as soon as it is embedded, so a run that stops
+     * half-way through a long policy keeps the work it already paid for.
+     */
+    savePart: (fileId, n, chunks) => col.set(partId(fileId, n), { fileId, chunks }),
+    /** Parts left over from a previous, longer version of the same document. */
+    trimParts: async (fileId, from, until) => { for (let i = from; i < (until || 0); i += 1) await col.delete(partId(fileId, i)); },
     removeFile: (fileId, parts) => dropParts(fileId, parts),
 
     /** Makes everything written so far the version questions are answered from. */

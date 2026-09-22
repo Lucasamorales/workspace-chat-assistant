@@ -22,6 +22,12 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
   run-on paragraph of forty names.
 
 ### Fixed
+- **A long policy could still overrun a reindex slice.** The clock was only checked between
+  documents, so one long document at the end of the queue blew through the twenty seconds a Chat
+  command gets. Progress is now saved **within** a document, a part at a time, and every slice does
+  at least one part before looking at the clock — so Continue can never spin without indexing
+  anything. Firestore also no longer rejects a write when an optional field (a Drive file with no
+  link, say) is missing.
 - **Every document indexed as "empty".** Making the reindex resumable dropped each file's type
   from the saved queue, and without it there is no way to export a Doc — so Drive returned nothing
   and all 40 policies were recorded as empty. The tests missed it because the fake Drive looked

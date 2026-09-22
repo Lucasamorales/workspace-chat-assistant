@@ -34,7 +34,9 @@ const config = core.loadConfig({
 
 const log = core.createLogger('chat-gateway');
 
-const store = core.createFirestoreStore(new Firestore());
+// ignoreUndefinedProperties: a module leaving an optional field undefined (a Drive file with
+// no link, say) should not take down a write. The field is simply not stored.
+const store = core.createFirestoreStore(new Firestore({ ignoreUndefinedProperties: true }));
 // Access granted from chat by an admin. Config remains the floor: see packages/core/grants.js.
 const grants = core.createGrants({ store });
 

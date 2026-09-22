@@ -11,7 +11,7 @@
 const { createDrive } = require('./drive');
 const { createTokens, CLOUD_SCOPE } = require('./token');
 const { createEmbeddings } = require('./embeddings');
-const { createIndexStore } = require('./store');
+const { createIndexStore, PER_PART: PART_SIZE } = require('./store');
 const { chunksOf, asContext } = require('./text');
 const { search } = require('./search');
 
@@ -94,7 +94,9 @@ function createManualModule({ drive, embeddings, tokens: injected, now = () => D
     const embed = embeddingsFor(ctx);
     const deadline = now() + budgetMs;
 
-    while (job.queue.length && now() < deadline) {
+    // Every slice does at least one part of work before looking at the clock. Otherwise a run
+    // that starts already out of budget returns having done nothing, and Continue never ends.
+    while (job.queue.length) {
       const file = job.queue[0];
       const text = await source.textOf(file);
       const pieces = text ? chunksOf({ ...file, webViewLink: file.link }, text) : [];
@@ -102,20 +104,39 @@ function createManualModule({ drive, embeddings, tokens: injected, now = () => D
       if (!pieces.length) {
         job.skipped.push({ name: file.name, section: file.section, reason: 'empty' });
         delete job.files[file.id];
-      } else {
-        const vectors = await embed.forDocuments(pieces.map(p => p.text));
-        const chunks = pieces.map((piece, i) => ({ ...piece, vector: vectors[i] }));
-        const parts = await index.saveFile(file.id, chunks, job.files[file.id].was || 0);
-        job.files[file.id] = { ...job.files[file.id], parts, chunks: chunks.length, was: 0 };
-        job.counts[file.new ? 'added' : 'updated'] += 1;
+        job.queue.shift();
+        if (now() >= deadline) break;
+        continue;
       }
+
+      // Long documents are embedded a part at a time, checking the clock between parts:
+      // one forty-page policy must not be able to overrun a whole slice.
+      const total = Math.ceil(pieces.length / PART_SIZE);
+      let part = job.partial && job.partial.fileId === file.id ? job.partial.parts : 0;
+
+      while (part < total) {
+        const group = pieces.slice(part * PART_SIZE, (part + 1) * PART_SIZE);
+        const vectors = await embed.forDocuments(group.map(p => p.text));
+        await index.savePart(file.id, part, group.map((piece, i) => ({ ...piece, vector: vectors[i] })));
+        part += 1;
+        job.partial = { fileId: file.id, parts: part };
+        if (now() >= deadline) break;
+      }
+
+      if (part < total) return job; // out of time mid-document; the next run picks up here
+
+      await index.trimParts(file.id, total, job.files[file.id].was || 0);
+      job.files[file.id] = { ...job.files[file.id], parts: total, chunks: pieces.length, was: 0 };
+      job.counts[file.new ? 'added' : 'updated'] += 1;
+      job.partial = null;
       job.queue.shift();
+      if (now() >= deadline) break;
     }
     return job;
   }
 
   /** One slice of a reindex: continues an unfinished one, or starts a new one. */
-  async function reindex(ctx, { budgetMs = 12_000 } = {}) {
+  async function reindex(ctx, { budgetMs = 10_000 } = {}) {
     const index = indexFor(ctx);
     let job = await index.job();
 
@@ -128,6 +149,7 @@ function createManualModule({ drive, embeddings, tokens: injected, now = () => D
         queue,
         skipped,
         gone,
+        partial: null,
         counts: { added: 0, updated: 0, unchanged, removed: gone.length },
         total: queue.length,
       };
@@ -143,7 +165,9 @@ function createManualModule({ drive, embeddings, tokens: injected, now = () => D
 
     for (const file of job.gone) await index.removeFile(file.id, file.parts);
     const meta = await index.publish({
-      files: Object.fromEntries(Object.entries(job.files).map(([id, f]) => [id, { ...f, was: undefined }])),
+      // `was` is bookkeeping for the run, not part of the index. Dropped by rebuilding the
+      // entry rather than setting it to undefined, which Firestore refuses to store.
+      files: Object.fromEntries(Object.entries(job.files).map(([id, { was, ...file }]) => [id, file])),
       skipped: job.skipped,
       model: embeddingsFor(ctx).model,
     });
