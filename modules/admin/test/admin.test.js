@@ -176,13 +176,15 @@ test('/access shows what chat granted, and says the file still applies', async (
 
   const all = await mod.commands.access.run(ctx, '');
   assert.match(all.text, /infra\/config\.env/);
-  assert.match(all.text, /riley@example\.com — until 2026-11-30, by robin@example\.com/);
-  assert.match(all.text, /Not changeable from chat: admin, leave, assistant/);
+  assert.match(all.text, /\*\*asana\*\*/, 'the module with grants gets its own block');
+  assert.match(all.text, /• riley@example\.com — until 2026-11-30/);
+  assert.match(all.text, /Nobody granted from chat: basics, files, kudos, ooo/, 'the empty ones are one quiet line');
+  assert.match(all.text, /Never changeable from chat: admin, leave, assistant/);
 
   const one = await mod.commands.access.run(ctx, 'asana');
   assert.match(one.text, /riley@/);
   const none = await mod.commands.access.run(ctx, 'kudos');
-  assert.match(none.text, /Nobody has been given <b>kudos<\/b> from chat/);
+  assert.match(none.text, /Nobody has been given \*\*kudos\*\* from chat/);
   const locked = await mod.commands.access.run(ctx, 'leave');
   assert.match(locked.text, /config file only/);
 });

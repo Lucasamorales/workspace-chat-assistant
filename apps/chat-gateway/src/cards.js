@@ -36,7 +36,24 @@ function setAssetsUrl(url) {
 }
 
 const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-const plain = s => esc(s).replace(/\n/g, '<br>');
+
+/**
+ * Module text → card text.
+ *
+ * Everything is escaped first, so nothing a module passes through — an Asana task name, a Drive
+ * document title, a line someone typed — can put markup on a card. Only then is a tiny, fixed
+ * set of markers turned into the HTML Chat cards allow:
+ *
+ *   **bold**   `code`   [text](https://link)
+ *
+ * Escaping cannot produce those markers, so the order is what makes this safe.
+ */
+const plain = s => esc(s)
+  // The URL may not contain quotes or angle brackets, so it cannot escape the href attribute.
+  .replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s"'<>&]+)\)/g, '<a href="$2">$1</a>')
+  .replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
+  .replace(/`([^`\n]+)`/g, '<b>$1</b>')
+  .replace(/\n/g, '<br>');
 
 function header(title, subtitle, mood) {
   const image = assetsUrl && MOOD_IMAGES[mood]

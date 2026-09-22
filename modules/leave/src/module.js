@@ -198,7 +198,7 @@ function createLeaveModule({ impersonator, calendar, now = () => new Date() } = 
             if (!SHIFTS[wanted]) {
               return {
                 title: 'Which shift?',
-                text: Object.entries(SHIFTS).map(([k, s]) => `• <b>${k}</b> — ${s.label}`).join('\n')
+                text: Object.entries(SHIFTS).map(([k, s]) => `• **${k}** — ${s.label}`).join('\n')
                   + '\n\nSet it with /leave shift ARG_8_5',
               };
             }
@@ -231,7 +231,7 @@ function createLeaveModule({ impersonator, calendar, now = () => new Date() } = 
           return {
             title: 'Booking leave',
             text: [
-              `Shift: <b>${SHIFTS[savedShift].label}</b> · shown as <b>${saved.nickname} (OOO)</b>`,
+              `Shift: **${SHIFTS[savedShift].label}** · shown as **${saved.nickname} (OOO)**`,
               '',
               'Just tell me, e.g. "I\'m off next Thursday" or "book me out 12–16 October, mornings only".',
               'I\'ll show you exactly what I\'m about to put in your calendar before anything happens.',

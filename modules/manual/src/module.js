@@ -162,6 +162,32 @@ function createManualModule({ drive, embeddings, tokens: injected, now = () => D
 
   const adminOnly = 'Sorry, chap, only admins can rebuild the manual index.';
 
+  /**
+   * What a reindex did, readable at a glance. Forty document names on one line is a wall;
+   * they are grouped by reason and capped, because the count is the news and the names are
+   * only useful for the few you can act on.
+   */
+  function summaryOf(job, meta) {
+    const { added, updated, unchanged, removed } = job.counts;
+    const many = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    const lines = [
+      `**${many(meta.chunks, 'passage')}** from **${many(Object.keys(meta.files).length, 'document')}**.`,
+      `${added} new · ${updated} updated · ${unchanged} unchanged${removed ? ` · ${removed} gone` : ''}`,
+    ];
+
+    const byReason = job.skipped.reduce((acc, s) => {
+      (acc[s.reason] = acc[s.reason] || []).push(s.name);
+      return acc;
+    }, {});
+    for (const [reason, names] of Object.entries(byReason)) {
+      const shown = names.slice(0, 5).map(n => `• ${n}`);
+      if (names.length > shown.length) shown.push(`• …and ${names.length - shown.length} more`);
+      lines.push('', `**Not indexed — ${reason} (${names.length})**`, ...shown);
+    }
+    if (byReason.PDF || byReason['unsupported type']) lines.push('', 'Save those as Google Docs and I\'ll pick them up.');
+    return lines.join('\n');
+  }
+
   return {
     name: 'manual',
     description: 'Answers from the team member manual',
@@ -202,15 +228,7 @@ function createManualModule({ drive, embeddings, tokens: injected, now = () => D
               };
             }
 
-            return {
-              title: 'Manual reindexed',
-              text: [
-                `${job.counts.added} new, ${job.counts.updated} updated, ${job.counts.unchanged} unchanged`
-                + `${job.counts.removed ? `, ${job.counts.removed} gone` : ''}.`,
-                `${meta.chunks} passages from ${Object.keys(meta.files).length} documents.`,
-                job.skipped.length ? `\nNot indexed: ${job.skipped.map(s => `${s.name} (${s.reason})`).join(', ')}` : '',
-              ].filter(Boolean).join('\n'),
-            };
+            return { title: 'Manual reindexed', text: summaryOf(job, meta) };
           }
 
           if (sub === 'check') {
@@ -243,7 +261,7 @@ function createManualModule({ drive, embeddings, tokens: injected, now = () => D
           return {
             title: 'The manual',
             text: [
-              `I've read <b>${files.length} documents</b> (${meta.chunks} passages), last updated ${meta.updatedAt.slice(0, 10)}.`,
+              `I've read **${files.length} documents** (${meta.chunks} passages), last updated ${meta.updatedAt.slice(0, 10)}.`,
               sections.length ? `Sections: ${sections.join(', ')}.` : '',
               '',
               'Just ask, e.g. "how many holidays do I get?" — I\'ll answer from the manual and link the document.',

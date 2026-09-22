@@ -47,22 +47,28 @@ function createAdminModule({ grants, moduleNames = [] } = {}) {
 
   const when = entry => (entry.until ? `until ${entry.until}` : 'no end date');
 
+  /**
+   * Only modules that actually have grants get their own block; the rest are one quiet line.
+   * A list of "nobody" repeated eight times buries the thing you opened this to read.
+   */
   function listText(ctx) {
     const { modules } = grants.all();
-    const lines = known().map(name => {
-      const entries = (modules[name] || []).filter(e => !e.expired);
-      return entries.length
-        ? `<b>${name}</b>\n${entries.map(e => `• ${e.email} — ${when(e)}, by ${e.by}`).join('\n')}`
-        : `<b>${name}</b>\n• nobody granted from chat`;
-    });
+    const withGrants = known().filter(name => (modules[name] || []).some(e => !e.expired));
+    const without = known().filter(name => !withGrants.includes(name));
+
+    const blocks = withGrants.map(name => [
+      `**${name}**`,
+      ...(modules[name] || []).filter(e => !e.expired).map(e => `• ${e.email} — ${when(e)}`),
+    ].join('\n'));
+
     return [
-      'Access granted from chat. Everyone in <b>infra/config.env</b> keeps their access as well —',
-      'that part can only be changed in the file.',
+      withGrants.length ? blocks.join('\n\n') : 'Nothing has been granted from chat yet.',
       '',
-      ...lines,
+      without.length ? `Nobody granted from chat: ${without.join(', ')}` : '',
+      `Never changeable from chat: ${PROTECTED.join(', ')}`,
       '',
-      PROTECTED.length ? `Not changeable from chat: ${PROTECTED.join(', ')}.` : '',
-    ].join('\n');
+      'Everyone listed in `infra/config.env` keeps their access either way — only the file can change that.',
+    ].filter(line => line !== null).join('\n');
   }
 
   return {
@@ -85,10 +91,15 @@ function createAdminModule({ grants, moduleNames = [] } = {}) {
           const asked = String(args || '').trim().toLowerCase();
           if (!asked) return { title: 'Module access', text: listText(ctx) };
           if (PROTECTED.includes(asked)) {
-            return { title: `Access: ${asked}`, text: `<b>${asked}</b> is set in the config file only, so there's nothing granted from chat.` };
+            return { title: `Access: ${asked}`, text: `**${asked}** is set in the config file only, so there's nothing granted from chat.` };
           }
           const entries = (grants.all().modules[asked] || []);
-          if (!entries.length) return { title: `Access: ${asked}`, text: `Nobody has been given <b>${asked}</b> from chat. Config still applies.` };
+          if (!entries.length) {
+            return {
+              title: `Access: ${asked}`,
+              text: `Nobody has been given **${asked}** from chat.\nAnyone listed in \`infra/config.env\` still has it.`,
+            };
+          }
           return {
             title: `Access: ${asked}`,
             text: entries.map(e => `• ${e.email} — ${e.expired ? 'expired' : when(e)}, by ${e.by}`).join('\n'),

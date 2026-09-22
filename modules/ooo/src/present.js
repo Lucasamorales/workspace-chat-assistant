@@ -59,7 +59,7 @@ function replyFor(entries, label) {
   if (!entries.length) return { title: `Nobody\'s out ${label}`, text: 'Full house! 🎉' };
   return {
     title: `Who\'s out ${label}`,
-    text: entries.map(e => `• <b>${e.name}</b>: ${e.when}`).join('\n'),
+    text: entries.map(e => `• **${e.name}**: ${e.when}`).join('\n'),
   };
 }
 

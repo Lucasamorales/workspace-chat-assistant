@@ -85,7 +85,7 @@ test('all-day leave shows the real last day, not Google\'s exclusive end', async
   const { mod, ctx } = setup([allDay('Robin (OOO)', '2026-09-22', '2026-09-26')]);
   const reply = await mod.commands.ooo.run(ctx, 'week');
   assert.equal(reply.title, 'Who\'s out this week');
-  assert.match(reply.text, /<b>Robin<\/b>: Sep 22 to Sep 25/);
+  assert.match(reply.text, /\*\*Robin\*\*: Sep 22 to Sep 25/);
 });
 
 test('a single all-day absence is one date, and half-days keep their hours', async () => {
@@ -94,8 +94,8 @@ test('a single all-day absence is one date, and half-days keep their hours', asy
     timed('Riley (OOO)', '2026-09-23T08:00:00-03:00', '2026-09-23T12:30:00-03:00'),
   ]);
   const reply = await mod.commands.ooo.run(ctx, 'today');
-  assert.match(reply.text, /<b>Remy<\/b>: Sep 23\n/);
-  assert.match(reply.text, /<b>Riley<\/b>: Sep 23 \(08:00 - 12:30 ARG\)/);
+  assert.match(reply.text, /\*\*Remy\*\*: Sep 23\n/);
+  assert.match(reply.text, /\*\*Riley\*\*: Sep 23 \(08:00 - 12:30 ARG\)/);
 });
 
 test('the personal block and the team invite are one absence, listed once', async () => {
@@ -133,9 +133,9 @@ test('the tag is stripped however it was written, leaving just the person', asyn
   ]);
   const reply = await mod.commands.ooo.run(ctx, 'today');
   assert.equal(reply.text, [
-    '• <b>Ian</b>: Sep 14 to Sep 25',
-    '• <b>Ella</b>: Sep 17 to Sep 25',
-    '• <b>Lenny</b>: Sep 21 to Sep 25',
+    '• **Ian**: Sep 14 to Sep 25',
+    '• **Ella**: Sep 17 to Sep 25',
+    '• **Lenny**: Sep 21 to Sep 25',
   ].join('\n'));
 });
 
@@ -143,7 +143,7 @@ test('multi-day leave counts on every day it covers, not just the day it starts'
   // The live calendar's answer for "today" on the 23rd includes leave that began on the 14th.
   const { mod, ctx, calls } = setup([allDay('Ian OOO', '2026-09-14', '2026-09-26')]);
   const reply = await mod.commands.ooo.run(ctx, 'today');
-  assert.match(reply.text, /<b>Ian<\/b>/);
+  assert.match(reply.text, /\*\*Ian\*\*/);
   assert.equal(calls.at(-1).timeMin, '2026-09-23T00:00:00-03:00', 'asks Google for the day, and overlaps come back');
 });
 

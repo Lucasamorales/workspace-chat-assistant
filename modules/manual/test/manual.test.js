@@ -107,8 +107,8 @@ test('reindex reads the folder, and says what it did', async () => {
     texts: { d1: HOLIDAY, d2: EXPENSES },
   });
   const reply = await mod.commands.manual.run(ctx, 'reindex');
-  assert.match(reply.text, /2 new, 0 updated, 0 unchanged/);
-  assert.match(reply.text, /passages from 2 documents/);
+  assert.match(reply.text, /2 new · 0 updated · 0 unchanged/);
+  assert.match(reply.text, /\*\*2 documents\*\*/);
 });
 
 test('reindexing again only re-reads what changed', async () => {
@@ -124,7 +124,7 @@ test('reindexing again only re-reads what changed', async () => {
   const reply = await mod.commands.manual.run(ctx, 'reindex');
 
   assert.deepEqual(read, ['d2'], 'the unchanged document was not fetched again');
-  assert.match(reply.text, /0 new, 1 updated, 1 unchanged/);
+  assert.match(reply.text, /0 new · 1 updated · 1 unchanged/);
 });
 
 test('a deleted document leaves the index, and stops being answerable', async () => {
@@ -134,7 +134,7 @@ test('a deleted document leaves the index, and stops being answerable', async ()
 
   files.pop();
   const reply = await mod.commands.manual.run(ctx, 'reindex');
-  assert.match(reply.text, /1 gone/);
+  assert.match(reply.text, /· 1 gone/);
 
   const { content } = await (await mod.tools(ctx)).execute('search_manual', { question: 'expenses' });
   assert.match(content, /Nothing in the manual covers that/);
@@ -146,7 +146,9 @@ test('PDFs are named as skipped rather than half-read', async () => {
     texts: { d1: HOLIDAY },
   });
   const reply = await mod.commands.manual.run(ctx, 'reindex');
-  assert.match(reply.text, /Not indexed: Old handbook\.pdf \(PDF\)/);
+  assert.match(reply.text, /\*\*Not indexed — PDF \(1\)\*\*/);
+  assert.match(reply.text, /• Old handbook\.pdf/);
+  assert.match(reply.text, /Save those as Google Docs/);
 });
 
 /* ---------- answering ---------- */
@@ -300,8 +302,8 @@ test('a long reindex stops, saves, and offers to carry on', async () => {
   let reply = first;
   for (let i = 0; i < 6 && reply.buttons; i += 1) reply = await ticking.commands.manual.run(ctx, 'reindex');
   assert.equal(reply.title, 'Manual reindexed');
-  assert.match(reply.text, /5 new, 0 updated/);
-  assert.match(reply.text, /passages from 5 documents/);
+  assert.match(reply.text, /5 new · 0 updated/);
+  assert.match(reply.text, /\*\*5 documents\*\*/);
 
   // And the finished index answers questions.
   const { content } = await (await mod.tools(ctx)).execute('search_manual', { question: 'holiday' });
