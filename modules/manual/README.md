@@ -65,6 +65,11 @@ that is fine for all staff.
 
 Needs `aiplatform.googleapis.com` enabled and `roles/aiplatform.user` on `buddy-bot`.
 
+**Why Drive needs a minted token:** on Cloud Run a service account's automatic token is scoped to
+`cloud-platform`, which Vertex AI accepts and the Drive API does not. `buddy-bot` mints itself a
+`drive.readonly` token through the IAM Credentials API, using the Service Account Token Creator
+role it already holds on itself. No key, and the narrower scope is the one Drive sees.
+
 ## Storage
 
 `m_manual__index`: chunks with their vectors, packed into shards of 40 so a question is a handful

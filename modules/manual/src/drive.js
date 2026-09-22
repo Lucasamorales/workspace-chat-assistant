@@ -20,13 +20,24 @@ const PLAIN = /^text\/(plain|csv|markdown)$/;
 const fail = (message, cause) => Object.assign(new Error(message), { expose: true, cause });
 
 function explain(status, folderId, body) {
+  // Google's own wording matters here: "insufficient scopes" and "not shared with me" both
+  // arrive as 403, and guessing between them cost a deploy once already.
+  const reason = (() => {
+    try { const parsed = JSON.parse(body); return (parsed.error && parsed.error.message) || ''; } catch { return ''; }
+  })();
+  const withReason = error => Object.assign(error, { detail: reason });
+
   if (status === 401 || status === 403) {
-    return fail('I can\'t read the manual folder. Share it as Viewer with '
-      + 'buddy-bot@your-gcp-project.iam.gserviceaccount.com and I\'ll be able to look things up.', body);
+    if (/scope/i.test(reason)) {
+      return withReason(fail('I don\'t have permission to read Drive at all: my token is missing the Drive scope. '
+        + 'Grant buddy-bot the Service Account Token Creator role on itself so I can ask for one.', body));
+    }
+    return withReason(fail('I can\'t read the manual folder. Share it as Viewer with '
+      + 'buddy-bot@your-gcp-project.iam.gserviceaccount.com and I\'ll be able to look things up.', body));
   }
-  if (status === 404) return fail(`I couldn't find the manual folder (${folderId}). Check MANUAL_FOLDER_ID.`, body);
-  if (status === 429 || status >= 500) return fail('Google Drive is busy right now. Give it a minute?', body);
-  return fail('Google Drive refused that request.', body);
+  if (status === 404) return withReason(fail(`I couldn't find the manual folder (${folderId}). Check MANUAL_FOLDER_ID.`, body));
+  if (status === 429 || status >= 500) return withReason(fail('Google Drive is busy right now. Give it a minute?', body));
+  return withReason(fail('Google Drive refused that request.', body));
 }
 
 function createDrive({ tokenFor, folderId, fetch: doFetch = fetch }) {

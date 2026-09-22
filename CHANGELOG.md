@@ -10,6 +10,13 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
 
 ## 2026-09-22
 
+### Fixed
+- **The manual module couldn't read Drive.** On Cloud Run a service account's token is scoped to
+  `cloud-platform`, which the Drive API refuses — and a 403 was being reported as "share the folder
+  with me", which was misleading since the folder *was* shared. Buddy now mints itself a
+  `drive.readonly` token (IAM Credentials, no key), and a 403 quotes Google's own wording so a
+  scope problem can't masquerade as a sharing problem again.
+
 ### Added
 - **`manual` module — the team member manual, answerable in chat.** Buddy reads the manual's Drive
   folder, indexes it (Docs, Slides and Sheets; PDFs are named as skipped), and answers questions

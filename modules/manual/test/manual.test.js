@@ -5,6 +5,7 @@ const { createManualModule } = require('../src/module');
 const { chunk, chunksOf, asContext } = require('../src/text');
 const { search, similarity } = require('../src/search');
 const { createDrive } = require('../src/drive');
+const { createTokens } = require('../src/token');
 
 const DOC = 'application/vnd.google-apps.document';
 const NOW = Date.parse('2026-09-22T10:00:00Z');
@@ -224,4 +225,50 @@ test('context given to Claude is numbered, sourced and separated', () => {
   assert.match(context, /\[1\] Holiday policy \(Policies 2026\) — Booking/);
   assert.match(context, /\[2\] Expenses/);
   assert.match(context, /---/);
+});
+
+/* ---------- tokens: the reason /manual check failed the first time ---------- */
+
+test('Drive is asked for with a Drive-scoped token, not Cloud Run\'s cloud-platform one', async () => {
+  const calls = [];
+  const fetch = async (url, options) => {
+    calls.push({ url, body: options.body });
+    return { ok: true, status: 200, json: async () => ({ accessToken: 'drive-token', expireTime: '2026-09-22T13:00:00Z' }) };
+  };
+  const auth = {
+    getCredentials: async () => ({ client_email: 'buddy-bot@your-gcp-project.iam.gserviceaccount.com' }),
+    getClient: async () => ({ getAccessToken: async () => ({ token: 'cloud-platform-token' }) }),
+  };
+  const tokens = createTokens({ auth, fetch, log: { warn() {}, info() {} }, now: () => Date.parse('2026-09-22T12:00:00Z') });
+
+  assert.equal(await tokens.forDrive(), 'drive-token');
+  assert.match(calls[0].url, /:generateAccessToken$/);
+  assert.deepEqual(JSON.parse(calls[0].body).scope, ['https://www.googleapis.com/auth/drive.readonly']);
+
+  assert.equal(await tokens.forDrive(), 'drive-token');
+  assert.equal(calls.length, 1, 'the token is reused until it nearly expires');
+
+  // Vertex is content with the identity Cloud Run already provides.
+  assert.equal(await tokens.forVertex(), 'cloud-platform-token');
+});
+
+test('a missing scope is not reported as "share the folder"', async () => {
+  const scopeError = JSON.stringify({ error: { message: 'Request had insufficient authentication scopes.' } });
+  const drive = createDrive({
+    tokenFor: async () => 'token',
+    folderId: 'folder1',
+    fetch: async () => ({ ok: false, status: 403, text: async () => scopeError }),
+  });
+  await assert.rejects(drive.list(), err => {
+    assert.match(err.message, /missing the Drive scope/);
+    assert.match(err.detail, /insufficient authentication scopes/);
+    return true;
+  });
+
+  const notShared = createDrive({
+    tokenFor: async () => 'token',
+    folderId: 'folder1',
+    fetch: async () => ({ ok: false, status: 403, text: async () => JSON.stringify({ error: { message: 'The caller does not have permission' } }) }),
+  });
+  await assert.rejects(notShared.list(), /Share it as Viewer/);
 });

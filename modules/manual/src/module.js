@@ -9,6 +9,7 @@
  */
 
 const { createDrive } = require('./drive');
+const { createTokens, CLOUD_SCOPE } = require('./token');
 const { createEmbeddings } = require('./embeddings');
 const { createIndexStore } = require('./store');
 const { chunksOf, asContext } = require('./text');
@@ -16,29 +17,25 @@ const { search } = require('./search');
 
 const bad = message => Object.assign(new Error(message), { expose: true });
 
-function defaultTokens() {
+function defaultTokens(log) {
   // Required lazily so tests never load the Google client.
   const { GoogleAuth } = require('google-auth-library');
-  const auth = new GoogleAuth({
-    scopes: ['https://www.googleapis.com/auth/drive.readonly', 'https://www.googleapis.com/auth/cloud-platform'],
-  });
-  return async () => {
-    const client = await auth.getClient();
-    const { token } = await client.getAccessToken();
-    return token;
-  };
+  return createTokens({ auth: new GoogleAuth({ scopes: [CLOUD_SCOPE] }), log });
 }
 
-function createManualModule({ drive, embeddings, tokenFor, now = () => Date.now() } = {}) {
-  let tokens = tokenFor;
-  const credentials = () => {
-    if (!tokens) tokens = defaultTokens();
+function createManualModule({ drive, embeddings, tokens: injected, now = () => Date.now() } = {}) {
+  let tokens = injected;
+  const credentials = ctx => {
+    if (!tokens) tokens = defaultTokens(ctx.log);
     return tokens;
   };
 
-  const driveFor = ctx => drive || createDrive({ tokenFor: credentials(), folderId: ctx.settings.MANUAL_FOLDER_ID });
+  const driveFor = ctx => drive || createDrive({
+    tokenFor: () => credentials(ctx).forDrive(),
+    folderId: ctx.settings.MANUAL_FOLDER_ID,
+  });
   const embeddingsFor = ctx => embeddings || createEmbeddings({
-    tokenFor: credentials(),
+    tokenFor: () => credentials(ctx).forVertex(),
     projectId: ctx.settings.MANUAL_PROJECT_ID,
     region: ctx.settings.MANUAL_REGION,
     ...(ctx.settings.MANUAL_EMBEDDING_MODEL ? { model: ctx.settings.MANUAL_EMBEDDING_MODEL } : {}),
@@ -155,8 +152,9 @@ function createManualModule({ drive, embeddings, tokenFor, now = () => Date.now(
               const others = files.filter(f => !driveFor(ctx).supported(f));
               if (others.length) lines.push(`⚠️ Not indexable: ${others.map(f => f.name).join(', ')} — save them as Google Docs.`);
             } catch (error) {
-              ctx.log.warn('manual drive check failed', { error });
+              ctx.log.warn('manual drive check failed', { error, detail: error.detail });
               lines.push(`❌ ${error.expose ? error.message : 'I can\'t read the manual folder.'}`);
+              if (error.detail) lines.push(`Google said: ${error.detail}`);
             }
             const meta = await index.meta();
             lines.push(meta.version
