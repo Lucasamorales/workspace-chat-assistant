@@ -143,6 +143,24 @@ Separate from Epic 5: this module only reads. No delegation, no writes.
 | C5 | Retire the Apps Script Buddy Chat app (keep the Leave Dates Sheet menu until Epic 5) | Only one "Buddy" in Chat search |
 | C6 | Announce to the team: same name, re-open the DM with Buddy | — |
 
+## Epic 6: `admin` module (grant module access from chat)
+
+Decision: `docs/decisions/0004-admin-module.md`. Config stays the floor; grants only widen.
+
+| # | Item | Acceptance |
+|---|---|---|
+| G1 | Access policy reads config **and** stored grants, cached and refreshed once per event | A grant works within seconds, without a deploy |
+| G2 | `admin` module, DM only, usable only via `BUDDY_ACCESS_ADMIN`; invisible to everyone else | Test: a non-admin sees no commands and cannot grant |
+| G3 | `/access` and `/access <module>`: who can use what, config and grants shown separately, with expiry dates | Matches what the policy actually allows |
+| G4 | Grant and revoke through the approval card, with the module, person, expiry and "they'll also be able to talk to Buddy" spelled out | Test |
+| G5 | Protected modules (`admin`, `leave`, `assistant`) refused — a constant in the source, not a setting | Test asserts each one |
+| G6 | Only `@example.com` addresses; validated like config entries | Test |
+| G7 | Granting also adds the person to the stored allow-list, so they can reach Buddy | Test: a granted colleague is no longer told Buddy is off for them |
+| G8 | Optional expiry; a lapsed grant stops working without anyone acting | Test with a frozen clock |
+| G9 | Revoking removes grants only, never config; any admin may revoke any grant | Test: a config-listed person survives a revoke |
+| G10 | Audit: who granted or revoked what, for whom, when — stored and logged | Visible in `/access` and Cloud Logging |
+| G11 | RUNBOOK: read access with `/access`, not the config file | Docs |
+
 ## Epic 5: `leave` module (book and cancel leave) — writes calendars
 
 Decision: `docs/decisions/0003-ooo.md`. Reference: `legacy/ooo-appsscript/ManualOOO.gs`.
