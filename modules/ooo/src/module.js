@@ -9,6 +9,7 @@
  */
 
 const { createOooCalendar } = require('./calendar');
+const { createReadTokens, readAs } = require('./token');
 const { WHEN, rangeFor, instantsFor } = require('./range');
 const { entriesFrom, replyFor, textFor } = require('./present');
 
@@ -16,11 +17,10 @@ const DEFAULT_CALENDAR = 'accounts@example.com';
 const DEFAULT_TZ = 'America/Argentina/Buenos_Aires';
 const DEFAULT_TZ_LABEL = 'ARG';
 
-function defaultCalendarApi() {
+function defaultTokens(log) {
   // Required lazily so tests and other modules never load the Google client.
-  const { calendar } = require('@googleapis/calendar');
   const { GoogleAuth } = require('google-auth-library');
-  return calendar({ version: 'v3', auth: new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/calendar.readonly'] }) });
+  return createReadTokens({ auth: new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] }), log });
 }
 
 /** "next week please" → "next week"; anything unrecognised falls back to today. */
@@ -34,11 +34,17 @@ function whenFrom(text) {
   return 'today';
 }
 
-function createOooModule({ calendarApi, now = () => new Date() } = {}) {
-  let api = calendarApi;
+function createOooModule({ calendar, tokenFor, now = () => new Date() } = {}) {
+  let tokens = tokenFor;
   const calendarFor = ctx => {
-    if (!api) api = defaultCalendarApi();
-    return createOooCalendar({ calendarApi: api, calendarId: ctx.settings.OOO_CALENDAR_ID || DEFAULT_CALENDAR });
+    if (calendar) return calendar; // tests inject a ready-made reader
+    if (!tokens) tokens = defaultTokens(ctx.log);
+    return createOooCalendar({
+      tokenFor: tokens,
+      calendarId: ctx.settings.OOO_CALENDAR_ID || DEFAULT_CALENDAR,
+      // Settings only: never a user, a message or anything Claude produced.
+      readAs: readAs(ctx.settings.OOO_READ_AS),
+    });
   };
   const zone = ctx => ({
     timeZone: ctx.settings.OOO_TIMEZONE || DEFAULT_TZ,
@@ -64,7 +70,7 @@ function createOooModule({ calendarApi, now = () => new Date() } = {}) {
       ctx.log.warn('ooo calendar check failed', { error });
       lines.push(error.expose ? `❌ ${error.message}` : '❌ I can\'t read the OOO calendar.');
     }
-    lines.push(`Calendar: ${cal.calendarId} · shown in ${zone(ctx).timeZone}`);
+    lines.push(`Calendar: ${cal.calendarId} · read${cal.readAs ? ` as ${cal.readAs}` : ' with Buddy\'s own access'} · shown in ${zone(ctx).timeZone}`);
     return { title: 'OOO setup check', text: lines.join('\n') };
   }
 

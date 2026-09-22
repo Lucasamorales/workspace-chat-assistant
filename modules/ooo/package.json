@@ -5,7 +5,6 @@
   "main": "src/index.js",
   "scripts": { "test": "node --test" },
   "dependencies": {
-    "@googleapis/calendar": "^9.0.0",
     "google-auth-library": "^11.1.0"
   },
   "devDependencies": { "@buddy/core": "*" }

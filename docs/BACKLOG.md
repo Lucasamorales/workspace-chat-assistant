@@ -116,7 +116,9 @@ Separate from Epic 5: this module only reads. No delegation, no writes.
 
 | # | Item | Acceptance |
 |---|---|---|
-| O0 | Give `buddy-bot@your-gcp-project.iam.gserviceaccount.com` read access to `accounts@example.com`, the OOO calendar. If it is a **Google Group**: add the service account as a member (a group manager can, unless the domain blocks external members). If it is a **calendar**: share it "See all event details", which needs external sharing allowed for that account alone (configuration group or sub-OU, never domain-wide) | Blocks this epic |
+| O0 | ✅ Worked around: Workspace only offers free/busy to outside addresses, so `ooo` reads `accounts@` by acting as it (`OOO_READ_AS`), with the guardrails in `0003-ooo.md` | Unblocked without an admin |
+| O0c | *Better, when someone can:* allow external sharing for `accounts@` alone (configuration group or sub-OU), share the calendar with `buddy-bot` as "See all event details", then unset `OOO_READ_AS` | `ooo` holds no delegation again |
+| O0d | *Cheap hardening:* add `https://www.googleapis.com/auth/calendar.events.readonly` to buddy-bot's delegation entry, so the read really cannot write | No "writable scope" warning in the logs |
 | O0b | *Fallback if the admin is slow:* read the calendar's secret iCal address, stored in Secret Manager. Weaker (a bearer URL, no audit trail, rotating it breaks other subscribers) — only if stuck | Decision recorded before use |
 
 ### Module

@@ -2,6 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { validateModule } = require('@buddy/core');
 const { createOooModule, whenFrom } = require('../src/module');
+const { createOooCalendar } = require('../src/calendar');
+const { createReadTokens, readAs, READONLY_SCOPE } = require('../src/token');
 const { rangeFor, instantsFor } = require('../src/range');
 
 const TZ = 'America/Argentina/Buenos_Aires';
@@ -13,19 +15,48 @@ const timed = (summary, start, end) => ({ summary, start: { dateTime: start }, e
 
 function setup(items = [], settings = {}) {
   const calls = [];
-  const calendarApi = {
-    events: { list: async params => { calls.push(params); return { data: { items } }; } },
-    calendars: { get: async () => ({ data: { summary: 'Accounts', timeZone: TZ } }) },
+  const calendar = {
+    calendarId: 'accounts@example.com',
+    readAs: 'accounts@example.com',
+    async list(window) { calls.push(window); return items; },
+    async describe() { return { title: 'Accounts', timeZone: TZ }; },
   };
-  const mod = createOooModule({ calendarApi, now: () => NOW });
+  const mod = createOooModule({ calendar });
   const ctx = {
-    settings: { OOO_CALENDAR_ID: 'accounts@example.com', ...settings },
+    settings: { OOO_CALENDAR_ID: 'accounts@example.com', OOO_READ_AS: 'accounts@example.com', ...settings },
     log: { info() {}, warn() {}, error() {} },
   };
   return { mod, ctx, calls };
 }
 
-test('module satisfies the contract', () => validateModule(createOooModule({ calendarApi: {} })));
+/** A reader built the real way, over a fake network. */
+function wired(responses, settings = {}) {
+  const requests = [];
+  const fetch = async (url, options = {}) => {
+    requests.push({ url, method: options.method, body: options.body });
+    const next = responses.shift();
+    if (!next) throw new Error('unexpected request: ' + url);
+    return next;
+  };
+  const auth = {
+    getCredentials: async () => ({ client_email: 'buddy-bot@your-gcp-project.iam.gserviceaccount.com' }),
+    getClient: async () => ({ getAccessToken: async () => ({ token: 'own-identity' }) }),
+  };
+  const log = { info() {}, warn(msg, data) { requests.push({ warn: msg, data }); }, error() {} };
+  const tokenFor = createReadTokens({ auth, fetch, log });
+  const calendar = createOooCalendar({
+    tokenFor,
+    calendarId: settings.calendarId || 'accounts@example.com',
+    readAs: readAs(settings.readAs === undefined ? 'accounts@example.com' : settings.readAs),
+    fetch,
+  });
+  return { calendar, requests };
+}
+
+const ok = body => ({ ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) });
+const bad = (status, body) => ({ ok: false, status, json: async () => body, text: async () => JSON.stringify(body) });
+
+test('module satisfies the contract', () => validateModule(createOooModule({ calendar: {} })));
 
 test('ranges are the week people live in, not UTC', () => {
   assert.deepEqual(rangeFor('today', NOW, TZ), { from: '2026-09-23', to: '2026-09-23', label: 'today' });
@@ -77,12 +108,75 @@ test('the personal block and the team invite are one absence, listed once', asyn
 });
 
 test('events without the (OOO) tag are ignored', async () => {
-  const { mod, ctx } = setup([
-    allDay('All-hands', '2026-09-23', '2026-09-24'),
-    allDay('Charlie (OOO)', '2026-09-23', '2026-09-24'),
+  const { calendar } = wired([
+    ok({ signedJwt: 's' }),
+    ok({ access_token: 'reading' }),
+    ok({ items: [allDay('All-hands', '2026-09-23', '2026-09-24'), allDay('Charlie (OOO)', '2026-09-23', '2026-09-24')] }),
   ]);
-  const reply = await mod.commands.ooo.run(ctx, 'today');
-  assert.equal(reply.text, '• <b>Charlie</b>: Sep 23');
+  const events = await calendar.list({ timeMin: '2026-09-23T00:00:00-03:00', timeMax: '2026-09-23T23:59:59-03:00' });
+  assert.deepEqual(events.map(e => e.summary), ['Charlie (OOO)']);
+});
+
+/* ---------- guardrails: this module may only ever read ---------- */
+
+test('the reader has no way to write: no create, delete or patch exists on it', () => {
+  const { calendar } = wired([]);
+  assert.deepEqual(Object.keys(calendar).sort(), ['calendarId', 'describe', 'list', 'readAs']);
+  for (const forbidden of ['create', 'insert', 'remove', 'delete', 'patch', 'update']) {
+    assert.equal(calendar[forbidden], undefined, `${forbidden} must not exist`);
+  }
+  assert.ok(Object.isFrozen(calendar), 'nothing can bolt a write method onto it later');
+});
+
+test('every request is a GET, to the one configured calendar', async () => {
+  const { calendar, requests } = wired([ok({ signedJwt: 's' }), ok({ access_token: 'reading' }), ok({ items: [] })]);
+  await calendar.list({ timeMin: '2026-09-23T00:00:00-03:00', timeMax: '2026-09-23T23:59:59-03:00' });
+
+  const calendarCalls = requests.filter(r => String(r.url).includes('/calendar/v3/'));
+  assert.equal(calendarCalls.length, 1);
+  assert.equal(calendarCalls[0].method, 'GET');
+  assert.equal(calendarCalls[0].body, undefined, 'a read never carries a body');
+  // Acting as the calendar's own account, so its own calendar is "primary".
+  assert.match(calendarCalls[0].url, /\/calendars\/primary\/events\?/);
+});
+
+test('the read-only scope is asked for first, and the writable one only if forced', async () => {
+  const { calendar, requests } = wired([ok({ signedJwt: 's' }), ok({ access_token: 'reading' }), ok({ items: [] })]);
+  await calendar.list({ timeMin: 'a', timeMax: 'b' });
+  const claims = JSON.parse(JSON.parse(requests[0].body).payload);
+  assert.equal(claims.scope, READONLY_SCOPE);
+  assert.equal(claims.sub, 'accounts@example.com');
+
+  // Delegation without the readonly scope: it falls back, but says so loudly.
+  const second = wired([
+    ok({ signedJwt: 's1' }), bad(400, { error: 'unauthorized_client' }),
+    ok({ signedJwt: 's2' }), ok({ access_token: 'reading' }), ok({ items: [] }),
+  ]);
+  await second.calendar.list({ timeMin: 'a', timeMax: 'b' });
+  const warned = second.requests.find(r => r.warn);
+  assert.match(warned.warn, /writable scope/);
+  assert.match(warned.data.fix, /calendar\.events\.readonly/);
+});
+
+test('the account acted as comes from settings alone, never from a caller', () => {
+  // Anything that is not a single, well-formed address is refused outright.
+  for (const attempt of ['robin@x.com,remy@x.com', 'not-an-email', 'me@x.com me@y.com', '*@example.com']) {
+    assert.throws(() => readAs(attempt), /single work email address/);
+  }
+  assert.equal(readAs(''), null, 'unset means no impersonation at all');
+  assert.equal(readAs(' Accounts@Example.com '), 'accounts@example.com');
+
+  // The module reads it from settings; the tool takes only a period, so there is no field to abuse.
+  const { mod, ctx } = setup([]);
+  const schema = mod.tools(ctx);
+  return schema.then(toolset => {
+    assert.deepEqual(Object.keys(toolset.definitions[0].input_schema.properties), ['when']);
+  });
+});
+
+test('a range is required: no window, no request', async () => {
+  const { calendar } = wired([]);
+  await assert.rejects(calendar.list({}), /date range/);
 });
 
 test('nobody out reads as good news, not as an error', async () => {
@@ -95,7 +189,7 @@ test('no access explains what to fix instead of showing a raw error', async () =
   const { mod, ctx } = setup();
   mod.commands.ooo.run(ctx, 'today'); // warm the lazy client
   const failing = createOooModule({
-    calendarApi: { events: { list: async () => { throw Object.assign(new Error('nope'), { code: 403 }); } } },
+    calendar: { calendarId: 'accounts@example.com', list: async () => { throw Object.assign(new Error('nope'), { expose: true, message: "Oh no, I can't read the team calendar: buddy-bot@your-gcp-project.iam.gserviceaccount.com doesn't have access to accounts@example.com." }); } },
     now: () => NOW,
   });
   await assert.rejects(failing.commands.ooo.run(ctx, 'today'), err => {
@@ -113,7 +207,7 @@ test('the check command reports what Buddy can and cannot reach', async () => {
   assert.match(reply.text, /✅ I can read events: 1 OOO entry this week/);
 
   const broken = createOooModule({
-    calendarApi: { calendars: { get: async () => { throw Object.assign(new Error('nope'), { code: 404 }); } } },
+    calendar: { calendarId: 'accounts@example.com', describe: async () => { throw Object.assign(new Error("Oh no, I couldn't find the calendar accounts@example.com. Check OOO_CALENDAR_ID."), { expose: true }); } },
     now: () => NOW,
   });
   assert.match((await broken.commands.ooo.run(ctx, 'check')).text, /❌ .*couldn't find the calendar/);

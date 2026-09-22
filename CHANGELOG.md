@@ -10,6 +10,16 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
 
 ## 2026-09-21
 
+### Changed
+- **`ooo` reads by acting as one fixed account.** Workspace only allows outside addresses
+  free/busy on a calendar, which has no names, so sharing could not work. `ooo` now reads
+  `accounts@` as `OOO_READ_AS`, using the delegation `buddy-bot` already holds. Guardrails:
+  the account comes from settings alone (validated, never from a user or Claude), the read-only
+  scope is asked for first and any fallback to the writable one is logged with the fix, and the
+  reader is a frozen object with only `list` and `describe` — no write method exists, every
+  request is a GET to the one configured calendar, and each read is logged. Recorded as an
+  amendment to `0003-ooo.md`.
+
 ### Added
 - **`leave` module.** Books and cancels out-of-office by chat — built for the accounts team to
   record the whole team's leave: "I'm off next

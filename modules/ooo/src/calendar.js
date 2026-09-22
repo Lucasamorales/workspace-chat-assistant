@@ -1,13 +1,20 @@
 /**
  * Read-only view of the OOO calendar (`accounts@`), where the company's leave lives.
  *
- * Buddy reads it as the buddy-bot service account, through a share or group membership.
- * It never writes: booking leave is the `leave` module's job, and only that module holds
- * the delegation needed for it. (`wholeteam@` is the address `leave` invites, not this one.)
+ * Deliberately tiny, because it is the only thing in `ooo` that talks to Google. There is no
+ * create, no delete, no patch — not "they are never called", they do not exist. Requests are
+ * built here, always GET, always events.list or calendars.get on the one configured calendar;
+ * nothing a user, a message or Claude says can change the URL, the method or the calendar.
+ *
+ * (`wholeteam@` is the address the `leave` module invites. This module never writes anywhere.)
  */
 
+const BASE = 'https://www.googleapis.com/calendar/v3/calendars';
 const OOO_TAG = /\(OOO\)/i;
 const SA_EMAIL = 'buddy-bot@your-gcp-project.iam.gserviceaccount.com';
+const MAX_RESULTS = '250';
+
+const fail = (message, cause) => Object.assign(new Error(message), { expose: true, cause });
 
 /** Google API failures become something a person can act on; the raw error is still logged. */
 function explain(error, calendarId) {
@@ -22,32 +29,54 @@ function explain(error, calendarId) {
   return error;
 }
 
-function createOooCalendar({ calendarApi, calendarId }) {
-  const guarded = fn => fn().catch(error => { throw explain(error, calendarId); });
+/**
+ * @param tokenFor    () => access token; the account acted as is decided in token.js, from settings
+ * @param calendarId  the one calendar this module may ever look at
+ * @param readAs      the configured mailbox, when reading by acting as it
+ */
+function createOooCalendar({ tokenFor, calendarId, readAs = null, fetch: doFetch = fetch }) {
+  if (!calendarId) throw new Error('ooo: calendarId is required');
+  // Acting as the account whose own calendar this is: "primary" is that same calendar, and
+  // avoids relying on it also being shared with itself by address.
+  const target = readAs && readAs === String(calendarId).toLowerCase() ? 'primary' : calendarId;
+  const path = encodeURIComponent(target);
 
-  return {
+  /** The only way out of this module. GET only, no caller-supplied options. */
+  async function get(suffix, params) {
+    const token = await tokenFor(readAs);
+    const query = params ? `?${new URLSearchParams(params)}` : '';
+    const res = await doFetch(`${BASE}/${path}${suffix}${query}`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw explain(Object.assign(new Error('calendar request failed'), { status: res.status }), calendarId);
+    return res.json();
+  }
+
+  return Object.freeze({
     calendarId,
+    readAs,
 
     /** Every `(OOO)` event overlapping the window, recurrences already expanded. */
-    list: ({ timeMin, timeMax }) => guarded(async () => {
-      const res = await calendarApi.events.list({
-        calendarId,
+    async list({ timeMin, timeMax }) {
+      if (!timeMin || !timeMax) throw fail('I need a date range to look at.');
+      const data = await get('/events', {
         timeMin,
         timeMax,
-        singleEvents: true,     // expand recurring events into real dates
+        singleEvents: 'true',
         orderBy: 'startTime',
-        maxResults: 250,
-        q: 'OOO',               // narrows server-side; the tag check below is what decides
+        maxResults: MAX_RESULTS,
+        q: 'OOO',
       });
-      return (res.data.items || []).filter(ev => OOO_TAG.test(ev.summary || ''));
-    }),
+      return (data.items || []).filter(ev => OOO_TAG.test(ev.summary || ''));
+    },
 
     /** For /ooo check: proves Buddy can actually open the calendar. */
-    describe: () => guarded(async () => {
-      const res = await calendarApi.calendars.get({ calendarId });
-      return { title: res.data.summary || calendarId, timeZone: res.data.timeZone };
-    }),
-  };
+    async describe() {
+      const data = await get('');
+      return { title: data.summary || calendarId, timeZone: data.timeZone };
+    },
+  });
 }
 
 module.exports = { createOooCalendar, explain, OOO_TAG, SA_EMAIL };
