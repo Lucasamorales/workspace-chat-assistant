@@ -52,6 +52,8 @@ Status: `todo` · `doing` · `done` · `blocked`
 
 | # | Item | Acceptance |
 |---|---|---|
+| D4 | ✅ `BUILDING-FOR-BUDDY.md`: rules for tools built outside the repo, so ports are wrapping rather than rewriting | Shared with Remy |
+| D5 | After Remy's next Apps Script project, revisit the rules with what actually still hurt | One round of feedback applied |
 | D1 | `SECURITY.md`: per-module access, assistant permission, Kudos (Sheet access, vote policy) | Controls table covers them |
 | D2 | RUNBOOK checklist: assistant permission (someone without it gets "here's what I can help with") | Checklist item |
 | D3 | ✅ Non-technical overview of what Buddy does, organised by module | Shared doc |

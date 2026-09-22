@@ -10,6 +10,12 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
 
 ## 2026-09-22
 
+### Docs
+- **`docs/BUILDING-FOR-BUDDY.md`.** Rules to paste into an AI assistant when building something
+  outside this repo (usually Apps Script) that we will later fold in as a module, plus a handover
+  checklist. Written from what the Kudos and leave ports actually cost: inlined keys, logic tangled
+  into the UI, over-wide deletes, duplicate writes, failures reported as success.
+
 ### Added
 - **`admin` module.** Admins give colleagues access to modules from a DM — "give riley@ access to
   Asana, until 30 November" — instead of editing `infra/config.env` and deploying. `/access` shows

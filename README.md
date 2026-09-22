@@ -162,7 +162,8 @@ modules/
   leave/               books and cancels out-of-office on people's own calendars
   admin/               grants module access from chat (config stays the floor)
 infra/                 setup, deploy and decommission scripts; config.env; Cloud Build
-docs/                  runbook, security model, backlog, decisions
+docs/                  runbook, security model, backlog, decisions,
+                       BUILDING-FOR-BUDDY.md (rules for tools built outside this repo)
 legacy/bot-rev23/     the original bot, kept read-only for reference
 ```
 
