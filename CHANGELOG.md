@@ -4,11 +4,18 @@ All notable changes to Buddy. Newest first. Dates are when the change was commit
 "deployed" notes say when it reached the live Chat app.
 
 Format: **Added** (new features) · **Changed** (existing behaviour or wording) ·
-**Fixed** (bugs) · **Security** · **Infrastructure** · **Docs**.
+**Fixed** (bugs) · **Security** · **Infrastructure** · **Docs** · **Deployed** (what reached the
+live Chat app, and what is still unverified against reality).
 
 ---
 
 ## 2026-09-22
+
+### Deployed
+- All nine modules are live: `basics`, `assistant`, `files`, `asana`, `kudos`, `ooo`, `leave`,
+  `admin` and `manual`. The manual's 40 documents are indexed and answerable.
+  Still unverified against reality: `manual` answers (M6), `leave` on a real calendar (RUNBOOK §5e),
+  a real access grant (G12). `kudos` still writes to the test Sheet, `files` is still pilot-only.
 
 ### Changed
 - **Module replies can be formatted.** Card text is escaped first — so a Drive title, an Asana

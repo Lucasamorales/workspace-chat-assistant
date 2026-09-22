@@ -1,12 +1,13 @@
 # Buddy
 
 Your company's assistant inside **Google Chat**. People talk to Buddy like a colleague: ask
-questions, send files, and work in **Asana** as themselves — with every change shown for
-approval before it happens.
+questions about the team member manual, send files, see who's out, record leave, give kudos, and
+work in **Asana** as themselves — with every change shown for approval before it happens.
 
-Buddy is a small core plus independent **modules**. Each module (assistant, files, Asana, Kudos,
-…) has its own code, data, settings, permissions and tests, so a change to one can't break
-another. OOO ("who's out") is next ([backlog](docs/BACKLOG.md)).
+Buddy is a small core plus independent **modules**: `assistant`, `basics`, `files`, `asana`,
+`kudos`, `ooo`, `leave`, `admin` and `manual`. Each has its own code, data, settings, permissions
+and tests, so a change to one can't break another, and any of them can be switched off without
+touching the rest. What is deployed and what is still unproven: [backlog](docs/BACKLOG.md).
 
 > **Status:** pilot, live as the Chat app **Buddy-Asana** for robin@ and remy@. Kudos is being
 > tested against a copy of the Kudos Sheet. The app will be renamed **Buddy** for the whole team
@@ -184,7 +185,7 @@ legacy/bot-rev23/     the original bot, kept read-only for reference
 | **ooo** | DMs + spaces | everyone @example.com | `OOO_CALENDAR_ID`, `OOO_READ_AS` | nothing (read-only) |
 | **leave** | DMs only | pilot: robin@, remy@; the accounts team at cutover (needs assistant) | `LEAVE_TEAM_EMAIL`, domain-wide delegation | each person's shift and display name in `m_leave__profiles` |
 | **admin** | DMs only | `BUDDY_ACCESS_ADMIN` — robin@, remy@ | — | grants in `core__grants` |
-| **manual** | DMs + spaces | everyone @example.com (needs assistant); `manual.admin` to reindex | `MANUAL_FOLDER_ID`, Vertex AI | index in `m_manual__index` |
+| **manual** | DMs + spaces | everyone @example.com (needs assistant); `manual.admin` to reindex | `MANUAL_FOLDER_ID`, Vertex AI, Drive folder shared with `buddy-bot` | index in `m_manual__index` |
 
 ### Permissions per module
 Two layers, both checked on every event:

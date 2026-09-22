@@ -8,6 +8,9 @@ Status: `todo` · `doing` · `done` · `blocked`
 
 ## Now: Buddy-Asana
 
+Everything below is deployed unless it says otherwise. What is *verified against reality* is a
+shorter list: see "Proven in use" at the bottom of this section.
+
 | # | Item | Status |
 |---|---|---|
 | A1 | Point the Chat app **Buddy-Asana** at `buddy-bot`; visibility robin@ + remy@ | done |
@@ -19,6 +22,18 @@ Status: `todo` · `doing` · `done` · `blocked`
 | A7 | `/asana tools` command listing free vs approval-gated actions | deployed |
 | A8 | Friendlier UX: Connect button on the first Asana request + "I've connected, continue"; Reconnect card when the connection stops working; welcome/help/status as button cards; disconnect asks first; Try again on errors and expired approvals; approval card copy with expiry time in the user's time zone; "Checking your Asana…" progress; 1 h connect links | deployed |
 | A9 | Test the files module properly (PDF, image, .xlsx, .csv, over the size limit, Drive attachment), then widen `BUDDY_ACCESS_FILES` from the pilot to `domain:example.com` | todo |
+
+### Proven in use
+
+| Module | Exercised for real? |
+|---|---|
+| basics, assistant, asana | ✅ used daily by the pilot |
+| ooo | ✅ answers checked against the live Apps Script bot |
+| manual | ✅ 40 documents indexed; **answers not yet checked** (M6) |
+| admin | ✅ deployed; a real grant not yet tried (G12) |
+| leave | ⚠️ permissions proven, **never used on a real calendar** (RUNBOOK §5e) |
+| kudos | ⚠️ still writing to the **test** Sheet in the test space (K13) |
+| files | ⚠️ pilot-only until tested (A9) |
 
 ## Later
 
@@ -185,8 +200,8 @@ Decision: `docs/decisions/0005-manual-rag.md`. Replaces the Internal-RAG widget.
 | M2 | ✅ `search_manual` read-only tool; Claude answers from the passages only, citing links | Tests |
 | M3 | ✅ `/manual`, `/manual reindex` (admin, incremental), `/manual check` | Tests |
 | M4 | ✅ PDFs and site-typed text named as gaps rather than silently missing | Tests |
-| M5 | Share the folder with `buddy-bot`; enable Vertex AI and grant `roles/aiplatform.user` | `/manual check` passes |
-| M6 | Compare answers with the live Internal-RAG widget on real questions | Answers at least as good |
+| M5 | ✅ Folder shared; Drive, Vertex AI and IAM Credentials APIs enabled; `buddy-bot` given `roles/aiplatform.user` and token-creator on itself | `/manual check` passes, 40 of 41 files indexable |
+| M6 | **Next:** ask five real questions and check the citations; compare three against the live Internal-RAG widget | Answers at least as good; the similarity floor tuned if needed |
 | M7 | Convert the manual's PDFs to Google Docs so they are indexed | `/manual check` lists nothing skipped |
 | M8 | Add an "Ask Buddy" link on the manual site, so people ask where they read | Link live |
 | M9 | Retire the Internal-RAG Cloud Run service, its Gemini key and GCS state bucket | ~£14/month saved |
