@@ -57,6 +57,7 @@ function createEventHandler(deps) {
   const {
     registry, chat, store, threads, usage, oauthFlows, claude,
     makeModuleContext, allowedUsers, log, defer, appName = 'Buddy', now = () => Date.now(),
+    grants = null,
   } = deps;
   const events = store.collection('core__events');
   const pendingCol = store.collection('core__pending');
@@ -67,7 +68,9 @@ function createEventHandler(deps) {
 
   function isAllowed(user) {
     if (!user || user.type === 'BOT') return false;
-    return allowed({ email: user.email, id: user.name });
+    // Config first; then anyone an admin granted a module to, who would otherwise be told
+    // Buddy is switched off for them and never reach the module they were given.
+    return allowed({ email: user.email, id: user.name }) || Boolean(grants && grants.mayTalk(user));
   }
 
   function baseOf(event) {
@@ -620,6 +623,9 @@ function createEventHandler(deps) {
 
   return async function handleEvent(event) {
     if (!event || !event.type || !event.space || !event.user) return {};
+    // One cached read, so a permission changed in chat takes effect in seconds, not at the
+    // next deploy. A failure here must never deny access that configuration already allows.
+    if (grants) await grants.refresh().catch(error => log.warn('could not refresh grants', { error }));
     if (!isAllowed(event.user)) {
       log.warn('user not on the allowlist', { user: event.user.name, type: event.type });
       return ['MESSAGE', 'ADDED_TO_SPACE'].includes(event.type) ? { text: `Sorry, ${appName} isn't switched on for you just yet.` } : {};

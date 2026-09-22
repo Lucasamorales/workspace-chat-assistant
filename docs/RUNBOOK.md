@@ -158,6 +158,18 @@ CONFIRM=yes bash infra/decommission-legacy.sh
 Deletes `legacy-chat-bot`, the ClickUp/old Asana/old state secrets, and removes the
 **Editor** role from the default compute service account.
 
+## 6b. Who can use what
+
+`/access` in a DM with Buddy is the answer, not `infra/config.env` alone: access is the union of
+the file and grants admins made from chat. The file still governs `admin`, `leave`, `assistant`,
+every role, and anyone listed there.
+
+- Give someone a module: tell Buddy, e.g. "give riley@example.com access to kudos",
+  and approve the card. Add "until 30 November" for temporary access.
+- Take it away: "remove riley's kudos access". If she still has it afterwards, it is in the file.
+- New starters also need the Chat app shared with them in the console (until visibility goes
+  company-wide at the merge).
+
 ## 7. Everyday operations
 
 | Task | How |

@@ -8,6 +8,21 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
 
 ---
 
+## 2026-09-22
+
+### Added
+- **`admin` module.** Admins give colleagues access to modules from a DM — "give riley@ access to
+  Asana, until 30 November" — instead of editing `infra/config.env` and deploying. `/access` shows
+  what has been granted, per module. Config stays the floor: grants only widen it, and revoking
+  only removes grants, so nothing said in chat can take away access the file allows. `admin`,
+  `leave` and `assistant` can never be granted (a constant in the source, and not even offered to
+  Claude), every change needs an approval click, only `@example.com` addresses are
+  accepted, roles are never granted, and each change is logged with who made it. Granting also
+  lets that person talk to Buddy, which the card says. Access is re-read once per event, so a
+  change takes effect in seconds rather than at the next deploy.
+
+---
+
 ## 2026-09-21
 
 ### Fixed

@@ -57,7 +57,7 @@ function tasksModule(executed, state) {
   };
 }
 
-function setup(claudeScript, { connected = true, reason, now } = {}) {
+function setup(claudeScript, { connected = true, reason, now, grants } = {}) {
   const store = core.createMemoryStore();
   const chat = fakeChat();
   const executed = [];
@@ -82,6 +82,7 @@ function setup(claudeScript, { connected = true, reason, now } = {}) {
     },
     makeModuleContext: core.createContextFactory({ store, sealer: core.createLocalSealer(), env: {}, log: quietLog }),
     defer: p => background.push(p),
+    ...(grants ? { grants } : {}),
     ...(now ? { now } : {}),
   });
   const settle = async () => { while (background.length) await background.shift(); };
@@ -114,6 +115,37 @@ test('people not on the allowlist get nothing', async () => {
   const res = await handle(message({ name: 'users/999', email: 'stranger@gmail.com', type: 'HUMAN' }, DM, 'hi'));
   assert.match(res.text, /isn't switched on/);
   assert.equal(chat.log.length, 0);
+});
+
+test('someone an admin granted a module can reach Buddy, without a deploy', async () => {
+  const grants = {
+    refreshed: 0,
+    refresh: async () => { grants.refreshed += 1; },
+    mayTalk: user => user.email === 'riley@example.com',
+    granted: () => false,
+  };
+  const { handle, chat } = setup([], { grants });
+  const riley = { name: 'users/777', email: 'riley@example.com', type: 'HUMAN' };
+
+  const res = await handle(message(riley, DM, '/help'));
+  assert.ok(!/isn't switched on/.test(res.text || ''), 'the grant let her in');
+  assert.equal(grants.refreshed, 1, 'grants are re-read once per event, so changes land in seconds');
+
+  // Still nothing for anyone who was neither configured nor granted.
+  const stranger = await handle(message({ name: 'users/999', email: 'stranger@gmail.com', type: 'HUMAN' }, DM, 'hi'));
+  assert.match(stranger.text, /isn't switched on/);
+  assert.equal(chat.log.length, 0);
+});
+
+test('a failure to read grants never closes the door on configured access', async () => {
+  const grants = {
+    refresh: async () => { throw new Error('firestore is having a moment'); },
+    mayTalk: () => false,
+    granted: () => false,
+  };
+  const { handle } = setup([], { grants });
+  const res = await handle(message(ROBIN, DM, '/help'));
+  assert.ok(!/isn't switched on/.test(res.text || ''), 'config access survives a grants outage');
 });
 
 test('a redelivered event is processed only once', async () => {

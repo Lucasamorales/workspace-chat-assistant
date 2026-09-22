@@ -34,15 +34,23 @@ const config = core.loadConfig({
 
 const log = core.createLogger('chat-gateway');
 
+const store = core.createFirestoreStore(new Firestore());
+// Access granted from chat by an admin. Config remains the floor: see packages/core/grants.js.
+const grants = core.createGrants({ store });
+
 const modules = config.BUDDY_MODULES.map(name => {
   if (!/^[a-z][a-z0-9]*$/.test(name)) throw new Error(`invalid module name "${name}"`);
-  return require(`@buddy/module-${name}`);
+  const pkg = require(`@buddy/module-${name}`);
+  // The admin module is the one module that needs the shared grants store, so it is built here
+  // rather than exporting a ready-made object.
+  return typeof pkg.createAdminModule === 'function'
+    ? pkg.createAdminModule({ grants, moduleNames: config.BUDDY_MODULES })
+    : pkg;
 });
 // Fails startup if any enabled module lacks BUDDY_ACCESS_<MODULE> or a declared role rule.
-const access = core.createAccessPolicy({ modules });
+const access = core.createAccessPolicy({ modules, grants });
 const registry = core.createRegistry({ modules, log, access });
 
-const store = core.createFirestoreStore(new Firestore());
 const sealer = core.createKmsSealer({ kmsClient: new KeyManagementServiceClient(), keyName: config.KMS_KEY_NAME });
 const chat = core.createChatClient({
   api: chatApi({ version: 'v1', auth: new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/chat.bot'] }) }),
@@ -57,6 +65,7 @@ const handleEvent = createEventHandler({
   store,
   log,
   allowedUsers: config.BUDDY_ALLOWED_USERS,
+  grants,
   appName: config.BUDDY_APP_NAME,
   threads: core.createThreads({ store, maxMessages: config.MAX_HISTORY_MESSAGES, ttlDays: config.THREAD_TTL_DAYS }),
   usage: core.createUsage({

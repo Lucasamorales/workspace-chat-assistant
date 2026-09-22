@@ -31,7 +31,11 @@ function parseRule(raw, label) {
   };
 }
 
-function createAccessPolicy({ modules, env = process.env }) {
+/**
+ * @param opts.grants  optional store of access granted from chat (see grants.js). Grants only
+ *   ever widen what the config rules allow: nothing granted in chat can remove configured access.
+ */
+function createAccessPolicy({ modules, env = process.env, grants = null }) {
   const problems = [];
   const moduleRules = new Map();
   const roleRules = new Map();
@@ -50,11 +54,21 @@ function createAccessPolicy({ modules, env = process.env }) {
   }
   if (problems.length) throw new Error(`Invalid access configuration:\n  - ${problems.join('\n  - ')}`);
 
+  const byConfig = (moduleName, user) => Boolean(moduleRules.get(moduleName) && moduleRules.get(moduleName)(user));
+
   return {
-    canUse: (moduleName, user) => Boolean(moduleRules.get(moduleName) && moduleRules.get(moduleName)(user)),
-    // A role never grants more than module access: both must match.
+    canUse: (moduleName, user) => byConfig(moduleName, user) || Boolean(grants && grants.granted(moduleName, user)),
+    /** Where a permission came from, for /access and for messages that explain a refusal. */
+    sourceOf: (moduleName, user) => {
+      if (byConfig(moduleName, user)) return 'config';
+      return grants && grants.granted(moduleName, user) ? 'granted' : null;
+    },
+    /**
+     * A role never grants more than module access: both must match. Roles are configuration
+     * only — chat can widen who may *use* a module, never who holds a role inside it.
+     */
     hasRole: (moduleName, role, user) => Boolean(
-      moduleRules.get(moduleName) && moduleRules.get(moduleName)(user)
+      byConfig(moduleName, user)
       && roleRules.get(`${moduleName}:${role}`) && roleRules.get(`${moduleName}:${role}`)(user),
     ),
   };

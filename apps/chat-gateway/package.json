@@ -20,6 +20,7 @@
     "@buddy/module-kudos": "*",
     "@buddy/module-assistant": "*",
     "@buddy/module-ooo": "*",
-    "@buddy/module-leave": "*"
+    "@buddy/module-leave": "*",
+    "@buddy/module-admin": "*"
   }
 }

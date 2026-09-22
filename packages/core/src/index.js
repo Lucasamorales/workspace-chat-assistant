@@ -9,6 +9,7 @@ module.exports = {
   ...require('./module-contract'),
   ...require('./registry'),
   ...require('./access'),
+  ...require('./grants'),
   ...require('./agent-loop'),
   ...require('./usage'),
   ...require('./threads'),
