@@ -10,6 +10,13 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
 
 ## 2026-09-21
 
+### Fixed
+- **`/ooo check` failed on something the module never uses.** It began by fetching the calendar's
+  name and time zone, which needs the `calendar.readonly` scope, while the delegation grants
+  `calendar.events` — so Google returned 403 and the check reported "no access" although reading
+  events worked. The check now proves what the module actually does (reading events); calendar
+  details are a bonus that can never fail it. Failures also quote Google's own message.
+
 ### Changed
 - **`ooo` reads by acting as one fixed account.** Workspace only allows outside addresses
   free/busy on a calendar, which has no names, so sharing could not work. `ooo` now reads

@@ -203,14 +203,38 @@ test('no access explains what to fix instead of showing a raw error', async () =
 test('the check command reports what Buddy can and cannot reach', async () => {
   const { mod, ctx } = setup([allDay('Robin (OOO)', '2026-09-23', '2026-09-24')]);
   const reply = await mod.commands.ooo.run(ctx, 'check');
-  assert.match(reply.text, /✅ Calendar reachable: "Accounts"/);
-  assert.match(reply.text, /✅ I can read events: 1 OOO entry this week/);
+  assert.match(reply.text, /✅ I can read the calendar: 1 OOO entry this week/);
+  assert.match(reply.text, /✅ Calendar: "Accounts"/);
 
   const broken = createOooModule({
-    calendar: { calendarId: 'accounts@example.com', describe: async () => { throw Object.assign(new Error("Oh no, I couldn't find the calendar accounts@example.com. Check OOO_CALENDAR_ID."), { expose: true }); } },
+    calendar: {
+      calendarId: 'accounts@example.com',
+      list: async () => { throw Object.assign(new Error("Oh no, I couldn't find the calendar accounts@example.com. Check OOO_CALENDAR_ID."), { expose: true, detail: 'Not Found' }); },
+    },
     now: () => NOW,
   });
-  assert.match((await broken.commands.ooo.run(ctx, 'check')).text, /❌ .*couldn't find the calendar/);
+  const failed = await broken.commands.ooo.run(ctx, 'check');
+  assert.match(failed.text, /❌ .*couldn't find the calendar/);
+  assert.match(failed.text, /Google said: Not Found/, 'the real reason is shown, not guessed at');
+});
+
+test('the check passes on events alone: calendar details need a wider scope than we ask for', async () => {
+  // This is the bug that made /ooo check fail while the module itself was fine: calendars.get
+  // needs calendar.readonly, but the delegation grants calendar.events.
+  const { mod, ctx } = setup([allDay('Robin (OOO)', '2026-09-23', '2026-09-24')]);
+  const noMetadata = createOooModule({
+    calendar: {
+      calendarId: 'accounts@example.com',
+      readAs: 'accounts@example.com',
+      list: async () => [allDay('Robin (OOO)', '2026-09-23', '2026-09-24')],
+      describe: async () => { throw Object.assign(new Error('insufficient scopes'), { status: 403 }); },
+    },
+    now: () => NOW,
+  });
+  const reply = await noMetadata.commands.ooo.run(ctx, 'check');
+  assert.match(reply.text, /✅ I can read the calendar/);
+  assert.ok(!reply.text.includes('❌'), 'metadata we do not need must never fail the check');
+  assert.equal(mod.name, 'ooo');
 });
 
 test('the tool is read-only and never asks for approval', async () => {

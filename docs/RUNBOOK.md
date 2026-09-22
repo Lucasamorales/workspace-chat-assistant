@@ -114,7 +114,8 @@ Checklist (in the test space unless noted):
 ## 5d. OOO check (after the calendar is shared)
 
 1. Add `ooo` to `MODULES` in `infra/config.env`, commit, deploy.
-2. `/ooo check` in a DM → "✅ Calendar reachable" and "✅ I can read events".
+2. `/ooo check` in a DM → "✅ I can read the calendar: N OOO entries this week".
+   A failure quotes Google's own message under "Google said:".
 
 - [ ] `/ooo` → who's out today; `/ooo week` → Monday to Sunday
 - [ ] Someone on a half-day shows hours in ARG; someone on multi-day leave shows the real last day

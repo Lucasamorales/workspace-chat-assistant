@@ -17,12 +17,15 @@ const MAX_RESULTS = '250';
 const fail = (message, cause) => Object.assign(new Error(message), { expose: true, cause });
 
 /** Google API failures become something a person can act on; the raw error is still logged. */
-function explain(error, calendarId) {
+function explain(error, calendarId, readAs = null) {
   const status = Number(error.status || error.code || (error.response && error.response.status));
-  const wrap = message => Object.assign(new Error(message), { expose: true, cause: error });
+  const wrap = message => Object.assign(new Error(message), { expose: true, cause: error, detail: error.detail });
   if (status === 401 || status === 403) {
-    return wrap(`Oh no, I can't read the team calendar: ${SA_EMAIL} doesn't have access to ${calendarId}. `
-      + 'Add it as a member of the group (or share the calendar with it) and I\'ll be able to see who\'s out.');
+    return wrap(readAs
+      ? `Oh no, I can't read ${calendarId} while acting as ${readAs}. Either that account can't see the `
+        + 'calendar, or the delegation is missing the calendar scope.'
+      : `Oh no, I can't read the team calendar: ${SA_EMAIL} doesn't have access to ${calendarId}. `
+        + 'Add it as a member of the group (or share the calendar with it) and I\'ll be able to see who\'s out.');
   }
   if (status === 404) return wrap(`Oh no, I couldn't find the calendar ${calendarId}. Check OOO_CALENDAR_ID.`);
   if (status === 429 || status >= 500) return wrap('Oh no, Google Calendar is a bit busy right now. Give it a minute and try again?');
@@ -49,7 +52,13 @@ function createOooCalendar({ tokenFor, calendarId, readAs = null, fetch: doFetch
       method: 'GET',
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) throw explain(Object.assign(new Error('calendar request failed'), { status: res.status }), calendarId);
+    if (!res.ok) {
+      // Google's own wording is worth keeping: "insufficient scopes" and "not found" look
+      // identical from the status alone, and guessing between them wasted a deploy once.
+      const body = await res.json().catch(() => null);
+      const detail = body && body.error && (body.error.message || body.error.status);
+      throw explain(Object.assign(new Error('calendar request failed'), { status: res.status, detail }), calendarId, readAs);
+    }
     return res.json();
   }
 

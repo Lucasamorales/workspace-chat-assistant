@@ -62,13 +62,17 @@ function createOooModule({ calendar, tokenFor, now = () => new Date() } = {}) {
     const cal = calendarFor(ctx);
     const lines = [];
     try {
-      const info = await cal.describe();
-      lines.push(`✅ Calendar reachable: "${info.title}" (time zone ${info.timeZone})`);
+      // Reading events is all this module ever does, so that is what the check proves.
+      // Calendar *metadata* needs a wider scope than the delegation grants, so it is only
+      // a nice-to-have: never let it decide whether the check passes.
       const { entries, label } = await lookup(ctx, 'week');
-      lines.push(`✅ I can read events: ${entries.length} OOO entr${entries.length === 1 ? 'y' : 'ies'} ${label}.`);
+      lines.push(`✅ I can read the calendar: ${entries.length} OOO entr${entries.length === 1 ? 'y' : 'ies'} ${label}.`);
+      const info = await cal.describe().catch(() => null);
+      if (info) lines.push(`✅ Calendar: "${info.title}" (time zone ${info.timeZone})`);
     } catch (error) {
-      ctx.log.warn('ooo calendar check failed', { error });
+      ctx.log.warn('ooo calendar check failed', { error, detail: error.detail });
       lines.push(error.expose ? `❌ ${error.message}` : '❌ I can\'t read the OOO calendar.');
+      if (error.detail) lines.push(`Google said: ${error.detail}`);
     }
     lines.push(`Calendar: ${cal.calendarId} · read${cal.readAs ? ` as ${cal.readAs}` : ' with Buddy\'s own access'} · shown in ${zone(ctx).timeZone}`);
     return { title: 'OOO setup check', text: lines.join('\n') };
