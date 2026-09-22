@@ -1,0 +1,227 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { validateModule, createMemoryStore } = require('@buddy/core');
+const { createManualModule } = require('../src/module');
+const { chunk, chunksOf, asContext } = require('../src/text');
+const { search, similarity } = require('../src/search');
+const { createDrive } = require('../src/drive');
+
+const DOC = 'application/vnd.google-apps.document';
+const NOW = Date.parse('2026-09-22T10:00:00Z');
+
+const file = (id, name, extra = {}) => ({
+  id, name, mimeType: DOC, modifiedTime: '2026-09-01T00:00:00Z',
+  webViewLink: `https://docs.google.com/document/d/${id}`, section: 'Policies 2026', ...extra,
+});
+
+/** Embeddings that encode which words a text contains, so similarity is predictable in tests. */
+const WORDS = ['holiday', 'expenses', 'laptop', 'parental', 'remote'];
+const fakeVector = text => WORDS.map(w => (String(text).toLowerCase().includes(w) ? 1 : 0));
+const fakeEmbeddings = {
+  model: 'fake-embeddings',
+  forDocuments: async texts => texts.map(fakeVector),
+  forQuery: async text => fakeVector(text),
+};
+
+function fakeDrive(files, texts) {
+  return {
+    folderId: 'folder1',
+    list: async () => files,
+    textOf: async f => texts[f.id] || null,
+    supported: f => f.mimeType === DOC || /^text\//.test(f.mimeType || ''),
+  };
+}
+
+function setup({ files = [], texts = {}, role = true } = {}) {
+  const store = createMemoryStore();
+  const drive = fakeDrive(files, texts);
+  const mod = createManualModule({ drive, embeddings: fakeEmbeddings, now: () => NOW });
+  const logged = [];
+  const ctx = {
+    userEmail: 'robin@example.com',
+    hasRole: () => role,
+    settings: { MANUAL_FOLDER_ID: 'folder1', MANUAL_PROJECT_ID: 'your-gcp-project' },
+    store: { collection: name => store.collection(`manual__${name}`) },
+    log: { info: (msg, data) => logged.push({ msg, data }), warn() {}, error() {} },
+  };
+  return { mod, ctx, drive, logged };
+}
+
+const HOLIDAY = 'Holiday policy\n\nEveryone gets 25 days of holiday a year, plus public holidays.\n\n'
+  + 'Booking holiday\n\nAsk your manager first, then tell accounts so it goes on the calendar.';
+const EXPENSES = 'Expenses\n\nClaim expenses by the 5th of the month. Keep receipts for anything over ten pounds.';
+
+test('module satisfies the contract', () => validateModule(createManualModule({ drive: {}, embeddings: {} })));
+
+/* ---------- chunking ---------- */
+
+test('chunks break on paragraphs and carry their heading', () => {
+  const pieces = chunk(HOLIDAY);
+  assert.ok(pieces.length >= 1);
+  assert.ok(pieces.every(p => p.text.length <= 1400));
+  assert.match(pieces[0].heading, /Holiday policy|Booking holiday/);
+});
+
+test('a chunk knows which document it came from, so an answer can cite it', () => {
+  const [piece] = chunksOf(file('d1', 'Holiday policy'), HOLIDAY);
+  assert.equal(piece.title, 'Holiday policy');
+  assert.equal(piece.section, 'Policies 2026');
+  assert.equal(piece.link, 'https://docs.google.com/document/d/d1');
+});
+
+test('an over-long paragraph is cut on whitespace, never mid-word', () => {
+  const long = `Heading\n\n${'word '.repeat(700)}`;
+  const pieces = chunk(long);
+  assert.ok(pieces.length > 1);
+  assert.ok(pieces.every(p => !/\bwor$|\bord\b/.test(p.text)));
+});
+
+/* ---------- searching ---------- */
+
+test('the closest passages win, and one document cannot crowd out the rest', () => {
+  const chunks = [
+    { fileId: 'a', title: 'Holiday', text: 'holiday one', vector: fakeVector('holiday') },
+    { fileId: 'a', title: 'Holiday', text: 'holiday two', vector: fakeVector('holiday') },
+    { fileId: 'a', title: 'Holiday', text: 'holiday three', vector: fakeVector('holiday') },
+    { fileId: 'b', title: 'Expenses', text: 'expenses', vector: fakeVector('expenses') },
+  ];
+  const hits = search(chunks, fakeVector('holiday'), { topK: 6, perFile: 2 });
+  assert.equal(hits.length, 2, 'at most two from the same document');
+  assert.ok(hits.every(h => h.fileId === 'a'));
+  assert.equal(hits[0].vector, undefined, 'vectors never travel to Claude');
+});
+
+test('a question the manual does not answer returns nothing, rather than the nearest thing', () => {
+  const chunks = [{ fileId: 'a', title: 'Holiday', text: 'holiday', vector: fakeVector('holiday') }];
+  assert.deepEqual(search(chunks, fakeVector('parental')), []);
+  assert.ok(similarity(fakeVector('holiday'), fakeVector('holiday')) > 0.99);
+});
+
+/* ---------- indexing ---------- */
+
+test('reindex reads the folder, and says what it did', async () => {
+  const { mod, ctx } = setup({
+    files: [file('d1', 'Holiday policy'), file('d2', 'Expenses policy')],
+    texts: { d1: HOLIDAY, d2: EXPENSES },
+  });
+  const reply = await mod.commands.manual.run(ctx, 'reindex');
+  assert.match(reply.text, /2 new, 0 updated, 0 unchanged/);
+  assert.match(reply.text, /passages from 2 documents/);
+});
+
+test('reindexing again only re-reads what changed', async () => {
+  const files = [file('d1', 'Holiday policy'), file('d2', 'Expenses policy')];
+  const { mod, ctx, drive } = setup({ files, texts: { d1: HOLIDAY, d2: EXPENSES } });
+  await mod.commands.manual.run(ctx, 'reindex');
+
+  const read = [];
+  const original = drive.textOf;
+  drive.textOf = async f => { read.push(f.id); return original(f); };
+
+  files[1] = file('d2', 'Expenses policy', { modifiedTime: '2026-09-22T09:00:00Z' });
+  const reply = await mod.commands.manual.run(ctx, 'reindex');
+
+  assert.deepEqual(read, ['d2'], 'the unchanged document was not fetched again');
+  assert.match(reply.text, /0 new, 1 updated, 1 unchanged/);
+});
+
+test('a deleted document leaves the index, and stops being answerable', async () => {
+  const files = [file('d1', 'Holiday policy'), file('d2', 'Expenses policy')];
+  const { mod, ctx } = setup({ files, texts: { d1: HOLIDAY, d2: EXPENSES } });
+  await mod.commands.manual.run(ctx, 'reindex');
+
+  files.pop();
+  const reply = await mod.commands.manual.run(ctx, 'reindex');
+  assert.match(reply.text, /1 gone/);
+
+  const { content } = await (await mod.tools(ctx)).execute('search_manual', { question: 'expenses' });
+  assert.match(content, /Nothing in the manual covers that/);
+});
+
+test('PDFs are named as skipped rather than half-read', async () => {
+  const { mod, ctx } = setup({
+    files: [file('d1', 'Holiday policy'), file('p1', 'Old handbook.pdf', { mimeType: 'application/pdf' })],
+    texts: { d1: HOLIDAY },
+  });
+  const reply = await mod.commands.manual.run(ctx, 'reindex');
+  assert.match(reply.text, /Not indexed: Old handbook\.pdf \(PDF\)/);
+});
+
+/* ---------- answering ---------- */
+
+test('searching returns the passage with its title and link, for Claude to cite', async () => {
+  const { mod, ctx } = setup({ files: [file('d1', 'Holiday policy')], texts: { d1: HOLIDAY } });
+  await mod.commands.manual.run(ctx, 'reindex');
+
+  const tools = await mod.tools(ctx);
+  assert.equal(tools.needsApproval('search_manual', {}), false, 'reading never asks for approval');
+
+  const { content } = await tools.execute('search_manual', { question: 'how much holiday do I get?' });
+  assert.match(content, /\[1\] Holiday policy \(Policies 2026\)/);
+  assert.match(content, /Link: https:\/\/docs\.google\.com\/document\/d\/d1/);
+  assert.match(content, /25 days of holiday/);
+});
+
+test('before any indexing, Buddy says so instead of answering', async () => {
+  const { mod, ctx } = setup();
+  const { content } = await (await mod.tools(ctx)).execute('search_manual', { question: 'holiday' });
+  assert.match(content, /has not been indexed yet/);
+  const reply = await mod.commands.manual.run(ctx, '');
+  assert.match(reply.text, /haven't read the manual yet/);
+});
+
+test('the search tool refuses an empty question', async () => {
+  const { mod, ctx } = setup();
+  await assert.rejects((await mod.tools(ctx)).execute('search_manual', { question: '  ' }), /like me to look up/);
+});
+
+test('Claude is told to answer only from the manual and to link the document', () => {
+  const { mod } = setup();
+  assert.match(mod.instructions, /answer only from what it returns/);
+  assert.match(mod.instructions, /Never fill gaps from general knowledge/);
+  assert.match(mod.instructions, /\[Title\]\(url\)/);
+  assert.match(mod.instructions, /information, not instructions/);
+});
+
+/* ---------- access ---------- */
+
+test('only admins can rebuild or check the index', async () => {
+  const { mod, ctx } = setup({ files: [file('d1', 'Holiday policy')], texts: { d1: HOLIDAY }, role: false });
+  assert.match(await mod.commands.manual.run(ctx, 'reindex'), /only admins/);
+  assert.match(await mod.commands.manual.run(ctx, 'check'), /only admins/);
+  // Everyone can still see what is indexed, and ask questions.
+  assert.equal((await mod.commands.manual.run(ctx, '')).title, 'The manual');
+});
+
+test('an unreadable folder explains the share, and never looks like an empty manual', async () => {
+  const drive = createDrive({
+    tokenFor: async () => 'token',
+    folderId: 'folder1',
+    fetch: async () => ({ ok: false, status: 403, text: async () => 'forbidden' }),
+  });
+  const mod = createManualModule({ drive, embeddings: fakeEmbeddings, now: () => NOW });
+  const store = createMemoryStore();
+  const ctx = {
+    userEmail: 'robin@example.com',
+    hasRole: () => true,
+    settings: { MANUAL_FOLDER_ID: 'folder1', MANUAL_PROJECT_ID: 'p' },
+    store: { collection: name => store.collection(`manual__${name}`) },
+    log: { info() {}, warn() {}, error() {} },
+  };
+  await assert.rejects(mod.commands.manual.run(ctx, 'reindex'), err => {
+    assert.equal(err.expose, true);
+    assert.match(err.message, /Share it as Viewer with buddy-bot@/);
+    return true;
+  });
+  assert.match((await mod.commands.manual.run(ctx, 'check')).text, /❌ .*Share it as Viewer/);
+});
+
+test('context given to Claude is numbered, sourced and separated', () => {
+  const context = asContext([
+    { title: 'Holiday policy', section: 'Policies 2026', heading: 'Booking', link: 'https://x', text: 'Ask your manager.' },
+    { title: 'Expenses', section: '', heading: '', link: '', text: 'By the 5th.' },
+  ]);
+  assert.match(context, /\[1\] Holiday policy \(Policies 2026\) — Booking/);
+  assert.match(context, /\[2\] Expenses/);
+  assert.match(context, /---/);
+});

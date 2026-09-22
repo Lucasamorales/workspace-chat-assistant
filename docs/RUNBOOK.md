@@ -140,6 +140,24 @@ Checklist (in the test space unless noted):
 - [ ] Ask Buddy to book leave for someone else → refused (unless you hold `leave.admin`)
 - [ ] Remy (no `leave.admin`) tries the same → refused
 
+## 5g. Manual check
+
+One-time: share the manual's Drive folder as **Viewer** with
+`buddy-bot@your-gcp-project.iam.gserviceaccount.com`, then:
+
+```bash
+gcloud services enable aiplatform.googleapis.com --project=your-gcp-project
+gcloud projects add-iam-policy-binding your-gcp-project --member="serviceAccount:buddy-bot@your-gcp-project.iam.gserviceaccount.com" --role="roles/aiplatform.user"
+```
+
+- [ ] `/manual check` → "✅ I can read the folder: N files"; note anything it can't index
+- [ ] `/manual reindex` → counts of new/updated/unchanged, and the passage total
+- [ ] "How many holidays do I get?" → answer matches the policy document, with its link
+- [ ] Ask something the manual doesn't cover → Buddy says so instead of inventing a policy
+- [ ] Change a line in a policy doc → `/manual reindex` → "1 updated", and the new answer is used
+- [ ] A non-admin gets "only admins" for reindex, but can still ask questions
+- [ ] Compare three answers against the old Internal-RAG widget before retiring it
+
 ## 5f. Admin module check
 
 - [ ] `/access` in a DM → granted list, and "Not changeable from chat: admin, leave, assistant"

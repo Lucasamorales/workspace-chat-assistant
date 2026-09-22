@@ -10,6 +10,17 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
 
 ## 2026-09-22
 
+### Added
+- **`manual` module — the team member manual, answerable in chat.** Buddy reads the manual's Drive
+  folder, indexes it (Docs, Slides and Sheets; PDFs are named as skipped), and answers questions
+  from those documents only, in its own voice, citing each one with a link. Retrieval is its own:
+  Vertex AI embeddings as `buddy-bot` with no API key, chunks in Firestore, cosine search in
+  memory, at most two passages per document and a similarity floor so a weak match returns nothing
+  rather than a confident wrong quote. `/manual` shows what has been read, `/manual reindex`
+  (admins) re-reads only what changed after a policy update, `/manual check` proves Drive access.
+  Open to the whole domain. Replaces the Internal-RAG widget and Chrome extension; decision record
+  `0005-manual-rag.md`.
+
 ### Docs
 - **`docs/BUILDING-FOR-BUDDY.md`.** Rules to paste into an AI assistant when building something
   outside this repo (usually Apps Script) that we will later fold in as a module, plus a handover

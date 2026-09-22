@@ -11,6 +11,7 @@ COPY modules/assistant/package.json modules/assistant/
 COPY modules/ooo/package.json modules/ooo/
 COPY modules/leave/package.json modules/leave/
 COPY modules/admin/package.json modules/admin/
+COPY modules/manual/package.json modules/manual/
 COPY apps/chat-gateway/package.json apps/chat-gateway/
 COPY apps/oauth-gateway/package.json apps/oauth-gateway/
 RUN npm ci --omit=dev --no-audit --no-fund

@@ -175,6 +175,24 @@ Separate module from Epic 3 so the delegation is fenced to this code alone.
 | L11 | ✅ Parity with the Sheet dialog: book for a colleague using **their** name and shift, remembered per person; optional skip of the team invite | Tests |
 | L12 | At cutover: swap `BUDDY_ACCESS_LEAVE` and `BUDDY_ROLE_LEAVE_ADMIN` to the accounts team | Accounts can book; nobody outside it can book for others |
 
+## Epic 7: `manual` module (team member manual)
+
+Decision: `docs/decisions/0005-manual-rag.md`. Replaces the Internal-RAG widget.
+
+| # | Item | Acceptance |
+|---|---|---|
+| M1 | ✅ Drive folder → text → chunks → Vertex AI embeddings → Firestore index | Tests |
+| M2 | ✅ `search_manual` read-only tool; Claude answers from the passages only, citing links | Tests |
+| M3 | ✅ `/manual`, `/manual reindex` (admin, incremental), `/manual check` | Tests |
+| M4 | ✅ PDFs and site-typed text named as gaps rather than silently missing | Tests |
+| M5 | Share the folder with `buddy-bot`; enable Vertex AI and grant `roles/aiplatform.user` | `/manual check` passes |
+| M6 | Compare answers with the live Internal-RAG widget on real questions | Answers at least as good |
+| M7 | Convert the manual's PDFs to Google Docs so they are indexed | `/manual check` lists nothing skipped |
+| M8 | Add an "Ask Buddy" link on the manual site, so people ask where they read | Link live |
+| M9 | Retire the Internal-RAG Cloud Run service, its Gemini key and GCS state bucket | ~£14/month saved |
+| M10 | *Later:* nightly reindex instead of a command | Scheduled job |
+| M11 | *Later:* PDFs and images answered multimodally; beyond the manual into wider Drive | Decision first |
+
 ## Epic 6: `admin` module (grant module access from chat)
 
 Decision: `docs/decisions/0004-admin-module.md`. Config stays the floor; grants only widen.
