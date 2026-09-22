@@ -20,6 +20,7 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
   accepted, roles are never granted, and each change is logged with who made it. Granting also
   lets that person talk to Buddy, which the card says. Access is re-read once per event, so a
   change takes effect in seconds rather than at the next deploy.
+- Remy is an admin as well as Robin (`BUDDY_ACCESS_ADMIN`).
 
 ---
 
