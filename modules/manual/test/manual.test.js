@@ -28,7 +28,8 @@ function fakeDrive(files, texts) {
   return {
     folderId: 'folder1',
     list: async () => files,
-    textOf: async f => texts[f.id] || null,
+    // Like the real one: without knowing the file's type there is no way to export it.
+    textOf: async f => (f.mimeType === DOC || /^text\//.test(f.mimeType || '') ? texts[f.id] || null : null),
     supported: f => f.mimeType === DOC || /^text\//.test(f.mimeType || ''),
   };
 }

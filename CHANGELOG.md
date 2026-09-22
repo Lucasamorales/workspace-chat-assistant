@@ -11,6 +11,11 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
 ## 2026-09-22
 
 ### Fixed
+- **Every document indexed as "empty".** Making the reindex resumable dropped each file's type
+  from the saved queue, and without it there is no way to export a Doc — so Drive returned nothing
+  and all 40 policies were recorded as empty. The tests missed it because the fake Drive looked
+  text up by file id, ignoring the type; it now behaves like the real one, and removing the fix
+  fails six tests.
 - **`/manual reindex` timed out on a real manual.** A Chat command has twenty seconds; forty
   documents take minutes, so the first real run failed with a generic error. Indexing now runs in
   slices — about twelve seconds each — saving progress and offering a **Continue** button, with

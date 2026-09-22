@@ -60,7 +60,15 @@ function createManualModule({ drive, embeddings, tokens: injected, now = () => D
         continue;
       }
       const before = known[file.id];
-      const entry = { name: file.name, section: file.section, modifiedTime: file.modifiedTime, link: file.webViewLink };
+      // mimeType travels with the queue: a resumed run has only what was saved here, and
+      // exporting a document is impossible without knowing what kind of document it is.
+      const entry = {
+        name: file.name,
+        section: file.section,
+        modifiedTime: file.modifiedTime,
+        link: file.webViewLink,
+        mimeType: file.mimeType,
+      };
       if (before && before.modifiedTime === file.modifiedTime && before.parts) {
         files[file.id] = { ...entry, parts: before.parts, chunks: before.chunks || 0 };
       } else {
