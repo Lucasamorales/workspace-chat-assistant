@@ -11,6 +11,11 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
 ## 2026-09-22
 
 ### Fixed
+- **`/manual reindex` timed out on a real manual.** A Chat command has twenty seconds; forty
+  documents take minutes, so the first real run failed with a generic error. Indexing now runs in
+  slices — about twelve seconds each — saving progress and offering a **Continue** button, with
+  chunks stored per document rather than in one block. The live index only changes when a run
+  finishes, so questions keep being answered from the previous version while a new one is built.
 - **The manual module couldn't read Drive.** On Cloud Run a service account's token is scoped to
   `cloud-platform`, which the Drive API refuses — and a 403 was being reported as "share the folder
   with me", which was misleading since the folder *was* shared. Buddy now mints itself a

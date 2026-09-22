@@ -43,55 +43,105 @@ function createManualModule({ drive, embeddings, tokens: injected, now = () => D
   const indexFor = ctx => createIndexStore({ store: ctx.store, now });
 
   /**
-   * Rebuilds the index. Files whose modified time has not changed keep the chunks and vectors
-   * they already had, so a policy update costs one document's worth of embedding, not the manual's.
+   * Plans the work: which documents are new, changed, unchanged or gone.
+   * Unchanged documents keep the chunks and vectors they already have, so a policy update
+   * costs one document's worth of embedding rather than the whole manual's.
    */
-  async function reindex(ctx) {
+  async function plan(ctx) {
     const source = driveFor(ctx);
-    const index = indexFor(ctx);
-    const previous = await index.meta();
-    const known = previous.files || {};
-    const existing = await index.load();
-    const byFile = existing.reduce((acc, chunk) => {
-      (acc[chunk.fileId] = acc[chunk.fileId] || []).push(chunk);
-      return acc;
-    }, {});
-
-    const files = await source.list();
+    const known = (await indexFor(ctx).meta()).files || {};
     const skipped = [];
-    const chunks = [];
-    const counts = { added: 0, updated: 0, unchanged: 0, removed: 0 };
-    const nextFiles = {};
+    const files = {};
+    const queue = [];
 
-    for (const file of files) {
+    for (const file of await source.list()) {
       if (!source.supported(file)) {
-        skipped.push({ name: file.name, section: file.section, reason: file.mimeType.includes('pdf') ? 'PDF' : 'unsupported type' });
+        skipped.push({ name: file.name, section: file.section, reason: /pdf/i.test(file.mimeType) ? 'PDF' : 'unsupported type' });
         continue;
       }
-      nextFiles[file.id] = { name: file.name, section: file.section, modifiedTime: file.modifiedTime, link: file.webViewLink };
-
       const before = known[file.id];
-      if (before && before.modifiedTime === file.modifiedTime && byFile[file.id]) {
-        chunks.push(...byFile[file.id]);
-        counts.unchanged += 1;
-        continue;
+      const entry = { name: file.name, section: file.section, modifiedTime: file.modifiedTime, link: file.webViewLink };
+      if (before && before.modifiedTime === file.modifiedTime && before.parts) {
+        files[file.id] = { ...entry, parts: before.parts, chunks: before.chunks || 0 };
+      } else {
+        files[file.id] = { ...entry, parts: 0, chunks: 0, was: before ? before.parts : 0 };
+        queue.push({ id: file.id, ...entry, new: !before });
       }
-
-      const text = await source.textOf(file);
-      const pieces = text ? chunksOf(file, text) : [];
-      if (!pieces.length) {
-        skipped.push({ name: file.name, section: file.section, reason: 'empty' });
-        continue;
-      }
-      const vectors = await embeddingsFor(ctx).forDocuments(pieces.map(p => p.text));
-      pieces.forEach((piece, i) => chunks.push({ ...piece, vector: vectors[i] }));
-      counts[before ? 'updated' : 'added'] += 1;
     }
 
-    counts.removed = Object.keys(known).filter(id => !nextFiles[id]).length;
-    const meta = await index.replace({ chunks, files: nextFiles, skipped, model: embeddingsFor(ctx).model });
-    ctx.log.info('manual reindexed', { by: ctx.userEmail, ...counts, chunks: chunks.length, skipped: skipped.length });
-    return { counts, meta, skipped };
+    const gone = Object.entries(known)
+      .filter(([id]) => !files[id])
+      .map(([id, file]) => ({ id, parts: file.parts || 0 }));
+
+    return { files, queue, skipped, gone, unchanged: Object.keys(files).length - queue.length };
+  }
+
+  /**
+   * Indexes for as long as a Chat command can afford, then stops and saves where it got to.
+   * A command has twenty seconds; forty documents take minutes.
+   */
+  async function work(ctx, job, budgetMs) {
+    const source = driveFor(ctx);
+    const index = indexFor(ctx);
+    const embed = embeddingsFor(ctx);
+    const deadline = now() + budgetMs;
+
+    while (job.queue.length && now() < deadline) {
+      const file = job.queue[0];
+      const text = await source.textOf(file);
+      const pieces = text ? chunksOf({ ...file, webViewLink: file.link }, text) : [];
+
+      if (!pieces.length) {
+        job.skipped.push({ name: file.name, section: file.section, reason: 'empty' });
+        delete job.files[file.id];
+      } else {
+        const vectors = await embed.forDocuments(pieces.map(p => p.text));
+        const chunks = pieces.map((piece, i) => ({ ...piece, vector: vectors[i] }));
+        const parts = await index.saveFile(file.id, chunks, job.files[file.id].was || 0);
+        job.files[file.id] = { ...job.files[file.id], parts, chunks: chunks.length, was: 0 };
+        job.counts[file.new ? 'added' : 'updated'] += 1;
+      }
+      job.queue.shift();
+    }
+    return job;
+  }
+
+  /** One slice of a reindex: continues an unfinished one, or starts a new one. */
+  async function reindex(ctx, { budgetMs = 12_000 } = {}) {
+    const index = indexFor(ctx);
+    let job = await index.job();
+
+    if (!job) {
+      const { files, queue, skipped, gone, unchanged } = await plan(ctx);
+      job = {
+        by: ctx.userEmail,
+        startedAt: new Date(now()).toISOString(),
+        files,
+        queue,
+        skipped,
+        gone,
+        counts: { added: 0, updated: 0, unchanged, removed: gone.length },
+        total: queue.length,
+      };
+    }
+
+    await work(ctx, job, budgetMs);
+
+    if (job.queue.length) {
+      await index.saveJob(job);
+      ctx.log.info('manual indexing in progress', { done: job.total - job.queue.length, of: job.total });
+      return { done: false, job };
+    }
+
+    for (const file of job.gone) await index.removeFile(file.id, file.parts);
+    const meta = await index.publish({
+      files: Object.fromEntries(Object.entries(job.files).map(([id, f]) => [id, { ...f, was: undefined }])),
+      skipped: job.skipped,
+      model: embeddingsFor(ctx).model,
+    });
+    await index.clearJob();
+    ctx.log.info('manual reindexed', { by: ctx.userEmail, ...job.counts, chunks: meta.chunks });
+    return { done: true, job, meta };
   }
 
   async function lookup(ctx, question) {
@@ -130,14 +180,27 @@ function createManualModule({ drive, embeddings, tokens: injected, now = () => D
 
           if (sub === 'reindex') {
             if (!ctx.hasRole('admin')) return adminOnly;
-            const { counts, meta, skipped } = await reindex(ctx);
+            const { done, job, meta } = await reindex(ctx);
+
+            if (!done) {
+              const read = job.total - job.queue.length;
+              return {
+                title: 'Reading the manual…',
+                text: [
+                  `${read} of ${job.total} documents done — reading 40 documents takes longer than one message allows,`,
+                  'so hit Continue and I\'ll carry on from here. Answers keep using the previous version until I finish.',
+                ].join(' '),
+                buttons: [{ text: `Continue (${job.queue.length} left)`, command: 'manual', args: 'reindex', replace: true }],
+              };
+            }
+
             return {
               title: 'Manual reindexed',
               text: [
-                `${counts.added} new, ${counts.updated} updated, ${counts.unchanged} unchanged`
-                + `${counts.removed ? `, ${counts.removed} gone` : ''}.`,
+                `${job.counts.added} new, ${job.counts.updated} updated, ${job.counts.unchanged} unchanged`
+                + `${job.counts.removed ? `, ${job.counts.removed} gone` : ''}.`,
                 `${meta.chunks} passages from ${Object.keys(meta.files).length} documents.`,
-                skipped.length ? `\nNot indexed: ${skipped.map(s => `${s.name} (${s.reason})`).join(', ')}` : '',
+                job.skipped.length ? `\nNot indexed: ${job.skipped.map(s => `${s.name} (${s.reason})`).join(', ')}` : '',
               ].filter(Boolean).join('\n'),
             };
           }

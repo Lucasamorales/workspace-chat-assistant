@@ -272,3 +272,57 @@ test('a missing scope is not reported as "share the folder"', async () => {
   });
   await assert.rejects(notShared.list(), /Share it as Viewer/);
 });
+
+/* ---------- indexing in slices: 40 documents do not fit in one command ---------- */
+
+test('a long reindex stops, saves, and offers to carry on', async () => {
+  const files = Array.from({ length: 5 }, (_, i) => file(`d${i}`, `Policy ${i}`));
+  const texts = Object.fromEntries(files.map(f => [f.id, HOLIDAY]));
+  const { mod, ctx } = setup({ files, texts });
+
+  // A clock that jumps a second per call, so the time budget runs out mid-queue.
+  let clock = NOW;
+  const ticking = createManualModule({
+    drive: fakeDrive(files, texts),
+    embeddings: fakeEmbeddings,
+    now: () => { clock += 5_000; return clock; },
+  });
+
+  const first = await ticking.commands.manual.run(ctx, 'reindex');
+  assert.equal(first.title, 'Reading the manual…');
+  assert.match(first.text, /of 5 documents done/);
+  const [button] = first.buttons;
+  assert.equal(button.command, 'manual');
+  assert.equal(button.args, 'reindex', 'the button just runs the command again');
+
+  // Carrying on eventually finishes, without redoing what was already done.
+  let reply = first;
+  for (let i = 0; i < 6 && reply.buttons; i += 1) reply = await ticking.commands.manual.run(ctx, 'reindex');
+  assert.equal(reply.title, 'Manual reindexed');
+  assert.match(reply.text, /5 new, 0 updated/);
+  assert.match(reply.text, /passages from 5 documents/);
+
+  // And the finished index answers questions.
+  const { content } = await (await mod.tools(ctx)).execute('search_manual', { question: 'holiday' });
+  assert.match(content, /25 days of holiday/);
+});
+
+test('while a reindex is unfinished, answers still come from the previous version', async () => {
+  const files = [file('d1', 'Holiday policy')];
+  const { mod, ctx } = setup({ files, texts: { d1: HOLIDAY } });
+  await mod.commands.manual.run(ctx, 'reindex');
+
+  // A new, slow-to-index document arrives; the run will not finish this time.
+  files.push(file('d2', 'Expenses policy', { modifiedTime: '2026-09-22T09:00:00Z' }));
+  let clock = NOW;
+  const ticking = createManualModule({
+    drive: fakeDrive(files, { d1: HOLIDAY, d2: EXPENSES }),
+    embeddings: fakeEmbeddings,
+    now: () => { clock += 30_000; return clock; },
+  });
+  const reply = await ticking.commands.manual.run(ctx, 'reindex');
+  assert.ok(reply.buttons, 'did not finish');
+
+  const { content } = await (await mod.tools(ctx)).execute('search_manual', { question: 'holiday' });
+  assert.match(content, /25 days of holiday/, 'the old index still answers while the new one is built');
+});

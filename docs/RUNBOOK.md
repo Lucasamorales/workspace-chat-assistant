@@ -151,7 +151,8 @@ gcloud projects add-iam-policy-binding your-gcp-project --member="serviceAccount
 ```
 
 - [ ] `/manual check` → "✅ I can read the folder: N files"; note anything it can't index
-- [ ] `/manual reindex` → counts of new/updated/unchanged, and the passage total
+- [ ] `/manual reindex` → progress, then **Continue** until it reports counts and the passage total
+      (the first full index of ~40 documents takes several rounds; later updates finish in one)
 - [ ] "How many holidays do I get?" → answer matches the policy document, with its link
 - [ ] Ask something the manual doesn't cover → Buddy says so instead of inventing a policy
 - [ ] Change a line in a policy doc → `/manual reindex` → "1 updated", and the new answer is used

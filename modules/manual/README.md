@@ -35,6 +35,12 @@ Replaces the Internal-RAG widget and Chrome extension. Decision: `docs/decisions
 Re-indexing is incremental: a file whose modified time hasn't changed keeps the chunks and vectors
 it already had, so updating one policy costs one document's worth of work, not the manual's.
 
+**It runs in slices.** A Chat command has twenty seconds and forty documents take minutes, so
+`/manual reindex` works for about twelve seconds, saves where it got to, and offers a **Continue**
+button. The live index only changes when a run finishes, so questions keep being answered from the
+previous version rather than from half a manual. After the first full index, updates usually
+finish in one go.
+
 ## What it will not do
 
 - **Invent policy.** Claude is told to answer only from the retrieved passages, and to say plainly
@@ -72,6 +78,8 @@ role it already holds on itself. No key, and the narrower scope is the one Drive
 
 ## Storage
 
-`m_manual__index`: chunks with their vectors, packed into shards of 40 so a question is a handful
-of reads rather than a thousand, plus a `meta` document holding the file list, the model and a
-version. Instances cache the vectors in memory and reload when that version changes.
+`m_manual__index`: each document's chunks and vectors in parts of 25 (`part-<fileId>-<n>`), a
+`meta` document holding the file list, the model and a version, and a `job` document while an
+index is part-way through. Storing per document is what makes re-indexing one policy — and
+resuming an interrupted run — cheap. Instances cache the vectors in memory and reload when the
+version changes.

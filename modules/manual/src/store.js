@@ -1,46 +1,61 @@
 /**
  * The index, in Firestore.
  *
- * Chunks are packed into shards rather than stored one per document: a question would otherwise
- * mean a thousand reads. The meta document carries a version that changes on every reindex, so
- * a running instance knows when its in-memory copy is stale without polling the whole index.
+ * Chunks are stored per document, in parts, for two reasons. Re-indexing one policy touches
+ * only that document's parts. And indexing cannot finish inside one Chat command — 40 documents
+ * take minutes, a command has twenty seconds — so the work is done in slices across several
+ * runs, and per-document storage is what makes that resumable.
+ *
+ * The live index only changes when a run finishes: while a reindex is in progress, questions
+ * keep being answered from the previous version rather than from half a manual.
  */
 
 const META = 'meta';
-const PER_SHARD = 40;
+const JOB = 'job';
+const PER_PART = 25;
 
-const shardId = n => `shard-${String(n).padStart(4, '0')}`;
+const partId = (fileId, n) => `part-${fileId}-${n}`;
 
 function createIndexStore({ store, now = () => Date.now() }) {
   const col = store.collection('index');
   let cached = { version: null, chunks: [] };
 
+  const emptyMeta = () => ({ version: null, files: {}, skipped: [], model: null, chunks: 0, updatedAt: null });
+
+  async function writeParts(fileId, chunks, previousParts = 0) {
+    const parts = [];
+    for (let i = 0; i < chunks.length; i += PER_PART) parts.push(chunks.slice(i, i + PER_PART));
+    for (const [i, group] of parts.entries()) await col.set(partId(fileId, i), { fileId, chunks: group });
+    for (let i = parts.length; i < previousParts; i += 1) await col.delete(partId(fileId, i));
+    return parts.length;
+  }
+
+  async function dropParts(fileId, parts) {
+    for (let i = 0; i < (parts || 0); i += 1) await col.delete(partId(fileId, i));
+  }
+
   return {
-    async meta() {
-      return (await col.get(META)) || { version: null, files: {}, chunks: 0, shards: 0, updatedAt: null };
-    },
+    async meta() { return (await col.get(META)) || emptyMeta(); },
+    async job() { return col.get(JOB); },
+    async saveJob(job) { await col.set(JOB, job); },
+    async clearJob() { await col.delete(JOB); },
 
-    /** Replaces the whole index in one go: partial indexes answer questions wrongly. */
-    async replace({ chunks, files, skipped, model }) {
-      const previous = await this.meta();
-      const shards = [];
-      for (let i = 0; i < chunks.length; i += PER_SHARD) shards.push(chunks.slice(i, i + PER_SHARD));
+    /** One document's chunks, replacing whatever was there before. */
+    saveFile: (fileId, chunks, previousParts) => writeParts(fileId, chunks, previousParts),
+    removeFile: (fileId, parts) => dropParts(fileId, parts),
 
-      for (const [i, group] of shards.entries()) await col.set(shardId(i), { chunks: group });
-      // Drop shards left over from a bigger previous index.
-      for (let i = shards.length; i < (previous.shards || 0); i += 1) await col.delete(shardId(i));
-
+    /** Makes everything written so far the version questions are answered from. */
+    async publish({ files, skipped, model }) {
       const meta = {
         version: String(now()),
         files,
         skipped,
         model,
-        chunks: chunks.length,
-        shards: shards.length,
+        chunks: Object.values(files).reduce((n, f) => n + (f.chunks || 0), 0),
         updatedAt: new Date(now()).toISOString(),
       };
       await col.set(META, meta);
-      cached = { version: meta.version, chunks };
+      cached = { version: null, chunks: [] }; // force a reload; the parts changed underneath us
       return meta;
     },
 
@@ -51,9 +66,11 @@ function createIndexStore({ store, now = () => Date.now() }) {
       if (cached.version === meta.version) return cached.chunks;
 
       const chunks = [];
-      for (let i = 0; i < (meta.shards || 0); i += 1) {
-        const shard = await col.get(shardId(i));
-        if (shard && shard.chunks) chunks.push(...shard.chunks);
+      for (const [fileId, file] of Object.entries(meta.files || {})) {
+        for (let i = 0; i < (file.parts || 0); i += 1) {
+          const part = await col.get(partId(fileId, i));
+          if (part && part.chunks) chunks.push(...part.chunks);
+        }
       }
       cached = { version: meta.version, chunks };
       return chunks;
@@ -61,4 +78,4 @@ function createIndexStore({ store, now = () => Date.now() }) {
   };
 }
 
-module.exports = { createIndexStore, PER_SHARD };
+module.exports = { createIndexStore, PER_PART };
