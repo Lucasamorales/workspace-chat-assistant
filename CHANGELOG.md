@@ -10,6 +10,17 @@ Format: **Added** (new features) · **Changed** (existing behaviour or wording) 
 
 ## 2026-09-22
 
+### Changed
+- **Module replies can be formatted.** Card text is escaped first — so a Drive title, an Asana
+  task name or a line from a policy can never become markup — and only then are `**bold**`,
+  backticked `code` and `[text](https://link)` turned into HTML. Links must be http(s) and free of
+  quotes, so a URL cannot break out of its attribute. Modules used raw `<b>` before, which showed
+  up literally on cards.
+- **`/access` and the manual's reindex report read properly.** `/access` gives a block only to
+  modules that actually have grants and folds the rest into one line; the reindex summary leads
+  with the counts and groups skipped files by reason, capped at five names each, instead of one
+  run-on paragraph of forty names.
+
 ### Fixed
 - **Every document indexed as "empty".** Making the reindex resumable dropped each file's type
   from the saved queue, and without it there is no way to export a Doc — so Drive returned nothing

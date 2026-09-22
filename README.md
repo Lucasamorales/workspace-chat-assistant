@@ -208,6 +208,10 @@ still use modules that don't need Claude (Kudos votes, commands); any other mess
 "here's what I can help with" card. Modules that only work through Claude (Asana, files) are
 marked `needsConversation` and are hidden from them.
 
+**Formatting replies:** module text is escaped before it reaches a card, then `**bold**`,
+backtick `code` and `[text](https://link)` become HTML. Never put raw HTML in a reply — it is
+shown literally, on purpose.
+
 Rules every module follows:
 
 1. **Never import another module.** Everything a module may use arrives in `ctx`.
