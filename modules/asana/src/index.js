@@ -12,6 +12,8 @@ module.exports = {
   allowedIn: ['DM'],
   // Asana is only reachable through Claude, so it's hidden from people who can't chat.
   needsConversation: true,
+  // Asana can be used by asking, without free-form Claude: 0007-scoped-conversation.md
+  scopedConversation: true,
   settings: ['ASANA_CLIENT_ID', 'ASANA_CLIENT_SECRET'],
 
   instructions: [

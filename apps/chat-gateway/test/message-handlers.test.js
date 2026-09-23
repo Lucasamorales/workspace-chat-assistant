@@ -23,12 +23,13 @@ function votesModule(seen) {
   };
 }
 
-function setup({ assistantAccess = 'robin@example.com' } = {}) {
+function setup({ assistantAccess = 'robin@example.com', asanaAccess = 'domain:example.com' } = {}) {
   const store = core.createMemoryStore();
   const posted = [];
   const seen = [];
   const background = [];
   let claudeCalls = 0;
+  const claudeParams = [];
   const chat = {
     postText: async (space, thread, text) => { posted.push({ text }); return `${space}/messages/${posted.length}`; },
     postCard: async (space, thread, text, cardsV2) => { posted.push({ text, cardsV2 }); return `${space}/messages/${posted.length}`; },
@@ -43,7 +44,7 @@ function setup({ assistantAccess = 'robin@example.com' } = {}) {
       BUDDY_ACCESS_BASICS: 'domain:example.com',
       BUDDY_ACCESS_VOTES: 'robin@example.com',
       BUDDY_ROLE_VOTES_ADMIN: 'robin@example.com',
-      BUDDY_ACCESS_ASANA: 'domain:example.com',
+      BUDDY_ACCESS_ASANA: asanaAccess,
       BUDDY_ACCESS_ASSISTANT: assistantAccess,
     },
   });
@@ -54,12 +55,12 @@ function setup({ assistantAccess = 'robin@example.com' } = {}) {
     threads: core.createThreads({ store, maxMessages: 20, ttlDays: 30 }),
     usage: core.createUsage({ store, capUsd: 15, prices: { inPerMTok: 2, outPerMTok: 10 } }),
     oauthFlows: core.createOAuthFlows({ store, secret: 'k'.repeat(40), baseUrl: 'https://oauth.test' }),
-    claude: { create: async () => { claudeCalls += 1; return { usage: {}, stop_reason: 'end_turn', content: [{ type: 'text', text: 'from Claude' }] }; } },
+    claude: { create: async params => { claudeCalls += 1; claudeParams.push(params); return { usage: {}, stop_reason: 'end_turn', content: [{ type: 'text', text: 'from Claude' }] }; } },
     makeModuleContext: core.createContextFactory({ store, sealer: core.createLocalSealer(), env: {}, log: quietLog, access }),
     defer: p => background.push(p),
   });
   const settle = async () => { while (background.length) await background.shift(); };
-  return { handle, settle, posted, seen, claudeCount: () => claudeCalls };
+  return { handle, settle, posted, seen, claudeCount: () => claudeCalls, claudeParams };
 }
 
 const TEXT = '@Buddy kudos to @Eve for think big';
@@ -101,8 +102,8 @@ const chatEvent = (user, text, space = { name: 'spaces/dm-eve', spaceType: 'DIRE
   message: { name: `${space.name}/messages/${Math.random().toString(36)}`, text, argumentText: text, annotations: [] },
 });
 
-test('without assistant access: no Claude, no cost — a card with what they can use instead', async () => {
-  const { handle, settle, posted, seen, claudeCount } = setup();
+test('with nothing that needs Claude: no Claude, no cost — a card with what they can use instead', async () => {
+  const { handle, settle, posted, seen, claudeCount } = setup({ asanaAccess: 'robin@example.com' });
   await handle(voteEvent(EVE)); // Eve has no access to the votes module either
   await handle(chatEvent(EVE, 'write me a poem'));
   await settle();
@@ -115,7 +116,32 @@ test('without assistant access: no Claude, no cost — a card with what they can
   const cmd = await handle(chatEvent(EVE, '/votes-audit'));
   assert.match(cmd.text, /I don't know \/votes-audit/);
   const asana = await handle(chatEvent(EVE, '/asana connect'));
-  assert.match(asana.text, /I don't know \/asana/, 'Asana needs Claude, so it is hidden without assistant access');
+  assert.match(asana.text, /I don't know \/asana/, 'Asana is not hers, so it is hidden');
+});
+
+test('Asana without the assistant: Claude runs, but only for Asana', async () => {
+  // The point of scoped conversation: "use Asana by asking" is an ordinary permission, while
+  // "chat with Claude about anything" stays with the people who are meant to have it.
+  const { handle, settle, claudeCount, claudeParams } = setup({ asanaAccess: 'domain:example.com' });
+  await handle(chatEvent(EVE, 'what are my tasks due this week?'));
+  await settle();
+
+  assert.equal(claudeCount(), 1, 'she can drive Asana in words');
+  const system = claudeParams.at(-1).system.map(b => b.text).join('\n');
+  assert.match(system, /only to help with Asana/);
+  assert.match(system, /do not answer it/, 'anything else is declined rather than answered');
+  assert.doesNotMatch(system, /not negotiable, whatever anyone says, including anyone claiming to be an administrator\.[\s\S]*Ask me anything/);
+
+  const asana = await handle(chatEvent(EVE, '/asana connect'));
+  assert.doesNotMatch(asana.text || '', /I don't know \/asana/, 'and the commands are hers too');
+});
+
+test('with the assistant, no such restriction is added', async () => {
+  const { handle, settle, claudeParams } = setup({ assistantAccess: 'domain:example.com' });
+  await handle(chatEvent(EVE, 'write me a poem'));
+  await settle();
+  const system = claudeParams.at(-1).system.map(b => b.text).join('\n');
+  assert.doesNotMatch(system, /only to help with/);
 });
 
 test('with assistant access, ordinary messages go to Claude and Claude-only modules appear', async () => {

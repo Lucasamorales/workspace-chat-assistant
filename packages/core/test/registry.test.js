@@ -206,3 +206,37 @@ test('conversation is a permission: Claude-only modules disappear for people who
   assert.throws(() => validateModule({ name: 'x', conversation: true, needsConversation: true }), /cannot both provide and need/);
   assert.throws(() => validateModule({ name: 'x', conversation: 'yes' }), /conversation must be true/);
 });
+
+test('conversation is free with the assistant, scoped for a module that only needs Claude for itself', () => {
+  const assistant = { name: 'assistant', conversation: true };
+  const asana = { name: 'asana', needsConversation: true, scopedConversation: true, allowedIn: ['DM'] };
+  const files = { name: 'files', needsConversation: true };
+  const registry = createRegistry({
+    modules: [assistant, asana, files],
+    log: quietLog,
+    env: {},
+    access: createAccessPolicy({
+      modules: [assistant, asana, files],
+      env: {
+        BUDDY_ACCESS_ASSISTANT: 'robin@example.com',
+        BUDDY_ACCESS_ASANA: 'domain:example.com',
+        BUDDY_ACCESS_FILES: 'domain:example.com',
+      },
+    }),
+  });
+  const scopeFor = email => ({ kind: 'DM', user: { email } });
+
+  assert.equal(registry.conversationMode(scopeFor('robin@example.com')), 'free');
+  assert.equal(registry.conversationMode(scopeFor('eve@example.com')), 'scoped');
+  assert.deepEqual(registry.scopedFor(scopeFor('eve@example.com')), ['asana']);
+  assert.equal(registry.conversationMode(scopeFor('stranger@gmail.com')), null);
+
+  // Files needs Claude but does not claim scoped conversation, so it rides on Asana being there
+  // rather than granting conversation itself — and grants nothing to someone without Asana.
+  assert.deepEqual(registry.scopedFor(scopeFor('robin@example.com')), ['asana']);
+});
+
+test('a module cannot claim scoped conversation without needing Claude', () => {
+  assert.throws(() => validateModule({ name: 'x', scopedConversation: true }), /requires needsConversation/);
+  assert.throws(() => validateModule({ name: 'x', conversation: true, scopedConversation: true }), /already provides free conversation/);
+});

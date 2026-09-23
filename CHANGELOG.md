@@ -11,6 +11,16 @@ live Chat app, and what is still unverified against reality).
 
 ## 2026-09-23
 
+### Added
+- **Using a module by asking, without free-form Claude.** A module can now declare
+  `scopedConversation`: it drives Claude **for itself alone**. Someone with `asana` can say
+  "create a task for Remy due Friday" and get it, while Claude declines anything else and has only
+  that module's tools — so "use Asana in words" is an ordinary permission instead of handing out a
+  general-purpose chatbot. Scoped people get a smaller allowance (`MONTHLY_USD_CAP_SCOPED`, $5),
+  since `assistant` used to be the de facto spend control. `asana` is the first; `files` and
+  `manual` deliberately still need the assistant. Decision record `0007-scoped-conversation.md`.
+  Consequence: **`asana` can now be granted from chat**, with no config edit and no deploy.
+
 ### Changed
 - Alexandra and Jordan added to `ALLOWED_USERS`, `BUDDY_ACCESS_ASSISTANT` and
   `BUDDY_ACCESS_ASANA` for the Asana UAT. They also need the Chat app shared with them in the

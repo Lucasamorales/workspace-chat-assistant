@@ -68,9 +68,25 @@ function createRegistry({ modules, env = process.env, log, timeouts = {}, access
   // With a policy, a scope without a user sees nothing: a caller that forgets the user fails closed.
   const mayUse = (mod, scope) => !access || Boolean(scope.user && access.canUse(mod.name, scope.user));
   const reachable = (mod, scope) => allowedHere(mod.allowedIn, scope.kind) && mayUse(mod, scope);
-  /** Can this person chat with Claude here? Only if some conversation module is reachable for them. */
-  const canConverse = scope => [...byName.values()].some(m => m.conversation && reachable(m, scope));
-  // Modules that only work through Claude are hidden from people who can't chat.
+  /**
+   * Two different things, deliberately separated:
+   *
+   *   free   — the assistant module: ask Claude anything.
+   *   scoped — a module that needs Claude to work (Asana, the manual) but only for itself:
+   *            Claude is given that module's tools and told to decline everything else.
+   *
+   * So "can use Asana by talking to it" is an ordinary permission, while "can chat with Claude
+   * about anything" stays with the people who are meant to have it.
+   */
+  const freeConverse = scope => [...byName.values()].some(m => m.conversation && reachable(m, scope));
+  const scopedModules = scope => [...byName.values()].filter(m => m.scopedConversation && reachable(m, scope));
+  const canConverse = scope => freeConverse(scope) || scopedModules(scope).length > 0;
+  /** 'free' · 'scoped' · null — what Claude may do for this person here. */
+  const conversationMode = scope => {
+    if (freeConverse(scope)) return 'free';
+    return scopedModules(scope).length ? 'scoped' : null;
+  };
+  // Modules that only work through Claude are hidden from people who cannot reach Claude at all.
   const visible = (mod, scope) => reachable(mod, scope) && (!mod.needsConversation || canConverse(scope));
   const active = scope => [...byName.values()].filter(m => visible(m, scope));
 
@@ -97,6 +113,9 @@ function createRegistry({ modules, env = process.env, log, timeouts = {}, access
     get: name => byName.get(name),
     hasRole: (name, role, user) => (byName.has(name) ? hasRole(byName.get(name), role, user) : false),
     canConverse,
+    conversationMode,
+    /** The modules Claude may act for when conversation is scoped, for the restricting prompt. */
+    scopedFor: scope => scopedModules(scope).map(m => m.name),
 
     /**
      * Look up a slash command for this person and place.

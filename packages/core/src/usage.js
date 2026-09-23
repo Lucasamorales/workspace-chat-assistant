@@ -39,10 +39,14 @@ function createUsage({ store, prices, capUsd, now = () => new Date(), eventTtlDa
   const empty = () => ({ month: monthKey(now()), inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, usd: 0 });
   const current = doc => (doc && doc.month === monthKey(now()) ? doc : empty());
 
-  const forUser = userId => ({
-    async get() { return { ...current(await col.get(userId)), capUsd }; },
+  /**
+   * @param cap  the allowance to enforce. Someone who can only drive one module through Claude
+   *   gets a smaller one than someone who can chat about anything: see MONTHLY_USD_CAP_SCOPED.
+   */
+  const forUser = (userId, cap = capUsd) => ({
+    async get() { return { ...current(await col.get(userId)), capUsd: cap }; },
     async check() {
-      if (current(await col.get(userId)).usd >= capUsd) throw new BudgetExceededError(capUsd, now());
+      if (current(await col.get(userId)).usd >= cap) throw new BudgetExceededError(cap, now());
     },
     async record(usage) {
       await col.update(userId, doc => {
@@ -69,8 +73,8 @@ function createUsage({ store, prices, capUsd, now = () => new Date(), eventTtlDa
      *
      * Metadata only: what was asked and what came back are never recorded.
      */
-    meter({ userId, userEmail, trigger = 'message', model = null }) {
-      const budget = forUser(userId);
+    meter({ userId, userEmail, trigger = 'message', model = null, capUsd: cap = capUsd }) {
+      const budget = forUser(userId, cap);
       const startedAt = now().getTime();
       const totals = { calls: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, usd: 0 };
       const tools = [];

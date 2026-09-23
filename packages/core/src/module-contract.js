@@ -78,7 +78,12 @@
  *   that no handler or command takes only reach Claude if a conversation module is available
  *   to that person; otherwise they get a short "here's what I can do" reply, at no cost.
  * @property {true}        [needsConversation]  The module only works through Claude (tools,
- *   attachments). It is hidden from people who can't chat, so they never see a dead end.
+ *   attachments). It is hidden from people who can't reach Claude at all, so they never see a
+ *   dead end.
+ * @property {true}        [scopedConversation]  This module may drive Claude **for itself alone**:
+ *   someone with this module but not the assistant can talk to it in words, and Claude is given
+ *   only this module's tools and told to decline anything else. It makes "use Asana by asking"
+ *   an ordinary permission without handing out free-form Claude.
  * @property {(ctx: ModuleContext, message: ChatMessage) => Promise<Reply|null>} [handleMessage]
  *   Handle a message directly, without Claude (e.g. a kudos vote). Return null to pass.
  *   Modules are asked in BUDDY_MODULES order; the first non-null reply wins.
@@ -111,7 +116,8 @@
 const FIELDS = [
   'name', 'description', 'allowedIn', 'settings', 'instructions',
   'commands', 'readAttachment', 'tools', 'oauth', 'status',
-  'examples', 'quickActions', 'connected', 'roles', 'handleMessage', 'conversation', 'needsConversation',
+  'examples', 'quickActions', 'connected', 'roles', 'handleMessage', 'conversation',
+  'needsConversation', 'scopedConversation',
 ];
 const SPACE_KINDS = ['DM', 'SPACE'];
 
@@ -131,10 +137,13 @@ function validateModule(mod, source = 'module') {
   for (const s of mod.settings || []) {
     if (!s.startsWith(prefix)) fail(`setting ${s} must start with ${prefix}`);
   }
-  for (const flag of ['conversation', 'needsConversation']) {
+  for (const flag of ['conversation', 'needsConversation', 'scopedConversation']) {
     if (mod[flag] !== undefined && mod[flag] !== true) fail(`${flag} must be true when set`);
   }
   if (mod.conversation && mod.needsConversation) fail('a module cannot both provide and need conversation');
+  if (mod.conversation && mod.scopedConversation) fail('the assistant already provides free conversation');
+  // Scoped conversation only means anything for a module that needs Claude in the first place.
+  if (mod.scopedConversation && !mod.needsConversation) fail('scopedConversation requires needsConversation');
   const roles = mod.roles || [];
   if (!Array.isArray(roles) || !roles.every(r => typeof r === 'string' && /^[a-z]+$/.test(r))) {
     fail('roles must be an array of lowercase words');

@@ -207,10 +207,12 @@ Entries are comma-separated: `robin@example.com`, `users/<chat id>`, or
 `domain:example.com`. A module (or role-restricted command) someone can't use is
 invisible to them: no commands, no help entries, no tools for Claude, no message handling.
 
-**Chatting with Claude is itself a permission** — `BUDDY_ACCESS_ASSISTANT`. People without it can
-still use modules that don't need Claude (Kudos votes, commands); any other message gets a free
-"here's what I can help with" card. Modules that only work through Claude (Asana, files) are
-marked `needsConversation` and are hidden from them.
+**Reaching Claude is itself a permission, in two grades.** `BUDDY_ACCESS_ASSISTANT` is free-form
+chat about anything. A module may instead declare `scopedConversation` — it drives Claude **for
+itself alone**, so someone with `asana` can say "create a task for Remy" without being given a
+general-purpose chatbot: Claude gets only that module's tools and declines anything else, on a
+smaller monthly allowance (`MONTHLY_USD_CAP_SCOPED`). People with neither get a free "here's what
+I can help with" card. See `docs/decisions/0007-scoped-conversation.md`.
 
 **Formatting replies:** module text is escaped before it reaches a card, then `**bold**`,
 backtick `code` and `[text](https://link)` become HTML. Never put raw HTML in a reply — it is
