@@ -24,6 +24,14 @@ live Chat app, and what is still unverified against reality).
   so "cost per request" stays a figure about chat, and it is never charged to anyone's cap —
   indexing a policy is infrastructure, not someone's conversation.
 
+### Fixed
+- **A request that failed before Claude answered recorded nothing**, so failures were invisible in
+  `/costs` — exactly the thing the waste report exists for. Anything that did not simply answer is
+  now recorded, even when it cost nothing.
+- **"No Weekly tab" was the wrong diagnosis** for an uploaded `.xlsx`: a spreadsheet uploaded to
+  Drive stays an Excel file, which the Sheets API refuses with the same 400 as a missing tab.
+  `/costs check` now tells the two apart and quotes Google's own message.
+
 ### Changed
 - **`/usage` is gone.** Spend is admin business now (`/costs`); people still see the cap message
   when they reach their limit.

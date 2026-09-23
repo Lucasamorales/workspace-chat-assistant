@@ -102,7 +102,9 @@ function createUsage({ store, prices, capUsd, now = () => new Date(), eventTtlDa
          * assistant's. Attribution is deliberately coarse — see docs/decisions/0006-costs.md.
          */
         async finish({ outcome = 'answered', module = null } = {}) {
-          if (!totals.calls && !tools.length) return null;
+          // A request that failed before Claude answered cost nothing, but it is exactly what
+          // the waste report is for: record anything that did not simply answer.
+          if (!totals.calls && !tools.length && outcome === 'answered') return null;
           const at = now();
           const used = [...new Set(tools.map(t => t.name.split('__')[0]))];
           const event = {

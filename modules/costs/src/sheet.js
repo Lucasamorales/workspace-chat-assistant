@@ -8,21 +8,28 @@
 const TAB = 'Weekly';
 const SA_EMAIL = 'buddy-bot@your-gcp-project.iam.gserviceaccount.com';
 
-function explain(error, action) {
+function explain(error, action, tab = TAB) {
   const status = Number(error.status || error.code || (error.response && error.response.status));
-  const wrap = message => Object.assign(new Error(message), { expose: true, cause: error });
+  // Google's own words: "no such tab" and "this file isn't a Google Sheet at all" both arrive
+  // as 400, and guessing between them sends people to fix the wrong thing.
+  const reason = String((error.response && error.response.data && error.response.data.error
+    && error.response.data.error.message) || error.message || '');
+  const wrap = message => Object.assign(new Error(message), { expose: true, cause: error, detail: reason });
+  const notASheet = 'That file isn\'t a Google Sheet yet — an uploaded .xlsx stays an Excel file in Drive. '
+    + 'Open it, choose File → Save as Google Sheets, and use the new file\'s id.';
+
   if (status === 403) {
     return wrap(`Buddy can't ${action} the costs Sheet. Share it as Editor with ${SA_EMAIL}.`);
   }
   if (status === 404) return wrap('I couldn\'t find the costs Sheet. Check COSTS_SHEET_ID.');
-  if (status === 400) return wrap(`The costs Sheet has no "${TAB}" tab.`);
+  if (status === 400) return wrap(/parse range|Unable to parse/i.test(reason) ? `The costs Sheet has no "${tab}" tab.` : notASheet);
   if (status === 429 || status >= 500) return wrap('Google Sheets is busy right now. Try again in a minute?');
   return error;
 }
 
 function createCostsSheet({ sheetsApi, spreadsheetId, tab = TAB }) {
   const range = cols => `'${tab.replace(/'/g, "''")}'!${cols}`;
-  const guarded = (action, fn) => fn().catch(error => { throw explain(error, action); });
+  const guarded = (action, fn) => fn().catch(error => { throw explain(error, action, tab); });
 
   return {
     /** The weeks already written, so a rollup never doubles up a week. */

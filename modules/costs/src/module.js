@@ -202,7 +202,7 @@ function createCostsModule({ usage, sheetsApi, now = () => new Date() } = {}) {
                 const weeks = await sheet.weeksWritten();
                 lines.push(`Weeks already written: ${weeks.size || 'none yet'}`);
               } catch (error) {
-                ctx.log.warn('costs sheet check failed', { error });
+                ctx.log.warn('costs sheet check failed', { error, detail: error.detail });
                 lines.push(`❌ ${error.expose ? error.message : 'Buddy can\'t open the costs Sheet.'}`);
               }
             }

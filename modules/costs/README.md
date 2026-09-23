@@ -65,7 +65,9 @@ largest avoidable cost in a chat assistant and nobody notices it without a repor
 | `COSTS_SHEET_TAB` | `Weekly` | Tab name |
 | `COSTS_TIMEZONE` | `America/Argentina/Buenos_Aires` | Which day a week starts on, and where a month begins |
 
-The Sheet must be shared as **Editor** with `buddy-bot@your-gcp-project.iam.gserviceaccount.com`.
+The Sheet must be shared as **Editor** with `buddy-bot@your-gcp-project.iam.gserviceaccount.com`,
+and it must be a **Google Sheet**: a spreadsheet uploaded to Drive stays an Excel file until it is
+opened and saved as one, and the Sheets API cannot read those.
 
 ## Deliberate omissions
 

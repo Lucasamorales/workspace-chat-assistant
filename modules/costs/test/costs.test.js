@@ -270,3 +270,57 @@ test('the weekly Sheet counts a conversation row, not the embedding row', () => 
   assert.equal(rows.length, 1);
   assert.equal(rows[0][3], 1, 'one request');
 });
+
+test('an uploaded .xlsx is named as the problem, not a missing tab', async () => {
+  const { createCostsSheet } = require('../src/sheet');
+  const excel = createCostsSheet({
+    spreadsheetId: 'x',
+    sheetsApi: {
+      spreadsheets: {
+        get: async () => {
+          throw Object.assign(new Error('bad'), {
+            code: 400,
+            response: { data: { error: { message: 'This operation is not supported for this document' } } },
+          });
+        },
+      },
+    },
+  });
+  await assert.rejects(excel.describe(), err => {
+    assert.match(err.message, /isn't a Google Sheet yet/);
+    assert.match(err.message, /Save as Google Sheets/);
+    return true;
+  });
+
+  const noTab = createCostsSheet({
+    spreadsheetId: 'x',
+    sheetsApi: {
+      spreadsheets: {
+        values: {
+          get: async () => {
+            throw Object.assign(new Error('bad'), {
+              code: 400,
+              response: { data: { error: { message: 'Unable to parse range: \'Weekly\'!A2:A' } } },
+            });
+          },
+        },
+      },
+    },
+  });
+  await assert.rejects(noTab.weeksWritten(), /no "Weekly" tab/);
+});
+
+test('a request that failed before Claude answered is still recorded', async () => {
+  const store = createMemoryStore();
+  const usage = createUsage({ store, capUsd: 15, prices: { inPerMTok: 2, outPerMTok: 10 }, now: () => NOW });
+  const meter = usage.meter({ userId: '111', userEmail: 'robin@example.com' });
+
+  const failed = await meter.finish({ outcome: 'failed' });
+  assert.ok(failed, 'a failure that cost nothing is exactly what the waste report is for');
+  assert.equal(failed.usd, 0);
+  assert.equal((await usage.events()).length, 1);
+
+  // A request that did nothing at all and simply answered is still not worth a row.
+  const quiet = usage.meter({ userId: '111', userEmail: 'robin@example.com' });
+  assert.equal(await quiet.finish({ outcome: 'answered' }), null);
+});
