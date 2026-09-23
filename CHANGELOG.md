@@ -9,6 +9,16 @@ live Chat app, and what is still unverified against reality).
 
 ---
 
+## 2026-09-23
+
+### Docs
+- **Cost tracking planned** (`0006-costs.md`, backlog Epic 8): one usage event per Claude call —
+  person, module, tools, tokens, model, cost, trigger, outcome, duration — kept 90 days, with a
+  `/costs` command for admins and a weekly append to a separate Google Sheet. Metadata only, never
+  message text. Admin-only, so `/usage` goes away for everyone else.
+
+---
+
 ## 2026-09-22
 
 ### Deployed

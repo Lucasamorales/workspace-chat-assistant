@@ -226,3 +226,19 @@ Decision: `docs/decisions/0004-admin-module.md`. Config stays the floor; grants 
 | G10 | ✅ Audit: who granted or revoked what, for whom, when | Test |
 | G11 | ✅ RUNBOOK §6b: read access with `/access` | Docs |
 | G12 | Try it live: grant a colleague a module, confirm they can use it and nobody else changed | After deploy |
+
+## Epic 8: `costs` module (what Buddy costs, per person and per module)
+
+Decision: `docs/decisions/0006-costs.md`. Admin-only; metadata only, never message text.
+
+| # | Item | Acceptance |
+|---|---|---|
+| X1 | Record one usage event per Claude call: person, module, tools, tokens (in/out/cache), model, cost, trigger, outcome, duration | Events in Firestore, 90-day TTL |
+| X2 | Attribute each request to a primary module (the module whose tools it used; `assistant` when none) | Test |
+| X3 | `/costs`: this month by person, by module, by tool; top spenders; cost per request | Admin-only |
+| X4 | Waste view: failures, cancelled and expired approvals, retries, cache read vs write, budget denials | In `/costs` |
+| X5 | Embedding spend recorded per reindex (characters × rate) | Shown under the manual |
+| X6 | Weekly append to a separate Google Sheet, one row per person per module per week; `/costs sheet` forces it | Rows appear; Sheet shared with `buddy-bot` as Editor |
+| X7 | `/usage` withdrawn from non-admins; the cap message still explains itself | Test |
+| X8 | Cloud Run and Firestore reported as flat overhead, not split per person | In `/costs` |
+| X9 | *Later:* BigQuery sink for arbitrary analysis | Decision first |
