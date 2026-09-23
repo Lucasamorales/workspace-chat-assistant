@@ -17,6 +17,11 @@ const { search } = require('./search');
 
 const bad = message => Object.assign(new Error(message), { expose: true });
 
+// Vertex prices embeddings per 1,000 characters. This is an estimate we control, not an invoice:
+// if Google's price changes and this doesn't, the figure drifts. Override with
+// MANUAL_EMBEDDING_USD_PER_MCHAR.
+const DEFAULT_USD_PER_MCHAR = 0.025;
+
 function defaultTokens(log) {
   // Required lazily so tests never load the Google client.
   const { GoogleAuth } = require('google-auth-library');
@@ -156,6 +161,9 @@ function createManualModule({ drive, embeddings, tokens: injected, now = () => D
     }
 
     await work(ctx, job, budgetMs);
+    // Every slice reports its own embedding spend: a reindex is several commands, and the
+    // figures add up across them.
+    await reportSpend(ctx, embeddingsFor(ctx));
 
     if (job.queue.length) {
       await index.saveJob(job);
@@ -174,6 +182,23 @@ function createManualModule({ drive, embeddings, tokens: injected, now = () => D
     await index.clearJob();
     ctx.log.info('manual reindexed', { by: ctx.userEmail, ...job.counts, chunks: meta.chunks });
     return { done: true, job, meta };
+  }
+
+  /** Tells the gateway what this module spent outside Claude. Never fails a reindex. */
+  async function reportSpend(ctx, embed) {
+    const characters = (embed && embed.characters) || 0;
+    if (!characters || !ctx.core || typeof ctx.core.recordSpend !== 'function') return;
+    const perMillion = Number(ctx.settings.MANUAL_EMBEDDING_USD_PER_MCHAR) || DEFAULT_USD_PER_MCHAR;
+    try {
+      await ctx.core.recordSpend({
+        kind: 'embeddings',
+        units: characters,
+        usd: (characters / 1e6) * perMillion,
+        note: embed.model,
+      });
+    } catch (error) {
+      ctx.log.warn('could not record embedding spend', { error });
+    }
   }
 
   async function lookup(ctx, question) {

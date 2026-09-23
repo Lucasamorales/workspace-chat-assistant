@@ -237,7 +237,7 @@ Decision: `docs/decisions/0006-costs.md`. Admin-only; metadata only, never messa
 | X2 | ✅ Attribute each request to a primary module | Test |
 | X3 | ✅ `/costs`, `/costs week`, `/costs tools` | Admin-only via `BUDDY_ACCESS_COSTS` |
 | X4 | ✅ Waste view: failures, declines, expiries, cache read vs write | `/costs waste` |
-| X5 | Embedding spend recorded per reindex (characters × rate) | Shown under the manual — **not built yet** |
+| X5 | ✅ Embedding spend recorded per reindex (characters × rate), shown under "Outside Claude" | Tests |
 | X6 | ✅ Weekly append to the costs Sheet, once per finished week; `/costs sheet` forces it | Tests; verify against the real Sheet after deploy |
 | X7 | ✅ `/usage` removed; the cap message still explains itself | Test |
 | X8 | Cloud Run and Firestore reported as flat overhead, not split per person | In `/costs` |

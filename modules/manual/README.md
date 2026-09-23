@@ -69,6 +69,7 @@ that is fine for all staff.
 | `MANUAL_PROJECT_ID` | — | Required. GCP project for Vertex AI embeddings |
 | `MANUAL_REGION` | `europe-west1` | Vertex AI region |
 | `MANUAL_EMBEDDING_MODEL` | `text-multilingual-embedding-002` | Multilingual, so Spanish content works |
+| `MANUAL_EMBEDDING_USD_PER_MCHAR` | `0.025` | What a million characters of embedding costs, for `/costs` |
 
 Needs `aiplatform.googleapis.com` enabled and `roles/aiplatform.user` on `buddy-bot`.
 

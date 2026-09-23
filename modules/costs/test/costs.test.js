@@ -224,3 +224,49 @@ test('costs are never offered to Claude as a tool', () => {
   const { mod } = setup();
   assert.equal(mod.tools, undefined, 'no conversation can be steered into reporting on someone');
 });
+
+/* ---------- spend that isn't a conversation ---------- */
+
+const spendEvent = (over = {}) => ({
+  at: '2026-09-22T11:00:00.000Z',
+  userEmail: 'robin@example.com',
+  module: 'manual',
+  kind: 'embeddings',
+  outcome: 'spend',
+  units: 500000,
+  usd: 0.0125,
+  calls: 0,
+  tools: [],
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+  ms: 0,
+  ...over,
+});
+
+test('embedding spend is reported, and never inflates the request count', async () => {
+  const { mod, ctx } = setup({ events: [event({ usd: 0.10 }), spendEvent()] });
+  const reply = await mod.commands.costs.run(ctx, '');
+
+  assert.match(reply.text, /over \*\*1 requests\*\*/, 'indexing is not a conversation');
+  assert.match(reply.text, /\*\*Outside Claude\*\*/);
+  assert.match(reply.text, /manual embeddings/);
+  assert.match(reply.text, /500,000 characters/);
+});
+
+test('spend alone still reports, rather than dividing by no requests', async () => {
+  const { mod, ctx } = setup({ events: [spendEvent()] });
+  const reply = await mod.commands.costs.run(ctx, '');
+  assert.match(reply.text, /No conversations yet/);
+  assert.match(reply.text, /manual embeddings/);
+});
+
+test('the weekly Sheet counts a conversation row, not the embedding row', () => {
+  const rows = weeklyRows([
+    event({ at: '2026-09-15T10:00:00.000Z', usd: 0.01 }),
+    spendEvent({ at: '2026-09-15T11:00:00.000Z' }),
+  ].filter(e => e.outcome !== 'spend'), TZ, '2026-09-23T12:00:00.000Z');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0][3], 1, 'one request');
+});

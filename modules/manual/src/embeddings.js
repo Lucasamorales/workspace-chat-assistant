@@ -38,21 +38,28 @@ function createEmbeddings({ tokenFor, projectId, region = DEFAULT_REGION, model 
     return (data.predictions || []).map(p => p.embeddings.values);
   }
 
+  // Characters embedded since this client was built, so a reindex can report what it cost.
+  let characters = 0;
+
   return {
     model,
     dimensions: DIMENSIONS,
+    get characters() { return characters; },
 
     /** Passages being stored. */
     async forDocuments(texts) {
       const out = [];
       for (let i = 0; i < texts.length; i += BATCH) {
-        out.push(...await embed(texts.slice(i, i + BATCH), 'RETRIEVAL_DOCUMENT'));
+        const batch = texts.slice(i, i + BATCH);
+        out.push(...await embed(batch, 'RETRIEVAL_DOCUMENT'));
+        characters += batch.reduce((n, t) => n + t.length, 0);
       }
       return out;
     },
 
     /** A question being asked. */
     async forQuery(text) {
+      characters += String(text).length;
       const [vector] = await embed([text], 'RETRIEVAL_QUERY');
       if (!vector) throw fail('Buddy couldn\'t work out what that question is about.');
       return vector;

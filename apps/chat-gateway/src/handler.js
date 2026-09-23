@@ -109,6 +109,11 @@ function createEventHandler(deps) {
       examples: () => registry.examples(scopeOf(base)),
       quickActions: () => registry.quickActions(contextsFor(base), scopeOf(base)),
       usage: () => usage.forUser(base.userId).get(),
+      // A module reporting what it spent outside Claude (embeddings, say). It can only ever
+      // record spend under its own name, and it never touches anyone's cap.
+      recordSpend: ({ kind, units, usd, note }) => usage.spend({
+        userId: base.userId, userEmail: base.userEmail, module: mod.name, kind, units, usd, note,
+      }),
       resetThread: () => threads.reset(base.threadKey),
       startOAuth: () => startOAuth(base, mod.name),
     });

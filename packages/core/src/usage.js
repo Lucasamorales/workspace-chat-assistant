@@ -127,6 +127,37 @@ function createUsage({ store, prices, capUsd, now = () => new Date(), eventTtlDa
       };
     },
 
+    /**
+     * Money spent outside Claude — embedding a manual, say. Recorded so `/costs` can show it,
+     * but deliberately NOT charged against anyone's monthly cap: the cap is there to stop one
+     * person's conversations running away, and indexing a policy is infrastructure, not chat.
+     */
+    async spend({ userId = '', userEmail = '', module, kind, units = 0, usd = 0, note = null }) {
+      const at = now();
+      const event = {
+        at: at.toISOString(),
+        month: monthKey(at),
+        userId,
+        userEmail: String(userEmail || '').toLowerCase(),
+        module,
+        kind,
+        units,
+        usd,
+        ...(note ? { note } : {}),
+        outcome: 'spend',
+        calls: 0,
+        tools: [],
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        ms: 0,
+        expireAt: new Date(at.getTime() + eventTtlDays * 24 * 3600 * 1000),
+      };
+      await events.set(`${at.toISOString()}-${randomId()}`, event);
+      return event;
+    },
+
     /** Everything recorded since an ISO timestamp, oldest first. For /costs and the weekly Sheet. */
     events: (sinceIso = null) => events.list({ field: 'at', from: sinceIso }),
   };

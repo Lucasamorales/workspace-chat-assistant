@@ -43,6 +43,13 @@ never written. `/costs sheet` forces it.
 A Sheet failure is logged and never shown: whoever happened to send the message that triggered the
 rollup should not see an error about a spreadsheet they didn't ask for.
 
+## Spend outside Claude
+
+A module can report what it spent elsewhere — today only the manual, which records the characters
+it embedded and what they cost (`MANUAL_EMBEDDING_USD_PER_MCHAR`, an estimate we control, not an
+invoice). It shows under **Outside Claude**, is counted apart from conversations, and is never
+charged against anyone's monthly cap: indexing a policy is infrastructure, not someone's chat.
+
 ## The number worth watching
 
 **Cache hit rate.** Long conversations re-send their history; cache reads cost a tenth of the input

@@ -7,7 +7,9 @@
  */
 
 const { createCostsSheet } = require('./sheet');
-const { groupBy, byTool, waste, weeklyRows, weekOf, totals, money, round } = require('./report');
+const {
+  groupBy, byTool, waste, weeklyRows, weekOf, totals, money, round, spending, conversations,
+} = require('./report');
 
 const DEFAULT_TZ = 'America/Argentina/Buenos_Aires';
 const STATE = 'state';
@@ -20,6 +22,9 @@ function defaultSheetsApi() {
 }
 
 const pad = (s, n) => String(s).padEnd(n).slice(0, n);
+// Pinned locale: the machine's default would group numbers with dots in some regions, and a
+// cost report that reads "500.000 characters" in one place and "500,000" in another is a bug.
+const count = n => Number(n || 0).toLocaleString('en-GB');
 const shortName = email => String(email || '').split('@')[0];
 
 function createCostsModule({ usage, sheetsApi, now = () => new Date() } = {}) {
@@ -43,8 +48,19 @@ function createCostsModule({ usage, sheetsApi, now = () => new Date() } = {}) {
   };
 
   async function summary(ctx, from, label) {
-    const events = await usage.events(from);
-    if (!events.length) return { title: `Costs ${label}`, text: 'Nothing recorded yet.' };
+    const recorded = await usage.events(from);
+    if (!recorded.length) return { title: `Costs ${label}`, text: 'Nothing recorded yet.' };
+
+    // Conversations and other spend are counted apart, so "cost per request" stays a figure
+    // about conversations rather than an average of two different things.
+    const events = conversations(recorded);
+    const spent = spending(recorded);
+    if (!events.length) {
+      return {
+        title: `Costs ${label}`,
+        text: ['No conversations yet.', ...spent.map(s => `${s.module} ${s.kind}: ${money(s.usd)}`)].join('\n'),
+      };
+    }
 
     const all = totals(events);
     const people = groupBy(events, 'userEmail');
@@ -69,6 +85,10 @@ function createCostsModule({ usage, sheetsApi, now = () => new Date() } = {}) {
     if (w.cacheHitRate !== null) {
       lines.push(`**Cache** ${(w.cacheHitRate * 100).toFixed(0)}% of repeated context read from cache`
         + `${w.cacheHitRate < 0.5 ? ' — low, so history is being paid for twice' : ''}`);
+    }
+    if (spent.length) {
+      lines.push('', '**Outside Claude**', ...spent.map(s => `\`${pad(`${s.module} ${s.kind}`, 20)} ${pad(money(s.usd), 8)}\``
+        + ` ${count(s.units)} characters`));
     }
     return { title: `Costs ${label}`, text: lines.join('\n') };
   }
@@ -146,7 +166,7 @@ function createCostsModule({ usage, sheetsApi, now = () => new Date() } = {}) {
                 w.cacheHitRate === null
                   ? '**Cache** nothing cached yet.'
                   : `**Cache** ${(w.cacheHitRate * 100).toFixed(0)}% of repeated context read from cache`
-                    + ` (${w.cacheRead.toLocaleString()} read, ${w.cacheWrite.toLocaleString()} written)`,
+                    + ` (${count(w.cacheRead)} read, ${count(w.cacheWrite)} written)`,
                 ...(tools.length ? ['', '**Tools that failed**', ...tools.map(t => `\`${pad(t.name, 26)}\` ${t.failed} of ${t.calls}`)] : []),
               ].join('\n'),
             };

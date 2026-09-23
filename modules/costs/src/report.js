@@ -110,4 +110,26 @@ function weeklyRows(events, timeZone, writtenAt) {
 
 const totals = events => events.reduce((acc, e) => add(acc, e), EMPTY());
 
-module.exports = { groupBy, byTool, waste, weeklyRows, weekOf, totals, money, round, EMPTY };
+/**
+ * Spend that isn't a conversation — embedding the manual, say. Kept apart from requests so
+ * "cost per request" stays a figure about conversations, not an average of two different things.
+ */
+const isSpend = event => event.outcome === 'spend';
+const conversations = events => events.filter(e => !isSpend(e));
+
+function spending(events) {
+  const rows = new Map();
+  for (const event of events.filter(isSpend)) {
+    const key = `${event.module}|${event.kind}`;
+    if (!rows.has(key)) rows.set(key, { module: event.module, kind: event.kind, usd: 0, units: 0 });
+    const row = rows.get(key);
+    row.usd += event.usd || 0;
+    row.units += event.units || 0;
+  }
+  return [...rows.values()].sort((a, b) => b.usd - a.usd);
+}
+
+module.exports = {
+  groupBy, byTool, waste, weeklyRows, weekOf, totals, money, round, EMPTY,
+  spending, conversations, isSpend,
+};

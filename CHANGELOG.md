@@ -19,6 +19,10 @@ live Chat app, and what is still unverified against reality).
   A finished week is appended to a separate Google Sheet on the first message after the week turns
   over, once. Metadata only: no message text is recorded, and costs are never offered to Claude as
   a tool. Admins only.
+- **Spend outside Claude is recorded too.** Indexing the manual reports the characters it embedded
+  and what they cost, shown in `/costs` under "Outside Claude". It is kept apart from conversations
+  so "cost per request" stays a figure about chat, and it is never charged to anyone's cap —
+  indexing a policy is infrastructure, not someone's conversation.
 
 ### Changed
 - **`/usage` is gone.** Spend is admin business now (`/costs`); people still see the cap message
