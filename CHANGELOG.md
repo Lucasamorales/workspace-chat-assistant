@@ -11,6 +11,11 @@ live Chat app, and what is still unverified against reality).
 
 ## 2026-09-23
 
+### Changed
+- Alexandra and Jordan added to `ALLOWED_USERS`, `BUDDY_ACCESS_ASSISTANT` and
+  `BUDDY_ACCESS_ASANA` for the Asana UAT. They also need the Chat app shared with them in the
+  console, which is set by hand.
+
 ### Added
 - **`costs` module.** Every Claude request now writes one usage event — person, module, tools,
   tokens in/out/cache, cost, trigger, outcome, duration — kept 90 days. `/costs` reports this
