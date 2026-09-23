@@ -227,6 +227,17 @@ Decision: `docs/decisions/0004-admin-module.md`. Config stays the floor; grants 
 | G11 | ✅ RUNBOOK §6b: read access with `/access` | Docs |
 | G12 | Try it live: grant a colleague a module, confirm they can use it and nobody else changed | After deploy |
 
+## Epic 9: scoped conversation
+
+Decision: `docs/decisions/0007-scoped-conversation.md`.
+
+| # | Item | Acceptance |
+|---|---|---|
+| S10 | ✅ `scopedConversation` flag; Asana usable without `assistant`, Claude restricted to its tools | Tests |
+| S11 | ✅ Smaller allowance for scoped people (`MONTHLY_USD_CAP_SCOPED`) | Config |
+| S12 | Watch what scoped users actually ask: does Claude decline off-topic requests in practice? | A week of `/costs` and spot checks |
+| S13 | *If needed:* deterministic Asana commands or a dialog, with no Claude in the loop | Decision first |
+
 ## Epic 8: `costs` module (what Buddy costs, per person and per module)
 
 Decision: `docs/decisions/0006-costs.md`. Admin-only; metadata only, never message text.

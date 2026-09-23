@@ -3,6 +3,11 @@
 Acts in Asana as the user, through Asana's MCP server (`https://mcp.asana.com/v2/mcp`), with
 Buddy as the MCP client. DMs only.
 
+**Access:** `BUDDY_ACCESS_ASANA` alone — it does **not** need `BUDDY_ACCESS_ASSISTANT`. Asana drives
+Claude for itself (`scopedConversation`), so someone can work in Asana by asking without being given
+free-form Claude: Claude gets only Asana's tools, declines anything else, and that person is on the
+smaller `MONTHLY_USD_CAP_SCOPED` allowance. See `docs/decisions/0007-scoped-conversation.md`.
+
 - Commands: `/asana connect | status | tools | disconnect`
 - Settings: `ASANA_CLIENT_ID`, `ASANA_CLIENT_SECRET` (required); `ASANA_READONLY_TOOLS`
   (comma list of tools that may skip approval), `ASANA_REQUIRE_EMAIL_MATCH` (default true)
