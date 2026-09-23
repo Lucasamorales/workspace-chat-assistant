@@ -80,7 +80,7 @@ secret_bind "$SECRET_STATE" "$OAUTH"
 secret_bind "$SECRET_ASANA" "$OAUTH"
 
 step "Firestore: auto-delete expired documents (threads after 30 days, approvals after 15 min, …)"
-for c in core__threads core__events core__pending core__oauth_sessions core__requests; do
+for c in core__threads core__events core__pending core__oauth_sessions core__requests core__usage_events; do
   gcloud firestore fields ttls update expireAt --collection-group="$c" --enable-ttl --async $P >/dev/null
 done
 

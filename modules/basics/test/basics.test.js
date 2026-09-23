@@ -15,12 +15,12 @@ test('help is a card with examples and buttons; commands are still listed for po
   assert.equal(dm.title, 'Here\'s what I can do');
   assert.match(dm.text, /What's due today in Asana\?/);
   assert.match(dm.text, /\/asana connect/);
-  assert.deepEqual(dm.buttons.map(b => b.text), ['Connect Asana', 'My usage', 'Start fresh']);
+  assert.deepEqual(dm.buttons.map(b => b.text), ['Connect Asana', 'Start fresh']);
   const space = await basics.commands.help.run({ spaceKind: 'SPACE', core });
   assert.match(space.text, /only works in a private chat/);
 });
 
-test('usage formats the monthly spend', async () => {
-  const core = { usage: async () => ({ usd: 1.234, capUsd: 15, inputTokens: 10, cacheReadTokens: 5, cacheWriteTokens: 0, outputTokens: 3 }) };
-  assert.equal(await basics.commands.usage.run({ core }), 'This month you\'ve used $1.23 of your $15 allowance (15 tokens in, 3 out).');
+test('spend is not reported here: it moved to the costs module, admins only', () => {
+  // docs/decisions/0006-costs.md — costs are a management matter, not a leaderboard.
+  assert.equal(basics.commands.usage, undefined);
 });

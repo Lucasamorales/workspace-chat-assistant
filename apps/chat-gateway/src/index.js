@@ -40,14 +40,20 @@ const store = core.createFirestoreStore(new Firestore({ ignoreUndefinedPropertie
 // Access granted from chat by an admin. Config remains the floor: see packages/core/grants.js.
 const grants = core.createGrants({ store });
 
+const usage = core.createUsage({
+  store,
+  capUsd: config.MONTHLY_USD_CAP,
+  prices: { inPerMTok: config.USD_PER_MTOK_IN, outPerMTok: config.USD_PER_MTOK_OUT },
+});
+
 const modules = config.BUDDY_MODULES.map(name => {
   if (!/^[a-z][a-z0-9]*$/.test(name)) throw new Error(`invalid module name "${name}"`);
   const pkg = require(`@buddy/module-${name}`);
   // The admin module is the one module that needs the shared grants store, so it is built here
   // rather than exporting a ready-made object.
-  return typeof pkg.createAdminModule === 'function'
-    ? pkg.createAdminModule({ grants, moduleNames: config.BUDDY_MODULES })
-    : pkg;
+  if (typeof pkg.createAdminModule === 'function') return pkg.createAdminModule({ grants, moduleNames: config.BUDDY_MODULES });
+  if (typeof pkg.createCostsModule === 'function') return pkg.createCostsModule({ usage });
+  return pkg;
 });
 // Fails startup if any enabled module lacks BUDDY_ACCESS_<MODULE> or a declared role rule.
 const access = core.createAccessPolicy({ modules, grants });
@@ -70,11 +76,7 @@ const handleEvent = createEventHandler({
   grants,
   appName: config.BUDDY_APP_NAME,
   threads: core.createThreads({ store, maxMessages: config.MAX_HISTORY_MESSAGES, ttlDays: config.THREAD_TTL_DAYS }),
-  usage: core.createUsage({
-    store,
-    capUsd: config.MONTHLY_USD_CAP,
-    prices: { inPerMTok: config.USD_PER_MTOK_IN, outPerMTok: config.USD_PER_MTOK_OUT },
-  }),
+  usage,
   oauthFlows: core.createOAuthFlows({ store, secret: config.STATE_SECRET, baseUrl: config.OAUTH_BASE_URL }),
   claude: core.createClaude({ apiKey: config.ANTHROPIC_API_KEY, model: config.MODEL, effort: config.EFFORT }),
   makeModuleContext: core.createContextFactory({ store, sealer, log, access }),

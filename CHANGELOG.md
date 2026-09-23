@@ -11,6 +11,20 @@ live Chat app, and what is still unverified against reality).
 
 ## 2026-09-23
 
+### Added
+- **`costs` module.** Every Claude request now writes one usage event — person, module, tools,
+  tokens in/out/cache, cost, trigger, outcome, duration — kept 90 days. `/costs` reports this
+  month by person, module and tool, with what was spent on requests that produced nothing and the
+  cache hit rate; `/costs week`, `/costs waste`, `/costs tools`, `/costs sheet`, `/costs check`.
+  A finished week is appended to a separate Google Sheet on the first message after the week turns
+  over, once. Metadata only: no message text is recorded, and costs are never offered to Claude as
+  a tool. Admins only.
+
+### Changed
+- **`/usage` is gone.** Spend is admin business now (`/costs`); people still see the cap message
+  when they reach their limit.
+- The store gained a narrow `list({field, from, limit})` range read, used by the cost reports.
+
 ### Docs
 - **Cost tracking planned** (`0006-costs.md`, backlog Epic 8): one usage event per Claude call —
   person, module, tools, tokens, model, cost, trigger, outcome, duration — kept 90 days, with a

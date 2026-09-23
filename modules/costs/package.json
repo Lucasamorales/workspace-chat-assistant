@@ -1,0 +1,12 @@
+{
+  "name": "@buddy/module-costs",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": { "test": "node --test" },
+  "dependencies": {
+    "@googleapis/sheets": "^18.0.0",
+    "google-auth-library": "^11.1.0"
+  },
+  "devDependencies": { "@buddy/core": "*" }
+}

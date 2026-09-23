@@ -189,6 +189,19 @@ CONFIRM=yes bash infra/decommission-legacy.sh
 Deletes `legacy-chat-bot`, the ClickUp/old Asana/old state secrets, and removes the
 **Editor** role from the default compute service account.
 
+## 6a. What Buddy costs
+
+`/costs` in a DM (admins only). Events are kept 90 days; the weekly Sheet keeps the history.
+
+- [ ] `/costs check` → "✅ Sheet reachable" and the number of events kept
+- [ ] `/costs` → this month by person and module
+- [ ] `/costs waste` → what produced nothing, and the cache hit rate
+- [ ] `/costs sheet` → writes finished weeks; running it twice writes nothing the second time
+- [ ] The Sheet is shared as **Editor** with `buddy-bot@your-gcp-project.iam.gserviceaccount.com`
+
+A cache hit rate below 50% means conversations are re-sending history at full price — worth
+looking at before anything else on the bill.
+
 ## 6b. Who can use what
 
 `/access` in a DM with Buddy is the answer, not `infra/config.env` alone: access is the union of

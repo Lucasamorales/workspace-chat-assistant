@@ -8,6 +8,7 @@
  *     create(id, data)        → true, or false if the id already exists (atomic)
  *     take(id)                → data | null, and deletes it in the same transaction (single use)
  *     update(id, fn)          → fn(current|null) returns next data, written in a transaction
+ *     list({field, from, limit}) → documents whose `field` is >= `from`, oldest first
  *   }
  *
  * Documents may carry `expireAt` (a Date). Firestore TTL policies delete them after that
@@ -68,6 +69,12 @@ function createFirestoreStore(db) {
             return next;
           });
         },
+        async list({ field = 'at', from = null, limit = 5000 } = {}) {
+          let query = col.orderBy(field).limit(limit);
+          if (from !== null) query = col.where(field, '>=', from).orderBy(field).limit(limit);
+          const snap = await query.get();
+          return snap.docs.map(d => ({ id: d.id, ...fromFirestore(d.data()) }));
+        },
       };
     },
   };
@@ -103,6 +110,13 @@ function createMemoryStore() {
           if (next === undefined) return null;
           docs.set(id, clone(next));
           return clone(next);
+        },
+        async list({ field = 'at', from = null, limit = 5000 } = {}) {
+          return [...docs.entries()]
+            .map(([id, data]) => ({ id, ...clone(data) }))
+            .filter(d => from === null || (d[field] !== undefined && d[field] >= from))
+            .sort((a, b) => String(a[field]).localeCompare(String(b[field])))
+            .slice(0, limit);
         },
       };
     },

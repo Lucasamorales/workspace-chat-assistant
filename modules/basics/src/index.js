@@ -2,7 +2,7 @@
 
 module.exports = {
   name: 'basics',
-  description: 'Help, usage, status and thread reset',
+  description: 'Help, status and thread reset',
 
   commands: {
     help: {
@@ -18,19 +18,9 @@ module.exports = {
           text: `${examples.map(e => `• ${e}`).join('\n')}${where}\n\nPrefer typing? Sure thing: ${commands}`,
           buttons: [
             ...(await ctx.core.quickActions()),
-            { text: 'My usage', command: 'usage' },
             { text: 'Start fresh', command: 'reset' },
           ],
         };
-      },
-    },
-
-    usage: {
-      description: 'Your Claude spend this month',
-      async run(ctx) {
-        const u = await ctx.core.usage();
-        return `This month you've used $${u.usd.toFixed(2)} of your $${u.capUsd} allowance `
-          + `(${u.inputTokens + u.cacheReadTokens + u.cacheWriteTokens} tokens in, ${u.outputTokens} out).`;
       },
     },
 

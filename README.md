@@ -90,6 +90,7 @@ Reads (searching tasks, "what's due today") run without asking. Deletes are mark
 | `/leave [shift|name|check]` | Your working hours and calendar name for booking leave |
 | `/access [module]` | Admins: who has been given access from chat |
 | `/manual [reindex|check]` | What Buddy has read from the team member manual (admins re-read it) |
+| `/costs [week|waste|tools|sheet|check]` | Admins: what Buddy costs, by person, module and tool |
 
 ---
 
@@ -165,6 +166,7 @@ modules/
   leave/               books and cancels out-of-office on people's own calendars
   admin/               grants module access from chat (config stays the floor)
   manual/              team member manual: Drive → embeddings → grounded answers
+  costs/               what Buddy spends, by person, module and tool (admins)
 infra/                 setup, deploy and decommission scripts; config.env; Cloud Build
 docs/                  runbook, security model, backlog, decisions,
                        BUILDING-FOR-BUDDY.md (rules for tools built outside this repo)
@@ -186,6 +188,7 @@ legacy/bot-rev23/     the original bot, kept read-only for reference
 | **leave** | DMs only | pilot: robin@, remy@; the accounts team at cutover (needs assistant) | `LEAVE_TEAM_EMAIL`, domain-wide delegation | each person's shift and display name in `m_leave__profiles` |
 | **admin** | DMs only | `BUDDY_ACCESS_ADMIN` — robin@, remy@ | — | grants in `core__grants` |
 | **manual** | DMs + spaces | everyone @example.com (needs assistant); `manual.admin` to reindex | `MANUAL_FOLDER_ID`, Vertex AI, Drive folder shared with `buddy-bot` | index in `m_manual__index` |
+| **costs** | DMs only | `BUDDY_ACCESS_COSTS` — robin@, remy@ | `COSTS_SHEET_ID` (optional) | usage events in `core__usage_events` (90 days) |
 
 ### Permissions per module
 Two layers, both checked on every event:

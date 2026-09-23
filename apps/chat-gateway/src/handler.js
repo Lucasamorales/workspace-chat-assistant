@@ -219,14 +219,35 @@ function createEventHandler(deps) {
     }
   }
 
-  async function withToolset(base, fn) {
+  async function withToolset(base, fn, meter = null) {
     const toolset = await registry.buildToolset(contextsFor(base), scopeOf(base));
+    // Every tool call is noted on the meter: it is what credits a request to a module, and
+    // what makes "which tools cost money" answerable. Names only, never inputs or results.
+    const watched = meter ? {
+      ...toolset,
+      execute: async (name, input) => {
+        try {
+          const result = await toolset.execute(name, input);
+          meter.toolUsed(name, { failed: Boolean(result && result.isError) });
+          return result;
+        } catch (error) {
+          meter.toolUsed(name, { failed: true });
+          throw error;
+        }
+      },
+    } : toolset;
     try {
-      return await fn(toolset);
+      return await fn(watched);
     } finally {
       await toolset.close();
     }
   }
+
+  /** What a finished loop counts as, for the cost record. */
+  const OUTCOMES = { needs_connection: 'connect', needs_approval: 'approval' };
+  const meterFinish = (meter, result, extra = {}) => meter
+    .finish({ outcome: OUTCOMES[result && result.status] || 'answered', ...extra })
+    .catch(error => log.warn('could not record usage', { error }));
 
   const historyTextOf = request => (request.attachments && request.attachments.length
     ? `${request.text}\n[attached: ${request.attachments.map(a => a.name).join(', ')}]`
@@ -290,8 +311,9 @@ function createEventHandler(deps) {
    * @param message  the original Chat message, for modules that handle messages directly.
    *                 Omitted for "Try again" / "continue", which always go to Claude.
    */
-  async function converse(base, request, message) {
+  async function converse(base, request, message, { trigger = 'message' } = {}) {
     let messageName;
+    let budget = null;
     try {
       if (message) {
         const handled = await registry.handleMessage(contextsFor(base), message, scopeOf(base));
@@ -306,7 +328,9 @@ function createEventHandler(deps) {
         return;
       }
       messageName = await chat.postText(base.space, base.thread, '_Hmm, give me a sec…_');
-      const budget = usage.forUser(base.userId);
+      // The meter IS the budget — the cap still stops a runaway before any call — and it collects
+      // what this request cost, which tools ran and how it ended. Metadata only (0006-costs.md).
+      budget = usage.meter({ userId: base.userId, userEmail: base.userEmail, trigger });
       await budget.check();
 
       const ctxFor = contextsFor(base);
@@ -340,8 +364,13 @@ function createEventHandler(deps) {
           },
         });
         await finish(base, messageName, request, result);
-      });
+        await meterFinish(budget, result);
+      }, budget);
     } catch (error) {
+      if (budget) {
+        await budget.finish({ outcome: error && error.expose ? 'refused' : 'failed' })
+          .catch(e => log.warn('could not record usage', { error: e }));
+      }
       await fail(base, messageName, error, request);
     }
   }
@@ -404,18 +433,24 @@ function createEventHandler(deps) {
    */
   async function resume(record, { cardId = null } = {}) {
     const base = baseOfRecord(record);
+    // A resumed request is its own event: the work after an approval costs money of its own,
+    // and whether the person approved or declined is worth knowing.
+    const meter = usage.meter({ userId: base.userId, userEmail: base.userEmail, trigger: 'approval' });
+    const declined = (record.items || []).every(it => it.state === 'declined');
     try {
       await withToolset(base, async toolset => {
         const result = await resumeLoop({
           claude, toolset, log,
-          budget: usage.forUser(base.userId),
+          budget: meter,
           system: systemFor(scopeOf(base), toolset.notes, [AFTER_APPROVAL]),
           saved: JSON.parse(record.loop),
           items: record.items,
         });
         await finish(base, null, { text: record.historyText, historyText: record.historyText, attachments: [] }, result);
-      });
+        await meterFinish(meter, result, declined ? { outcome: 'declined' } : {});
+      }, meter);
     } catch (error) {
+      await meter.finish({ outcome: 'failed' }).catch(e => log.warn('could not record usage', { error: e }));
       await fail(base, null, error);
     } finally {
       if (cardId && record.cardMessage) {
