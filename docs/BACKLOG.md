@@ -239,7 +239,9 @@ can cost precision (model, effort, retrieval size) waits for the eval.
 | C3 | Shorten module instructions (7 × ~800 chars on every request) without changing behaviour | Tests still pass; instructions ~half |
 | C4 | A small eval: ~20 real questions with known-good answers, run before and after any change to model, effort or retrieval | Runnable; a baseline recorded |
 | C5 | Effort per module (Asana keeps more; looking something up needs less) | Eval holds |
-| C6 | Model per module — Haiku 4.5 for manual and ooo, Sonnet for asana and leave — **plus a per-model price table**, or `/costs` starts lying | Eval holds; `/costs` still correct |
+| C6 | Model per module — Haiku 4.5 for manual and ooo, Sonnet for asana and leave. Model follows the **scope**, never the tool (no mid-thread switching, or the cache is thrown away each time), so the saving lands on scoped people rather than admins | Eval holds |
+| C6a | Record the model on every usage event — today it is always `null`, so `/costs` cannot tell two models apart | An event names its model |
+| C6b | Per-model price table; `/costs` and the monthly cap both read it | A Haiku request is priced at $1/$5, a Sonnet one at $2/$10 |
 | C7 | Answer cache for the manual, keyed on the question embedding we already compute, invalidated by index version; hashes only, never question text | Repeat questions cost nothing |
 | C8 | Context editing (`clear_tool_uses`) for long Asana loops | Fewer tokens per multi-step request |
 | C9 | Default most people to scoped modules rather than the assistant at the company rollout | Fewer instructions and tools per request |

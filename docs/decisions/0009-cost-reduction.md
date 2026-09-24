@@ -37,8 +37,20 @@ effort or retrieval.
 6. **Effort per module.** Most requests are not reasoning problems. Asana's multi-step writes keep
    more; looking something up in the manual needs less.
 7. **Model per module.** Haiku 4.5 ($1/$5) where retrieval does the work — the manual, "who's
-   out". Sonnet 5 stays where mistakes write to real data: Asana, leave. This needs a per-model
-   price table, or `/costs` starts lying the moment two models are in play.
+   out". Sonnet 5 stays where mistakes write to real data: Asana, leave. Three things follow from
+   this, and all three are part of the work rather than afterthoughts:
+
+   - **The model follows the person's scope, not the tool they end up using.** Which tool a request
+     needs is only known once Claude has answered, and changing model mid-conversation throws away
+     the cache every time. So someone scoped to the manual gets Haiku for the whole conversation;
+     someone with the assistant gets Sonnet throughout. The saving therefore lands on **scoped
+     people — the company at large — and not on admins**, which is the right way round.
+   - **Prompt caches are per model**, so two models mean two caches. The rule above keeps that from
+     hurting: a scoped person only ever uses one, so nothing is fragmented mid-thread.
+   - **Prices are per model.** `/costs` and the monthly cap both compute money from
+     `USD_PER_MTOK_IN`/`OUT`, which are single global numbers today, and every usage event
+     currently records `model: null` because the handler never passes it. Both have to change in
+     the same step, or the reports quietly drift the moment a second model appears.
 8. **Context editing** (`clear_tool_uses`) for long Asana loops, where old tool results pile up
    inside a single request.
 
