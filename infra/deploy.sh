@@ -7,6 +7,18 @@ cd "$(dirname "$0")/.."
 source infra/config.env
 
 fail() { echo "ERROR: $*" >&2; exit 1; }
+
+# On Windows, `bash` from PowerShell is WSL, which has its own HOME and so its own (empty) gcloud
+# config: `gcloud auth login` on the Windows side never reaches it. The error you get is "no
+# active account selected", which sends you round the login loop instead of here.
+if grep -qi 'microsoft\|wsl' /proc/version 2>/dev/null; then
+  fail "this is WSL, where gcloud has no credentials. Run it with Git Bash instead:
+  & \"C:\Program Files\Git\bin\bash.exe\" infra/deploy.sh"
+fi
+if [ -z "$(gcloud auth list --filter=status:ACTIVE --format='value(account)' 2>/dev/null)" ]; then
+  fail "no active gcloud account in this shell. Run: gcloud auth login"
+fi
+
 [ -n "$ASANA_CLIENT_ID" ] || fail "ASANA_CLIENT_ID is empty in infra/config.env"
 git diff --quiet && git diff --cached --quiet || fail "commit your changes first"
 [ -z "$(git ls-files --others --exclude-standard)" ] || fail "untracked files present; commit or ignore them"
