@@ -119,13 +119,21 @@ async function toolsSummary(ctx) {
   try {
     const free = [];
     const gated = [];
-    for (const d of toolset.definitions) (toolset.needsApproval(d.name) ? gated : free).push(`\`${d.name}\``);
+    const loaded = new Set(toolset.loadedTools || toolset.definitions.map(d => d.name));
+    for (const d of toolset.definitions) {
+      if (!loaded.has(d.name)) continue; // the long tail is listed as a count, not by name
+      (toolset.needsApproval(d.name) ? gated : free).push(`\`${d.name}\``);
+    }
+    const deferred = (toolset.deferredTools || []).length;
     return [
-      `*Asana actions available to Buddy (${toolset.definitions.length})*`,
+      `*Asana actions Buddy keeps to hand (${loaded.size})*`,
       '',
       `*Runs without asking* (read-only): ${free.join(', ') || '—'}`,
       '',
       `*Asks for your approval first*: ${gated.join(', ') || '—'}`,
+      ...(deferred ? ['', `Another ${deferred} Asana actions exist and still work — Buddy looks them up when you `
+        + 'ask for something the list above doesn\'t cover. Keeping them out of every request is what makes '
+        + 'Asana cheap to run.'] : []),
     ].join('\n').slice(0, 3900);
   } finally {
     if (toolset.close) await toolset.close();

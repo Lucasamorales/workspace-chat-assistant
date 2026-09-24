@@ -9,6 +9,20 @@ live Chat app, and what is still unverified against reality).
 
 ---
 
+## 2026-09-24
+
+### Changed
+- **Asana no longer sends ~100 tool definitions on every request.** Asana's MCP server offers about
+  a hundred tools, each with a description and a JSON schema — tens of thousands of tokens before
+  anyone types a word, which is where the money was going (Remy measured ~12¢ on a first request).
+  The everyday tools are loaded; the rest are **deferred** and Claude looks them up with the
+  tool-search tool when a request needs one, so nothing became impossible — `/asana tools` says how
+  many are a lookup away. `ASANA_TOOLS` names the list exactly when the built-in match isn't right,
+  and if a list matches nothing, everything is loaded: a cheaper Asana that cannot do its job is not
+  cheaper. Decision record `0008-tool-payload.md`.
+
+---
+
 ## 2026-09-23
 
 ### Added

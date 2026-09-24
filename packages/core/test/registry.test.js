@@ -240,3 +240,23 @@ test('a module cannot claim scoped conversation without needing Claude', () => {
   assert.throws(() => validateModule({ name: 'x', scopedConversation: true }), /requires needsConversation/);
   assert.throws(() => validateModule({ name: 'x', conversation: true, scopedConversation: true }), /already provides free conversation/);
 });
+
+test('a deferred tool keeps its flag through the registry, and stays callable', async () => {
+  const mod = {
+    name: 'asana',
+    tools: async () => ({
+      definitions: [
+        { name: 'search_tasks', input_schema: { type: 'object' } },
+        { name: 'duplicate_portfolio', input_schema: { type: 'object' }, defer_loading: true },
+      ],
+      execute: async name => ({ content: `${name} ran` }),
+    }),
+  };
+  const registry = make([mod]);
+  const toolset = await registry.buildToolset(() => ({ log: quietLog }), { kind: 'DM', user: ROBIN });
+
+  const byName = Object.fromEntries(toolset.definitions.map(d => [d.name, d]));
+  assert.equal(byName['asana__search_tasks'].defer_loading, undefined);
+  assert.equal(byName['asana__duplicate_portfolio'].defer_loading, true);
+  assert.deepEqual(await toolset.execute('asana__duplicate_portfolio', {}), { content: 'duplicate_portfolio ran' });
+});

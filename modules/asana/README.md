@@ -9,6 +9,9 @@ free-form Claude: Claude gets only Asana's tools, declines anything else, and th
 smaller `MONTHLY_USD_CAP_SCOPED` allowance. See `docs/decisions/0007-scoped-conversation.md`.
 
 - Commands: `/asana connect | status | tools | disconnect`
+- **Tool payload:** the everyday tools are loaded on every request; the rest are deferred and
+  looked up with the tool-search tool when needed (`ASANA_TOOLS` to name the list exactly).
+  Nothing is unreachable — see `docs/decisions/0008-tool-payload.md`.
 - Settings: `ASANA_CLIENT_ID`, `ASANA_CLIENT_SECRET` (required); `ASANA_READONLY_TOOLS`
   (comma list of tools that may skip approval), `ASANA_REQUIRE_EMAIL_MATCH` (default true)
 - Storage: `m_asana__tokens/{userId}` — KMS-encrypted token bundle

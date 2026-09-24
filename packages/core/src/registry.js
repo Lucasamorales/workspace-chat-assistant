@@ -242,7 +242,14 @@ function createRegistry({ modules, env = process.env, log, timeouts = {}, access
         for (const def of ts.definitions || []) {
           const name = `${mod.name}__${def.name}`;
           if (!TOOL_NAME.test(name)) { log.warn('skipping tool with invalid name', { module: mod.name, tool: def.name }); continue; }
-          definitions.push({ name, description: def.description || '', input_schema: def.input_schema || { type: 'object' } });
+          definitions.push({
+            name,
+            description: def.description || '',
+            input_schema: def.input_schema || { type: 'object' },
+            // A module may defer a rarely-used tool: its definition is not sent up front, and
+            // Claude loads it with the tool-search tool when it needs it.
+            ...(def.defer_loading ? { defer_loading: true } : {}),
+          });
           routes.set(name, { mod, ts, name: def.name });
         }
       }

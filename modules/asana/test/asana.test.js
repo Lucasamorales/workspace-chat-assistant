@@ -137,3 +137,55 @@ test('access removed on Asana\'s side turns into a Reconnect request, and stored
   assert.deepEqual(ts, { connect: { reason: 'expired' } });
   assert.equal(await tokens.load(ctx), null);
 });
+
+/* ---------- the tool payload: what is loaded up front, and what is looked up ---------- */
+
+const MANY_TOOLS = [
+  { name: 'search_tasks', inputSchema: { type: 'object' }, annotations: { readOnlyHint: true } },
+  { name: 'get_task', inputSchema: { type: 'object' }, annotations: { readOnlyHint: true } },
+  { name: 'create_task', inputSchema: { type: 'object' } },
+  { name: 'update_task', inputSchema: { type: 'object' } },
+  { name: 'add_custom_field_setting', inputSchema: { type: 'object' } },
+  { name: 'duplicate_portfolio', inputSchema: { type: 'object' } },
+  { name: 'reorder_sections', inputSchema: { type: 'object' } },
+];
+
+async function toolsetWith(settings = {}) {
+  const env = { ...ENV, ...settings };
+  const ctx = ctxFor({ env });
+  await tokens.saveFromOAuth(ctx, { access_token: 'AT', expires_in: 3600, data: { email: 'robin@example.com' } });
+  const client = {
+    listTools: async () => ({ tools: MANY_TOOLS }),
+    callTool: async ({ name }) => ({ content: [{ type: 'text', text: `${name} done` }] }),
+    close: async () => {},
+  };
+  return createAsanaToolset(ctx, { connect: async () => client });
+}
+
+test('everyday tools are loaded; the long tail is deferred, not dropped', async () => {
+  const ts = await toolsetWith();
+
+  assert.ok(ts.loadedTools.includes('search_tasks'));
+  assert.ok(ts.loadedTools.includes('create_task'));
+  assert.ok(ts.deferredTools.includes('duplicate_portfolio'), 'rarely used, so not paid for on every request');
+
+  const deferred = ts.definitions.filter(d => d.defer_loading).map(d => d.name);
+  assert.deepEqual(deferred.sort(), ts.deferredTools.slice().sort());
+  assert.equal(ts.definitions.length, MANY_TOOLS.length, 'every tool is still offered, deferred or not');
+
+  // And a deferred tool still runs when Claude finds it.
+  assert.deepEqual(await ts.execute('duplicate_portfolio', {}), { content: 'duplicate_portfolio done', isError: false });
+  assert.equal(ts.needsApproval('duplicate_portfolio'), true, 'an unannotated tool still asks first');
+});
+
+test('ASANA_TOOLS names the list exactly, and unknown names are logged not obeyed', async () => {
+  const ts = await toolsetWith({ ASANA_TOOLS: 'get_task,reorder_sections,not_a_tool' });
+  assert.deepEqual(ts.loadedTools.sort(), ['get_task', 'reorder_sections']);
+  assert.ok(ts.deferredTools.includes('create_task'), 'anything not named is deferred');
+});
+
+test('if the list matches nothing, everything is loaded rather than nothing', async () => {
+  const ts = await toolsetWith({ ASANA_TOOLS: 'nope,also_nope' });
+  assert.equal(ts.deferredTools.length, 0, 'a cheaper Asana that cannot work is not cheaper');
+  assert.equal(ts.loadedTools.length, MANY_TOOLS.length);
+});

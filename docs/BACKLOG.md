@@ -227,6 +227,19 @@ Decision: `docs/decisions/0004-admin-module.md`. Config stays the floor; grants 
 | G11 | ✅ RUNBOOK §6b: read access with `/access` | Docs |
 | G12 | Try it live: grant a colleague a module, confirm they can use it and nobody else changed | After deploy |
 
+## Epic 10: what a request costs to send
+
+Decision: `docs/decisions/0008-tool-payload.md`.
+
+| # | Item | Acceptance |
+|---|---|---|
+| T1 | ✅ Everyday Asana tools loaded, the rest deferred behind tool search | Tests |
+| T2 | ✅ `ASANA_TOOLS` names the list exactly; a list matching nothing loads everything | Tests |
+| T3 | After a week of real use: read `/costs`, set `ASANA_TOOLS` to what people actually use | Cost per Asana request falls |
+| T4 | Measure whether deferred tools are ever searched for; trim or grow the list accordingly | Decision from data |
+| T5 | Try a one-hour cache TTL: it cuts the *first* request in a burst, which is the expensive one | Cache hit rate and cost per request |
+| T6 | *Then* consider Haiku 4.5 for cheaper modules (`claude-haiku-4-5`, $1/$5) | Only after the payload work |
+
 ## Epic 9: scoped conversation
 
 Decision: `docs/decisions/0007-scoped-conversation.md`.

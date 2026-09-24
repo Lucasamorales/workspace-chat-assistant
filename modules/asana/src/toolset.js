@@ -11,6 +11,36 @@ const { splitInput, describeTool, describeFields, createNameResolver } = require
 const DEFAULT_MCP_URL = 'https://mcp.asana.com/v2/mcp';
 const MAX_TOOLS = 100;
 
+/**
+ * Asana's MCP server offers around a hundred tools, and every definition is re-sent on every
+ * request — tens of thousands of tokens before anyone has typed a word. So only the tools people
+ * actually use are loaded; the rest are deferred, and Claude pulls one in when it needs it.
+ *
+ * Nothing becomes impossible: a deferred tool is still callable, it just isn't paid for up front.
+ * `ASANA_TOOLS` overrides this list; if neither matches anything, everything is loaded, because
+ * a cheaper Asana that cannot do its job is not cheaper.
+ */
+const EVERYDAY = [
+  /search/i, /list/i, /^(asana_)?get_/i, /create/i, /update/i,
+  /complete/i, /comment|story/i, /me|current_user/i, /project/i, /workspace/i,
+];
+
+function splitTools(tools, setting, log) {
+  const wanted = String(setting || '').split(',').map(s => s.trim()).filter(Boolean);
+  const keep = wanted.length
+    ? tools.filter(t => wanted.includes(t.name))
+    : tools.filter(t => EVERYDAY.some(re => re.test(t.name)));
+
+  if (wanted.length) {
+    const unknown = wanted.filter(name => !tools.some(t => t.name === name));
+    if (unknown.length) log.warn('ASANA_TOOLS names no such tool', { unknown });
+  }
+  // Fail open: never leave Claude with nothing to work with.
+  if (!keep.length) return { loaded: tools, deferred: [] };
+  const names = new Set(keep.map(t => t.name));
+  return { loaded: keep, deferred: tools.filter(t => !names.has(t.name)) };
+}
+
 function mcpUrl(settings) {
   const raw = settings.ASANA_MCP_URL || DEFAULT_MCP_URL;
   const url = new URL(raw);
@@ -102,12 +132,22 @@ async function createAsanaToolset(ctx, { connect = connectMcp } = {}) {
     callTool: async (name, args) => renderResult(await client.callTool({ name, arguments: args })),
   });
 
+  const { loaded, deferred } = splitTools(tools, ctx.settings.ASANA_TOOLS, ctx.log);
+  ctx.log.info('asana tools', { loaded: loaded.length, deferred: deferred.length });
+  const define = (t, defer) => ({
+    name: t.name,
+    description: t.description || t.title || t.name,
+    input_schema: t.inputSchema || { type: 'object' },
+    // Deferred definitions are not sent up front; Claude finds them with the tool-search tool
+    // and they are then called like any other.
+    ...(defer ? { defer_loading: true } : {}),
+  });
+
   return {
-    definitions: tools.map(t => ({
-      name: t.name,
-      description: t.description || t.title || t.name,
-      input_schema: t.inputSchema || { type: 'object' },
-    })),
+    loadedTools: loaded.map(t => t.name),
+    deferredTools: deferred.map(t => t.name),
+
+    definitions: [...loaded.map(t => define(t, false)), ...deferred.map(t => define(t, true))],
 
     needsApproval,
 
