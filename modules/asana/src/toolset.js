@@ -12,14 +12,14 @@ const DEFAULT_MCP_URL = 'https://mcp.asana.com/v2/mcp';
 const MAX_TOOLS = 100;
 
 /**
- * Asana's MCP server offers about thirty tools, and every definition is re-sent on every request
- * — around 14,000 tokens before anyone has typed a word. So only the tools people actually use
+ * Asana's MCP server offers 39 tools, and every definition is re-sent on every request — around
+ * 17,500 tokens before anyone has typed a word. So only the tools people actually use
  * are loaded; the rest are deferred, and Claude pulls one in when it needs it.
  *
  * Nothing becomes impossible: a deferred tool is still callable, it just isn't paid for up front.
  *
  * **Every pattern is anchored on purpose.** The first version of this list used loose fragments
- * (/get_/, /me|current_user/) and kept 30 tools out of 31 — /me/ matches "add_com*me*nt" — so the
+ * (/get_/, /me|current_user/) and kept 36 tools out of 39 — /me/ matches "add_com*me*nt" — so the
  * curation cost a lot of thought and saved nothing. A pattern here must match a whole tool name.
  *
  * `ASANA_TOOLS` overrides the list entirely, and is the better setting once `/asana tools` has

@@ -60,13 +60,13 @@ Two safety rules, both tested:
 
 Two things in the context above were wrong, and together they meant the change saved nothing.
 
-**The server offers about thirty tools, not a hundred.** Counted against the real tool list:
-31. Still ~14,000 tokens on every request, so the decision stands — but the headline was
+**The server offers 39 tools, not a hundred.** Counted from /asana tools against the live
+workspace. Still ~17,500 tokens on every request, so the decision stands — but the headline was
 overstated.
 
-**The "everyday" patterns kept 30 of those 31.** They were loose fragments — `/^get_/` alone kept
-17, and `/me|current_user/` matched `add_com`**`me`**`nt` and `get_attach`**`me`**`nts`. Only
-`delete_task` was ever deferred.
+**The "everyday" patterns kept 36 of those 39.** They were loose fragments — `/^get_/` alone kept
+17, and `/me|current_user/` matched `add_com`**`me`**`nt` and `get_attach`**`me`**`nts`. Only `delete_task`,
+`log_widget_event` and `save_task_changes_confirm` were ever deferred.
 
 The tests did not catch it because they ran against seven invented tool names
 (`duplicate_portfolio`, `reorder_sections`) chosen so the filter appeared to work. They proved the
@@ -75,12 +75,16 @@ use the strings the filter will meet.**
 
 Now:
 
-- every pattern is anchored to a whole tool name, and 13 of 31 are loaded;
+- every pattern is anchored to a whole tool name, and 13 of 39 are loaded;
 - below four matches the code loads everything, on the assumption that the patterns do not fit
   this server's naming rather than that Asana offers three tools;
 - above 60% kept it logs a warning, because a curation that keeps almost everything costs the
   same as none and looks like it worked;
 - the tests use the real names and assert the **ratio**, not just that the mechanism runs.
 
-Cost, estimated from the payload: a first Asana request drops from ~7.7¢ to ~2.8¢. Measured
+Deferring also keeps Asana's own preview → confirm tools out of the loaded set, which matters
+beyond cost: Buddy's approval card is already the confirmation step, and loading those would put
+a second one in front of it.
+
+Cost, estimated from the payload: a first Asana request drops from ~8.5¢ to ~2.8¢. Measured
 figures replace these once `/costs` has a week of data.

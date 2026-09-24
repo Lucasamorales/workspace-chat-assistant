@@ -43,12 +43,13 @@ live Chat app, and what is still unverified against reality).
 
 ### Fixed
 - **The Asana tool curation was not curating.** The "everyday" patterns were loose fragments, so
-  against the real tool names they deferred exactly one tool out of 31 — `/^get_/` alone kept 17,
-  and `/me|current_user/` matched `add_comment`. Every pattern is now anchored to a whole tool
-  name (13 of 31 loaded), the code loads everything if fewer than four match and warns if it keeps
+  against the real tool names they deferred three tools out of 39 — `/^get_/` alone kept 17, and
+  `/me|current_user/` matched `add_comment`. Every pattern is now anchored to a whole tool name
+  (13 of 39 loaded, checked against the live `/asana tools` output), the code loads everything if fewer than four match and warns if it keeps
   more than 60%, and the tests use Asana's real tool names and assert the ratio. They previously
-  used seven invented names picked so the filter looked like it worked. Estimated effect on a
-  first Asana request: ~7.7¢ → ~2.8¢.
+  used seven invented names picked so the filter looked like it worked. Estimated effect on a first Asana
+  request: ~8.5¢ → ~2.8¢. It also keeps Asana's own preview/confirm tools out of the loaded set,
+  which would otherwise put a second approval step in front of Buddy's card.
 - **The cost settings were never reaching Cloud Run.** `deploy.sh` passes a fixed list of
   variables, and `MAX_OUTPUT_TOKENS`, `MAX_HISTORY_CHARS`, `CACHE_TTL` and
   `MONTHLY_USD_CAP_SCOPED` were not on it: editing them in `infra/config.env` changed nothing,

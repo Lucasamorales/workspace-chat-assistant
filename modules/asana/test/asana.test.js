@@ -144,16 +144,19 @@ test('access removed on Asana\'s side turns into a Reconnect request, and stored
  * The tool names Asana's MCP server actually returns, not invented ones.
  *
  * This matters: the first version of the everyday list was tested against seven made-up names
- * chosen so it looked like it worked, and against the real ones it deferred exactly one tool
- * out of thirty-one. A test of a filter has to use the strings the filter will meet.
+ * chosen so it looked like it worked, and against the real ones it deferred three tools
+ * out of thirty-nine. A test of a filter has to use the strings the filter will meet.
  */
 const REAL_TOOL_NAMES = [
-  'add_comment', 'create_project', 'create_project_from_template', 'create_project_preview_v3',
-  'create_project_status_update', 'create_task_from_template', 'create_task_preview_v4', 'create_tasks',
-  'delete_task', 'get_agent', 'get_attachments', 'get_items_for_portfolio', 'get_me', 'get_my_tasks',
-  'get_portfolio', 'get_portfolios', 'get_project', 'get_projects', 'get_status_overview', 'get_task',
-  'get_task_stories', 'get_tasks', 'get_teams', 'get_user', 'get_users', 'get_workspace_agents',
-  'search_objects', 'search_tasks', 'search_tasks_preview', 'update_project', 'update_tasks',
+  'get_workspace_agents', 'get_agent', 'get_attachments', 'get_portfolio', 'get_portfolios',
+  'get_items_for_portfolio', 'get_project', 'get_project_internal', 'get_projects', 'get_status_overview',
+  'search_tasks', 'get_task', 'get_task_stories', 'get_tasks', 'get_my_tasks', 'get_teams',
+  'search_objects', 'search_objects_internal', 'get_user', 'get_me', 'get_users', 'log_widget_event',
+  'create_task_preview_v4', 'search_tasks_preview', 'create_project_preview_v3',
+  'create_task_from_template', 'create_project_from_template', 'create_project_status_update',
+  'create_project', 'update_project', 'create_tasks', 'update_tasks', 'add_comment', 'delete_task',
+  'create_task_confirm', 'save_task_changes_confirm', 'create_project_confirm',
+  'create_project_confirm_populate', 'save_project_changes_confirm',
 ];
 
 const READ_ONLY = new Set(['search_tasks', 'get_task', 'get_tasks', 'get_my_tasks', 'get_me']);
@@ -200,6 +203,16 @@ test('the everyday list actually cuts the payload: most of Asana is deferred', a
   assert.ok(ts.deferredTools.length > MANY_TOOLS.length / 2,
     `only ${ts.deferredTools.length} of ${MANY_TOOLS.length} deferred — the patterns are matching too much`);
   assert.ok(ts.loadedTools.length >= 8, 'but not so few that ordinary work needs a lookup every time');
+});
+
+// Asana offers its own preview → confirm flow for creating things. Buddy's approval card IS the
+// confirmation step, so loading those would put a second one in front of it.
+test('Asana own preview and confirm tools stay out of the loaded set', async () => {
+  const ts = await toolsetWith();
+  for (const name of ['create_task_preview_v4', 'create_task_confirm', 'save_task_changes_confirm']) {
+    assert.ok(ts.deferredTools.includes(name), `${name} should not be loaded up front`);
+  }
+  assert.ok(ts.loadedTools.includes('create_tasks'), 'the one-step tool is the one Buddy uses');
 });
 
 test('a pattern matches a whole tool name, never a fragment of one', () => {
