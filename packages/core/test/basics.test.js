@@ -107,3 +107,18 @@ test('history is capped by size as well as by count, since it is re-sent every r
   assert.equal(loaded[0].role, 'user', 'and always starts with a user message');
   assert.match(loaded.at(-1).content, /answer 5/, 'keeping the most recent exchange');
 });
+
+// Anthropic charges more to write a cache that lives an hour than one that lives five minutes
+// (2x the input price rather than 1.25x). We ask for an hour, so charging the five-minute rate
+// under-reports every first request — the expensive one — by 60%.
+test('usage: a one-hour cache write is priced as one, not as a five-minute one', () => {
+  const prices = { inPerMTok: 2, outPerMTok: 10 };
+  const write = { cache_creation_input_tokens: 1e6 };
+  assert.equal(costUsd(write, prices, null, '1h'), 4);
+  assert.equal(costUsd(write, prices, null, '5m'), 2.5);
+  assert.equal(costUsd(write, prices), 4, 'an hour is what the service asks for, so it is the default');
+
+  // Haiku's writes follow its own input price, not Sonnet's.
+  const perModel = { default: prices, 'claude-haiku-4-5': { inPerMTok: 1, outPerMTok: 5 } };
+  assert.equal(costUsd(write, perModel, 'claude-haiku-4-5', '1h'), 2);
+});

@@ -11,6 +11,13 @@ live Chat app, and what is still unverified against reality).
 
 ## 2026-09-24
 
+### Fixed
+- **Cache writes were priced at the five-minute rate while we buy the one-hour one.** Anthropic
+  charges 2x the input price to write a cache that lives an hour, against 1.25x for five minutes;
+  we switched to an hour this morning and kept charging 1.25x.  was under-reporting the
+  first request of every burst — the expensive one — by 60%, and the monthly cap was that much too
+  generous. The rate now follows , per model.
+
 ### Changed
 - **"Approve all" counts up while it works.** Twenty Asana changes take half a minute, and the
   card used to sit unchanged until every one had finished — a click that looked like nothing

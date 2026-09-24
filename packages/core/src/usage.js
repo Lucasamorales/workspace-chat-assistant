@@ -1,6 +1,12 @@
 /** Per-user monthly spend tracking and the hard budget cap (checked before every Claude call). */
 
-const CACHE_WRITE_MULTIPLIER = 1.25;
+/**
+ * Writing to the cache costs more than plain input, and how much more depends on how long the
+ * cache is asked to live: a five-minute write is 1.25x the input price, an hour is 2x. We ask for
+ * an hour (CACHE_TTL), so charging 1.25 would under-report every first request by 60%.
+ * Reads are a tenth either way.
+ */
+const CACHE_WRITE_MULTIPLIER = { '5m': 1.25, '1h': 2 };
 const CACHE_READ_MULTIPLIER = 0.1;
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -27,15 +33,16 @@ function pricesFor(prices, model) {
   return prices[model] || prices.default || { inPerMTok: 0, outPerMTok: 0 };
 }
 
-function costUsd(usage, prices, model) {
+function costUsd(usage, prices, model, cacheTtl = '1h') {
   const input = usage.input_tokens || 0;
   const cacheWrite = usage.cache_creation_input_tokens || 0;
   const cacheRead = usage.cache_read_input_tokens || 0;
   const output = usage.output_tokens || 0;
   const rate = pricesFor(prices, model);
+  const writeRate = CACHE_WRITE_MULTIPLIER[cacheTtl] || CACHE_WRITE_MULTIPLIER['1h'];
   return (
     input * rate.inPerMTok
-    + cacheWrite * rate.inPerMTok * CACHE_WRITE_MULTIPLIER
+    + cacheWrite * rate.inPerMTok * writeRate
     + cacheRead * rate.inPerMTok * CACHE_READ_MULTIPLIER
     + output * rate.outPerMTok
   ) / 1e6;
@@ -44,7 +51,7 @@ function costUsd(usage, prices, model) {
 const EVENT_TTL_DAYS = 90;
 const randomId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
-function createUsage({ store, prices, capUsd, now = () => new Date(), eventTtlDays = EVENT_TTL_DAYS }) {
+function createUsage({ store, prices, capUsd, cacheTtl = '1h', now = () => new Date(), eventTtlDays = EVENT_TTL_DAYS }) {
   const col = store.collection('core__usage');
   const events = store.collection('core__usage_events');
   const empty = () => ({ month: monthKey(now()), inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, usd: 0 });
@@ -68,7 +75,7 @@ function createUsage({ store, prices, capUsd, now = () => new Date(), eventTtlDa
           outputTokens: u.outputTokens + (usage.output_tokens || 0),
           cacheReadTokens: u.cacheReadTokens + (usage.cache_read_input_tokens || 0),
           cacheWriteTokens: u.cacheWriteTokens + (usage.cache_creation_input_tokens || 0),
-          usd: u.usd + costUsd(usage, prices, model),
+          usd: u.usd + costUsd(usage, prices, model, cacheTtl),
         };
       });
     },
@@ -104,7 +111,7 @@ function createUsage({ store, prices, capUsd, now = () => new Date(), eventTtlDa
           totals.outputTokens += usage.output_tokens || 0;
           totals.cacheReadTokens += usage.cache_read_input_tokens || 0;
           totals.cacheWriteTokens += usage.cache_creation_input_tokens || 0;
-          totals.usd += costUsd(usage, prices, usedModel);
+          totals.usd += costUsd(usage, prices, usedModel, cacheTtl);
           await budget.record(usage, usedModel);
         },
 

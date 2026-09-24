@@ -58,7 +58,7 @@ const store = core.createFirestoreStore(new Firestore({ ignoreUndefinedPropertie
 // Access granted from chat by an admin. Config remains the floor: see packages/core/grants.js.
 const grants = core.createGrants({ store });
 
-const usage = core.createUsage({ store, capUsd: config.MONTHLY_USD_CAP, prices });
+const usage = core.createUsage({ store, capUsd: config.MONTHLY_USD_CAP, prices, cacheTtl: config.CACHE_TTL });
 
 const modules = config.BUDDY_MODULES.map(name => {
   if (!/^[a-z][a-z0-9]*$/.test(name)) throw new Error(`invalid module name "${name}"`);
