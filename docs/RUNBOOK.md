@@ -66,6 +66,18 @@ Saving this switches traffic from the old bot to Buddy. To roll back, put the ol
 
 ## 5. Acceptance checklist
 
+**Do this one first.** Asana's rarely-used tools are deferred and looked up with the API's
+tool-search tool, which has never run against a live call. If the API rejects it, **every** Asana
+request fails, not just the deferred ones:
+
+- [ ] "What's due for me this week?" → a normal answer. An error here is the tool-search tool, not
+      Asana: the fix is to stop deferring (`ASANA_TOOLS` naming every tool, or one commit in
+      `packages/core/src/claude.js`). Check the logs for `invalid_request_error`
+- [ ] `/asana tools` → "keeps to hand (13)" and "Another 18 Asana actions exist". A much bigger
+      first number means the patterns don't fit this workspace's tool names — set `ASANA_TOOLS`
+      from this output
+- [ ] Ask for something unusual ("show me my portfolios") → still works, via a lookup
+
 In a DM with Buddy:
 - [ ] `hello` → a reply replaces "_Hmm, give me a sec…_"
 - [ ] `/help` → card with examples and buttons (Connect Asana, My usage, Start fresh)
