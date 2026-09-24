@@ -11,6 +11,15 @@ live Chat app, and what is still unverified against reality).
 
 ## 2026-09-24
 
+### Changed
+- **Asana-only people run on Haiku 4.5.** They are the heaviest users and the ones the saving is
+  meant for: alexandra and jordan were 74% of the first day of spend. Haiku is half price in
+  and out, so their requests drop from ~12 cents to roughly 3 once the tool curation lands too.
+  Effort stays at medium — Asana plans multi-step writes to real client projects, and a mistake
+  there is wrong data, not a worse sentence. Robin, Remy and Riley are unaffected: they have the
+  assistant, so they get free-form conversation and therefore the default model. **Run the Asana
+  eval before trusting this** (); reverting is one line.
+
 ### Fixed
 - **Cache writes were priced at the five-minute rate while we buy the one-hour one.** Anthropic
   charges 2x the input price to write a cache that lives an hour, against 1.25x for five minutes;
