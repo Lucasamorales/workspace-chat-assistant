@@ -442,3 +442,35 @@ test('look: Buddy\'s face in card headers and orange main buttons, only when ima
     cards.setAssetsUrl(null);
   }
 });
+
+test('a long "approve all" shows progress instead of sitting still until the end', async () => {
+  // Six Asana-ish calls at a few seconds each is half a minute of a card that has not moved.
+  let clock = Date.parse('2026-09-24T10:00:00Z');
+  const tasks = Array.from({ length: 6 }, (_, i) => ({ name: `Task ${i + 1}` }));
+  const { handle, settle, chat, executed } = setup(
+    [{ stop_reason: 'tool_use', content: [toolUse('w', 'tasks__create', { tasks })] }, textReply('All six done.')],
+    { now: () => clock },
+  );
+  await handle(message(ROBIN, DM, 'create six tasks'));
+  await settle();
+
+  const cardMessage = chat.log.filter(l => l.op === 'card').at(-1).name;
+  const before = chat.log.length;
+  // Each one takes a while, as a real Asana call does.
+  const original = executed.push.bind(executed);
+  executed.push = entry => { clock += 2500; return original(entry); };
+
+  await handle(click(ROBIN, ACTIONS.APPROVE_ALL, { pendingId: param(buttonsOf(lastCard(chat))[0], 'pendingId') }));
+  await settle();
+
+  assert.equal(executed.length, 6, 'every task still ran');
+  const redraws = chat.log.slice(before).filter(l => l.op === 'card' && l.name === cardMessage);
+  // What matters is not how many redraws but that one was drawn *during* the batch: some items
+  // already done while others were still going. A card only ever drawn at the end never shows that.
+  const midBatch = redraws.filter(l => {
+    const json = JSON.stringify(l.cardsV2);
+    return json.includes('Done!') && json.includes('On it');
+  });
+  assert.ok(midBatch.length >= 1, 'the card showed the batch part-way through, not only once finished');
+  assert.equal(chat.log.filter(l => l.op === 'post').at(-1).text, 'All six done.');
+});

@@ -11,6 +11,13 @@ live Chat app, and what is still unverified against reality).
 
 ## 2026-09-24
 
+### Changed
+- **"Approve all" counts up while it works.** Twenty Asana changes take half a minute, and the
+  card used to sit unchanged until every one had finished — a click that looked like nothing
+  happened. It is now redrawn as the batch goes, at most once every few seconds so each redraw is
+  not a Chat API call per Asana call, and a redraw that fails is logged rather than stopping the
+  work.
+
 ### Fixed
 - **Asana could get stuck in a "just ask me to carry on" loop.** This morning's 4,000-token
   output ceiling was too low to write a large batch tool call — updating one field on 54 tasks

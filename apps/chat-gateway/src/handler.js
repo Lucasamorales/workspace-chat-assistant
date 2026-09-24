@@ -17,6 +17,9 @@ const EVENT_TTL_MS = 24 * 60 * 60 * 1000;
 // Firestore documents max out at 1 MiB; leave room for per-item results added later.
 const MAX_PENDING_BYTES = 500_000;
 const MAX_ITEM_RESULT_CHARS = 10_000;
+// How often a long batch redraws its card while it runs. Every item would be a Chat API call per
+// Asana call; a few seconds is enough for the count to visibly move.
+const PROGRESS_EVERY_MS = 3_000;
 const MAX_REQUEST_TEXT_CHARS = 8_000;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const ID_PATTERN = /^[A-Za-z0-9_-]{20,64}$/;
@@ -451,10 +454,18 @@ function createEventHandler(deps) {
     await chat.replaceWithCard(record.cardMessage, card.text, card.cardsV2);
   }
 
-  /** Runs items that a click moved to 'running', saving each result as soon as it exists. */
+  /**
+   * Runs items that a click moved to 'running', saving each result as soon as it exists.
+   *
+   * "Approve all" on twenty Asana changes takes half a minute, and a card that only updates at
+   * the end is half a minute of nothing happening after a click. So it is redrawn as the batch
+   * goes — no more than once every few seconds, because each redraw is a Chat API call, and never
+   * at the cost of the work: a redraw that fails is logged and the items carry on.
+   */
   async function runApproved(id, record, indexes) {
+    let shownAt = now();
     await withToolset(baseOfRecord(record), async toolset => {
-      for (const i of indexes) {
+      for (const [done, i] of indexes.entries()) {
         const r = await executeApprovedItem(toolset, record.items[i]);
         const result = { content: String(r.content ?? '').slice(0, MAX_ITEM_RESULT_CHARS), isError: Boolean(r.isError) };
         await pendingCol.update(id, doc => {
@@ -463,6 +474,12 @@ function createEventHandler(deps) {
           doc.items[i].result = result;
           return doc;
         });
+        // The last item is left to the caller's own refresh, so the finished card is drawn once.
+        const more = done < indexes.length - 1;
+        if (more && now() - shownAt >= PROGRESS_EVERY_MS) {
+          shownAt = now();
+          await refreshCard(id).catch(error => log.warn('could not show approval progress', { error }));
+        }
       }
     });
   }
