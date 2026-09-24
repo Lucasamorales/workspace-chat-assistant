@@ -37,7 +37,7 @@ admin must approve it.
 ## 3. Deploy
 
 **Windows: run it with Git Bash, not WSL.** `bash` in PowerShell resolves to
-`C:\WINDOWS\system32ash.exe`, which is WSL — it has its own `HOME`, so gcloud there has no
+`C:\WINDOWS\system32\bash.exe`, which is WSL — it has its own `HOME`, so gcloud there has no
 credentials and reports "no active account selected" however many times you log in on the Windows
 side. The script now refuses to run under WSL and says this. Use:
 
