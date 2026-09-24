@@ -86,10 +86,10 @@ live Chat app, and what is still unverified against reality).
   use, English or Spanish, no commands needed. A question about the leave *policy* still goes to
   the manual, anything unrecognised still goes to Claude, and a calendar failure falls through
   rather than failing the message. That request now costs nothing.
-- **An hour of prompt cache instead of five minutes**, a **4,000-token ceiling on replies**
-  (output is five times the input price) and **history capped by size, not just message count**
-  (8,000 characters; twenty messages is nothing in a terse thread and a lot in a chatty one).
-  All three are settings. Decision record `0009-cost-reduction.md`.
+- **An hour of prompt cache instead of five minutes**, a **4,000-token ceiling on replies** and
+  **history capped by size, not just message count** (8,000 characters; twenty messages is nothing
+  in a terse thread and a lot in a chatty one). All three are settings. Decision record
+  `0009-cost-reduction.md`. _The output ceiling was reverted the same day — see Fixed above._
 
 ### Changed
 - **Asana no longer sends ~100 tool definitions on every request.** Asana's MCP server offers about
