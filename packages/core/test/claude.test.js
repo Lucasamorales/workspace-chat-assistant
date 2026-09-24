@@ -19,7 +19,9 @@ test('the request caches the stable prefix for an hour, not five minutes', async
   await claude.create({ system: 'voice', tools: [{ name: 'a' }], messages: [{ role: 'user', content: 'hi' }] });
   assert.deepEqual(sent[0].cache_control, { type: 'ephemeral', ttl: '1h' });
   assert.equal(sent[0].model, 'claude-sonnet-5');
-  assert.equal(sent[0].max_tokens, 4000, 'a ceiling on output: it costs five times the input price');
+  // A ceiling against a runaway answer, not a budget: headroom that is never written costs
+  // nothing, and too little of it makes a large tool call impossible to write at all.
+  assert.equal(sent[0].max_tokens, 16000);
 });
 
 test('deferring tools brings in the search tool, so nothing becomes unreachable', async () => {

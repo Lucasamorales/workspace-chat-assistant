@@ -31,7 +31,9 @@ const config = core.loadConfig({
   USD_PER_MTOK_OUT: { type: 'number', min: 0, required: true },
   MAX_HISTORY_MESSAGES: { type: 'number', min: 2, default: 20 },
   MAX_HISTORY_CHARS: { type: 'number', min: 500, default: 8000 },
-  MAX_OUTPUT_TOKENS: { type: 'number', min: 256, default: 4000 },
+  // A ceiling, not a budget: unwritten tokens cost nothing. Too low and a large tool call
+  // cannot be written at all, and every retry is cut at the same place.
+  MAX_OUTPUT_TOKENS: { type: 'number', min: 1000, default: 16000 },
   CACHE_TTL: { type: 'enum', values: ['5m', '1h'], default: '1h' },
   // "manual:claude-haiku-4-5:low" — the model and effort for people scoped to that module.
   MODULE_TUNING: { type: 'list', default: [] },

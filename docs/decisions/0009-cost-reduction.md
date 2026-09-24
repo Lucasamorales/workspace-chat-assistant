@@ -103,3 +103,27 @@ Two are deliberately left off:
   waits for the eval.
 - The eval's known-good answers. `evals/manual.md` has the twenty questions; the answers need
   someone who knows the manual, and inventing them would defeat the purpose.
+
+## Amendment, 2026-09-24 (same day): lever 2 was wrong, and it broke Asana
+
+Within hours of the deploy a user hit a loop: Buddy said "Oops, I got cut off. Just ask me to
+carry on", they said carry on, and it was cut off again, four times over.
+
+**`max_tokens` is a ceiling, not a budget.** Output is billed per token written; headroom that is
+never used costs nothing. Lowering the ceiling from 16,000 to 4,000 therefore saved nothing on
+ordinary replies. What it did was make a legitimate request impossible: updating one custom field
+on 54 tasks is a tool call of roughly 7,000 output tokens, so it was truncated every time, at the
+same place, deterministically. The reply then invited the user to carry on — which regenerated the
+identical too-long call. The "saving" cost four full requests and about twenty wasted minutes.
+
+Reverted to 16,000, and two guards added so the shape of the failure cannot recur silently:
+
+- the loop tells **cut off mid-answer** apart from **cut off mid-tool-call** (`max_tokens_tool`).
+  A half-written tool call is discarded, so "carry on" is the one thing that cannot work; the
+  reply now asks for a smaller batch instead;
+- the Asana instructions cap a single call at 20 items, which keeps the common case well inside
+  the ceiling in the first place.
+
+The lesson for the rest of this document: a lever that changes a **limit** is not the same as a
+lever that changes an **amount**. Levers 1, 3, 4, 5, 9 and 10 reduce what is sent or generated,
+and are real savings. Lever 2 only narrowed what was possible.

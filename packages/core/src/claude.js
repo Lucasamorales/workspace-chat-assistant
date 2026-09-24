@@ -34,7 +34,7 @@ const clearing = keep => ({
   }],
 });
 
-function createClaude({ apiKey, model, effort, maxTokens = 4000, cacheTtl = '1h', clearToolUses = 0, client }) {
+function createClaude({ apiKey, model, effort, maxTokens = 16000, cacheTtl = '1h', clearToolUses = 0, client }) {
   const anthropic = client || new Anthropic({ apiKey });
   return {
     /**

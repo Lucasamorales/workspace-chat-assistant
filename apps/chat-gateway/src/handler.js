@@ -330,6 +330,13 @@ function createEventHandler(deps) {
     let reply = result.text;
     if (result.stopReason === 'refusal') reply = 'Sorry, that\'s not one I can help with.';
     if (result.stopReason === 'max_tokens') reply += '\n\n_(Oops, I got cut off. Just ask me to carry on.)_';
+    // Never "carry on" here. A half-written tool call is discarded, so carrying on writes the very
+    // same one and is cut off at the very same place — the loop a user hit on 24 September. The
+    // only way out is a smaller batch, so ask for that instead.
+    if (result.stopReason === 'max_tokens_tool') {
+      reply = `${reply ? `${reply}\n\n` : ''}_(That's more than I can change in one go. Ask me to do it in `
+        + 'smaller batches — around twenty at a time works.)_';
+    }
     if (result.stopReason === 'max_steps') reply = `${reply ? `${reply}\n\n` : ''}_(That took a few too many steps. Try asking for one thing at a time?)_`;
     // A normal request always gets an answer; a follow-up after an approval may have nothing to add.
     if (!reply && !messageName) return;

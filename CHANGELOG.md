@@ -11,6 +11,16 @@ live Chat app, and what is still unverified against reality).
 
 ## 2026-09-24
 
+### Fixed
+- **Asana could get stuck in a "just ask me to carry on" loop.** This morning's 4,000-token
+  output ceiling was too low to write a large batch tool call — updating one field on 54 tasks
+  needs about 7,000 — so the call was truncated every time, at the same place, and the reply
+  invited a retry that reproduced it exactly.  is a ceiling, not a budget: unwritten
+  headroom costs nothing, so the lower limit saved nothing and only narrowed what was possible.
+  Back to 16,000. The loop now tells a truncated **answer** apart from a truncated **tool call**
+  and asks for a smaller batch rather than offering to carry on, and Asana is told to change at
+  most 20 things per call.
+
 ### Changed
 - **Riley can test Buddy end to end.** Added to `ALLOWED_USERS` and to Asana, the assistant,
   files, kudos (with the kudos admin role) and the manual admin role; basics, ooo and the manual

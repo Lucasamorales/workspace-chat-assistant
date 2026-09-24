@@ -66,7 +66,17 @@ async function drive({ claude, system, toolset, budget, maxSteps, log, onProgres
 
     if (res.stop_reason === 'pause_turn') continue;
     if (res.stop_reason !== 'tool_use') {
-      return { status: 'done', text: textOf(res.content), stopReason: res.stop_reason, messages };
+      // Running out of room mid-answer and running out of room mid-tool-call look the same from
+      // here, but only one of them can be carried on: a half-written tool call is thrown away, so
+      // asking again produces the same half-written call. Name the two apart.
+      const cutOffMidCall = res.stop_reason === 'max_tokens'
+        && res.content.some(b => b.type === 'tool_use');
+      return {
+        status: 'done',
+        text: textOf(res.content),
+        stopReason: cutOffMidCall ? 'max_tokens_tool' : res.stop_reason,
+        messages,
+      };
     }
 
     const uses = res.content.filter(b => b.type === 'tool_use');
