@@ -227,6 +227,24 @@ Decision: `docs/decisions/0004-admin-module.md`. Config stays the floor; grants 
 | G11 | ✅ RUNBOOK §6b: read access with `/access` | Docs |
 | G12 | Try it live: grant a colleague a module, confirm they can use it and nobody else changed | After deploy |
 
+## Epic 11: cheap enough for the whole company
+
+Decision: `docs/decisions/0009-cost-reduction.md`. Order is cheapest risk first; anything that
+can cost precision (model, effort, retrieval size) waits for the eval.
+
+| # | Item | Acceptance |
+|---|---|---|
+| C1 | ✅ "Who's out?" answered without Claude, in natural language (EN + ES) | Tests; that request costs nothing |
+| C2 | ✅ One-hour prompt cache, 4,000-token output ceiling, history capped by size | Tests |
+| C3 | Shorten module instructions (7 × ~800 chars on every request) without changing behaviour | Tests still pass; instructions ~half |
+| C4 | A small eval: ~20 real questions with known-good answers, run before and after any change to model, effort or retrieval | Runnable; a baseline recorded |
+| C5 | Effort per module (Asana keeps more; looking something up needs less) | Eval holds |
+| C6 | Model per module — Haiku 4.5 for manual and ooo, Sonnet for asana and leave — **plus a per-model price table**, or `/costs` starts lying | Eval holds; `/costs` still correct |
+| C7 | Answer cache for the manual, keyed on the question embedding we already compute, invalidated by index version; hashes only, never question text | Repeat questions cost nothing |
+| C8 | Context editing (`clear_tool_uses`) for long Asana loops | Fewer tokens per multi-step request |
+| C9 | Default most people to scoped modules rather than the assistant at the company rollout | Fewer instructions and tools per request |
+| C10 | Re-read `/costs` after each step; stop when the number stops mattering | Measured, not assumed |
+
 ## Epic 10: what a request costs to send
 
 Decision: `docs/decisions/0008-tool-payload.md`.
