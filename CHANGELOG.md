@@ -18,7 +18,7 @@ live Chat app, and what is still unverified against reality).
   Effort stays at medium — Asana plans multi-step writes to real client projects, and a mistake
   there is wrong data, not a worse sentence. Robin, Remy and Riley are unaffected: they have the
   assistant, so they get free-form conversation and therefore the default model. **Run the Asana
-  eval before trusting this** (); reverting is one line.
+  eval before trusting this** (`docs/EVAL.md`); reverting is one line.
 
 ### Fixed
 - **Cache writes were priced at the five-minute rate while we buy the one-hour one.** Anthropic
