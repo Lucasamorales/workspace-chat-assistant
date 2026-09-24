@@ -23,6 +23,28 @@ function defaultTokens(log) {
   return createReadTokens({ auth: new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] }), log });
 }
 
+/**
+ * Questions this module can answer on its own, without Claude.
+ *
+ * "Who's out today?" has one right answer and a fixed shape, so paying a language model to
+ * format a list nobody argues about is waste — at company scale it is the most-asked question
+ * there is. Nobody types commands, so the match is on how people actually write, in both
+ * languages the team uses. Anything not obviously this question falls through to Claude.
+ */
+const ASKS_WHO_IS_OUT = [
+  // English: who is out / off / away / on holiday / on leave / ooo
+  /\bwho(?:'s|s| is| are)?\b[^?]{0,20}\b(?:out|off|away|ooo|on (?:holiday|leave|vacation|annual leave))\b/i,
+  /\b(?:anyone|anybody|someone)\b[^?]{0,20}\b(?:out|off|away|ooo|on (?:holiday|leave|vacation))\b/i,
+  // Spanish: quién está / quiénes están de vacaciones / licencia / fuera / ausente
+  /\bqui[eé]n(?:es)?\b[^?]{0,25}\b(?:de (?:vacaciones|licencia)|fuera|ausente|ooo)\b/i,
+  /\bqui[eé]n(?:es)?\s+(?:no\s+)?(?:est[aá]|est[aá]n)\b[^?]{0,25}\b(?:hoy|ma[ñn]eve|semana)\b/i,
+];
+
+/** A question about the OOO *policy* belongs to the manual, not here. */
+const ABOUT_THE_POLICY = /\b(polic|pol[ií]tica|procedure|procedimiento|how do i|c[oó]mo (?:pido|solicito)|request|book|solicitar|pedir)\b/i;
+
+const asksWhoIsOut = text => ASKS_WHO_IS_OUT.some(re => re.test(text)) && !ABOUT_THE_POLICY.test(text);
+
 /** "next week please" → "next week"; anything unrecognised falls back to today. */
 function whenFrom(text) {
   const t = String(text || '').toLowerCase();
@@ -85,6 +107,24 @@ function createOooModule({ calendar, tokenFor, now = () => new Date() } = {}) {
     examples: ['Who\'s out today?', 'Who\'s off next week?'],
     instructions: 'Out-of-office information comes from the who_is_out tool: use it instead of guessing, and '
       + 'never invent absences. Buddy can only read leave; booking or cancelling it is done elsewhere.',
+
+    /**
+     * Answers "who's out?" directly, without Claude. The reply is the same list the command
+     * gives; a question that isn't plainly this one returns null and carries on to Claude.
+     */
+    async handleMessage(ctx, message) {
+      const text = String((message && (message.argumentText || message.text)) || '').trim();
+      if (!text || !asksWhoIsOut(text)) return null;
+      try {
+        const { entries, label } = await lookup(ctx, whenFrom(text));
+        ctx.log.info('ooo answered without Claude', { when: label });
+        return replyFor(entries, label);
+      } catch (error) {
+        // Never turn a saving into a failure: if the calendar is unhappy, let Claude try.
+        ctx.log.warn('ooo direct answer failed, falling through to Claude', { error });
+        return null;
+      }
+    },
 
     commands: {
       ooo: {

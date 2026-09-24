@@ -90,3 +90,20 @@ test('long replies are split under the Chat limit', () => {
   assert.ok(parts.every(p => p.length <= 4000));
   assert.equal(parts.join('').length, 9000);
 });
+
+test('history is capped by size as well as by count, since it is re-sent every request', async () => {
+  const { createMemoryStore, createThreads } = require('../src');
+  const store = createMemoryStore();
+  const threads = createThreads({ store, maxMessages: 20, maxChars: 400, ttlDays: 30 });
+
+  for (let i = 0; i < 6; i += 1) {
+    await threads.append('thread', `question ${i} ${'x'.repeat(100)}`, `answer ${i} ${'y'.repeat(100)}`);
+  }
+  const loaded = await threads.load('thread');
+  const size = loaded.reduce((n, m) => n + m.content.length, 0);
+
+  assert.ok(size <= 600, `history should be trimmed to roughly the budget, got ${size}`);
+  assert.ok(loaded.length >= 2, 'but never trimmed away entirely');
+  assert.equal(loaded[0].role, 'user', 'and always starts with a user message');
+  assert.match(loaded.at(-1).content, /answer 5/, 'keeping the most recent exchange');
+});

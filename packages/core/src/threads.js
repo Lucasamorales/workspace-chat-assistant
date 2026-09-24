@@ -7,12 +7,20 @@ const crypto = require('crypto');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function createThreads({ store, maxMessages, ttlDays, now = () => Date.now() }) {
+function createThreads({ store, maxMessages, maxChars = 8000, ttlDays, now = () => Date.now() }) {
   const col = store.collection('core__threads');
   const id = threadKey => crypto.createHash('sha256').update(threadKey).digest('hex');
 
+  /**
+   * Twenty messages is nothing in a terse thread and a great deal in a chatty one, and history is
+   * re-sent on every request — so the cap is a size as well as a count. Oldest goes first.
+   */
   function normalize(messages) {
     const trimmed = messages.slice(-maxMessages);
+    let size = trimmed.reduce((n, m) => n + String(m.text || '').length, 0);
+    while (trimmed.length > 2 && size > maxChars) {
+      size -= String(trimmed.shift().text || '').length;
+    }
     while (trimmed.length && trimmed[0].role !== 'user') trimmed.shift(); // must start with the user
     return trimmed;
   }

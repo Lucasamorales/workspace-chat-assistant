@@ -12,6 +12,17 @@ live Chat app, and what is still unverified against reality).
 ## 2026-09-24
 
 ### Changed
+- **"Who's out?" is answered without Claude.** The most-asked question at company scale has one
+  right answer and a fixed shape, so `ooo` now answers it directly — in the words people actually
+  use, English or Spanish, no commands needed. A question about the leave *policy* still goes to
+  the manual, anything unrecognised still goes to Claude, and a calendar failure falls through
+  rather than failing the message. That request now costs nothing.
+- **An hour of prompt cache instead of five minutes**, a **4,000-token ceiling on replies**
+  (output is five times the input price) and **history capped by size, not just message count**
+  (8,000 characters; twenty messages is nothing in a terse thread and a lot in a chatty one).
+  All three are settings. Decision record `0009-cost-reduction.md`.
+
+### Changed
 - **Asana no longer sends ~100 tool definitions on every request.** Asana's MCP server offers about
   a hundred tools, each with a description and a JSON schema — tens of thousands of tokens before
   anyone types a word, which is where the money was going (Remy measured ~12¢ on a first request).

@@ -30,6 +30,9 @@ const config = core.loadConfig({
   USD_PER_MTOK_IN: { type: 'number', min: 0, required: true },
   USD_PER_MTOK_OUT: { type: 'number', min: 0, required: true },
   MAX_HISTORY_MESSAGES: { type: 'number', min: 2, default: 20 },
+  MAX_HISTORY_CHARS: { type: 'number', min: 500, default: 8000 },
+  MAX_OUTPUT_TOKENS: { type: 'number', min: 256, default: 4000 },
+  CACHE_TTL: { type: 'enum', values: ['5m', '1h'], default: '1h' },
   THREAD_TTL_DAYS: { type: 'number', min: 1, default: 30 },
 });
 
@@ -77,10 +80,21 @@ const handleEvent = createEventHandler({
   grants,
   scopedCapUsd: config.MONTHLY_USD_CAP_SCOPED,
   appName: config.BUDDY_APP_NAME,
-  threads: core.createThreads({ store, maxMessages: config.MAX_HISTORY_MESSAGES, ttlDays: config.THREAD_TTL_DAYS }),
+  threads: core.createThreads({
+    store,
+    maxMessages: config.MAX_HISTORY_MESSAGES,
+    maxChars: config.MAX_HISTORY_CHARS,
+    ttlDays: config.THREAD_TTL_DAYS,
+  }),
   usage,
   oauthFlows: core.createOAuthFlows({ store, secret: config.STATE_SECRET, baseUrl: config.OAUTH_BASE_URL }),
-  claude: core.createClaude({ apiKey: config.ANTHROPIC_API_KEY, model: config.MODEL, effort: config.EFFORT }),
+  claude: core.createClaude({
+    apiKey: config.ANTHROPIC_API_KEY,
+    model: config.MODEL,
+    effort: config.EFFORT,
+    maxTokens: config.MAX_OUTPUT_TOKENS,
+    cacheTtl: config.CACHE_TTL,
+  }),
   makeModuleContext: core.createContextFactory({ store, sealer, log, access }),
   defer: promise => promise.catch(error => log.error('background task crashed', { error })),
 });

@@ -18,7 +18,7 @@ function withSearch(tools) {
   return deferred && loaded ? [TOOL_SEARCH, ...tools] : tools.map(({ defer_loading, ...t }) => t);
 }
 
-function createClaude({ apiKey, model, effort, maxTokens = 16000, client }) {
+function createClaude({ apiKey, model, effort, maxTokens = 4000, cacheTtl = '1h', client }) {
   const anthropic = client || new Anthropic({ apiKey });
   return {
     create({ system, tools, messages }) {
@@ -29,7 +29,9 @@ function createClaude({ apiKey, model, effort, maxTokens = 16000, client }) {
         system,
         ...(withTools && withTools.length ? { tools: withTools } : {}),
         messages,
-        cache_control: { type: 'ephemeral' }, // caches system + tools + history across loop steps
+        // Caches system + tools + history. An hour rather than the default five minutes: chat
+        // comes in bursts, and it is the first request after a gap that pays full price.
+        cache_control: { type: 'ephemeral', ttl: cacheTtl },
         output_config: { effort },
       });
     },

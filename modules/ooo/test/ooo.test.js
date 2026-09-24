@@ -281,3 +281,59 @@ test('plain wording maps to a period', () => {
   assert.equal(whenFrom('tomorrow'), 'tomorrow');
   assert.equal(whenFrom('whatever'), 'today');
 });
+
+/* ---------- answering without Claude: the most-asked question at company scale ---------- */
+
+const asked = text => ({ argumentText: text, text });
+
+test('"who\'s out" is answered directly, in the words people actually use', async () => {
+  const { mod, ctx } = setup([allDay('Ian OOO', '2026-09-23', '2026-09-24')]);
+
+  for (const question of [
+    'who is out today?',
+    "who's off today",
+    'Who is OOO?',
+    'anyone out today?',
+    'who is on holiday today',
+    '¿quién está de vacaciones?',
+    'quienes estan de licencia hoy',
+  ]) {
+    const reply = await mod.handleMessage(ctx, asked(question));
+    assert.ok(reply, `should have answered: ${question}`);
+    assert.match(reply.text, /<b>Ian<\/b>|\*\*Ian\*\*/, question);
+  }
+});
+
+test('the period still comes from the question', async () => {
+  const { mod, ctx, calls } = setup([]);
+  await mod.handleMessage(ctx, asked("who's off next week?"));
+  assert.equal(calls.at(-1).timeMin, '2026-09-28T00:00:00-03:00');
+});
+
+test('a question about the leave *policy* is left for the manual', async () => {
+  const { mod, ctx } = setup([allDay('Ian OOO', '2026-09-23', '2026-09-24')]);
+  for (const question of [
+    'what is the policy for being out of office?',
+    'how do I request time off?',
+    'cómo pido vacaciones',
+    'where do I book leave',
+  ]) {
+    assert.equal(await mod.handleMessage(ctx, asked(question)), null, question);
+  }
+});
+
+test('anything else passes through to Claude untouched', async () => {
+  const { mod, ctx } = setup([]);
+  for (const question of ['write me a poem', 'what are my asana tasks', 'hello', '']) {
+    assert.equal(await mod.handleMessage(ctx, asked(question)), null, question);
+  }
+});
+
+test('a calendar failure falls through to Claude rather than failing the message', async () => {
+  const broken = createOooModule({
+    calendar: { calendarId: 'accounts@example.com', list: async () => { throw new Error('calendar down'); } },
+    now: () => NOW,
+  });
+  const { ctx } = setup([]);
+  assert.equal(await broken.handleMessage(ctx, asked('who is out today?')), null);
+});

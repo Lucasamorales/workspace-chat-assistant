@@ -13,11 +13,13 @@ function fake() {
   return { claude, sent };
 }
 
-test('the request caches the stable prefix: tools, system and history', async () => {
+test('the request caches the stable prefix for an hour, not five minutes', async () => {
+  // Chat comes in bursts; it is the first request after a gap that pays full price.
   const { claude, sent } = fake();
   await claude.create({ system: 'voice', tools: [{ name: 'a' }], messages: [{ role: 'user', content: 'hi' }] });
-  assert.deepEqual(sent[0].cache_control, { type: 'ephemeral' });
+  assert.deepEqual(sent[0].cache_control, { type: 'ephemeral', ttl: '1h' });
   assert.equal(sent[0].model, 'claude-sonnet-5');
+  assert.equal(sent[0].max_tokens, 4000, 'a ceiling on output: it costs five times the input price');
 });
 
 test('deferring tools brings in the search tool, so nothing becomes unreachable', async () => {
