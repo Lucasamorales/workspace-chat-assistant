@@ -11,6 +11,13 @@ live Chat app, and what is still unverified against reality).
 
 ## 2026-09-24
 
+### Changed
+- **Riley can test Buddy end to end.** Added to `ALLOWED_USERS` and to Asana, the assistant,
+  files, kudos (with the kudos admin role) and the manual admin role; basics, ooo and the manual
+  she already had by domain. Deliberately **not** added to `admin`, `costs` or `leave`: granting
+  other people access, reading the whole company's spend and writing to colleagues' calendars are
+  not needed to test the rest, and leave has still never run against a real calendar.
+
 ### Added
 - **A cheaper model for people who only use one module.** Someone whose Buddy is just the manual
   does not need the model that answers anything: `MODULE_TUNING` sets a model and an effort level
