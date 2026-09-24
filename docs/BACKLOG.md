@@ -16,6 +16,8 @@ shorter list: see "Proven in use" at the bottom of this section.
 | A1 | Point the Chat app **Buddy-Asana** at `buddy-bot`; visibility robin@ + remy@ | done |
 | A2 | Run the acceptance checklist (RUNBOOK §5) | doing |
 | A3 | Tune `ASANA_READONLY_TOOLS` if reads ask for approval | todo |
+| A10 | Set `ASANA_TOOLS` from the real `/asana tools` output (the commented list in `config.env` is an expectation, not a confirmation) | todo — post-deploy |
+| A11 | **Confirm the tool-search tool is accepted by the API.** `tool_search_tool_regex_20251119` has never run against a live call; if it is rejected, every Asana request fails, not just the deferred ones | todo — first Asana request after deploy |
 | A4 | After A2 passes: `feat:` commit marking the build verified | todo |
 | A5 | Remove the old bot: `CONFIRM=yes bash infra/decommission-legacy.sh` | todo |
 | A6 | Remy's feedback: one card section per task (title, description, due date, assignee by name), Approve/Cancel each, Approve all/Cancel all; update ≠ "cannot be undone" | deployed |

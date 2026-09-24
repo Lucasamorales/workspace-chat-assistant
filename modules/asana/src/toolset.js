@@ -12,18 +12,33 @@ const DEFAULT_MCP_URL = 'https://mcp.asana.com/v2/mcp';
 const MAX_TOOLS = 100;
 
 /**
- * Asana's MCP server offers around a hundred tools, and every definition is re-sent on every
- * request — tens of thousands of tokens before anyone has typed a word. So only the tools people
- * actually use are loaded; the rest are deferred, and Claude pulls one in when it needs it.
+ * Asana's MCP server offers about thirty tools, and every definition is re-sent on every request
+ * — around 14,000 tokens before anyone has typed a word. So only the tools people actually use
+ * are loaded; the rest are deferred, and Claude pulls one in when it needs it.
  *
  * Nothing becomes impossible: a deferred tool is still callable, it just isn't paid for up front.
- * `ASANA_TOOLS` overrides this list; if neither matches anything, everything is loaded, because
- * a cheaper Asana that cannot do its job is not cheaper.
+ *
+ * **Every pattern is anchored on purpose.** The first version of this list used loose fragments
+ * (/get_/, /me|current_user/) and kept 30 tools out of 31 — /me/ matches "add_com*me*nt" — so the
+ * curation cost a lot of thought and saved nothing. A pattern here must match a whole tool name.
+ *
+ * `ASANA_TOOLS` overrides the list entirely, and is the better setting once `/asana tools` has
+ * confirmed what this workspace's server actually calls things.
  */
 const EVERYDAY = [
-  /search/i, /list/i, /^(asana_)?get_/i, /create/i, /update/i,
-  /complete/i, /comment|story/i, /me|current_user/i, /project/i, /workspace/i,
+  /^(asana_)?search_(tasks|objects)$/i,      // finding anything
+  /^(asana_)?(get|create|update)_tasks?$/i,  // the everyday task work
+  /^(asana_)?get_my_tasks$/i,                // "what's on my plate"
+  /^(asana_)?get_projects?$/i,
+  /^(asana_)?add_comment$/i,
+  /^(asana_)?get_(me|users?)$/i,             // resolving people by name
 ];
+
+/**
+ * Below this, assume the patterns do not fit this server's naming rather than that it offers
+ * three tools — and load everything. A cheaper Asana that cannot do its job is not cheaper.
+ */
+const MIN_LOADED = 4;
 
 function splitTools(tools, setting, log) {
   const wanted = String(setting || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -35,8 +50,15 @@ function splitTools(tools, setting, log) {
     const unknown = wanted.filter(name => !tools.some(t => t.name === name));
     if (unknown.length) log.warn('ASANA_TOOLS names no such tool', { unknown });
   }
-  // Fail open: never leave Claude with nothing to work with.
-  if (!keep.length) return { loaded: tools, deferred: [] };
+  // Fail open, both ways: too few matches means the list does not fit this server.
+  if (keep.length < Math.min(MIN_LOADED, tools.length)) {
+    log.warn('asana tool list matched too little; loading everything', { matched: keep.length, of: tools.length });
+    return { loaded: tools, deferred: [] };
+  }
+  // And say so when it barely filters: the whole point is a smaller request.
+  if (keep.length > tools.length * 0.6) {
+    log.warn('asana tool list is keeping most tools; set ASANA_TOOLS', { loaded: keep.length, of: tools.length });
+  }
   const names = new Set(keep.map(t => t.name));
   return { loaded: keep, deferred: tools.filter(t => !names.has(t.name)) };
 }
@@ -170,4 +192,4 @@ async function createAsanaToolset(ctx, { connect = connectMcp } = {}) {
   };
 }
 
-module.exports = { createAsanaToolset, needsApprovalFor, renderResult, mcpUrl };
+module.exports = { createAsanaToolset, needsApprovalFor, renderResult, mcpUrl, splitTools, EVERYDAY };
