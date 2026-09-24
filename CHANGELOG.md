@@ -12,6 +12,10 @@ live Chat app, and what is still unverified against reality).
 ## 2026-09-24
 
 ### Changed
+- **The scoped allowance is $20 for the UAT**, up from $5. Nobody had actually hit it — what looked
+  like a limit was the carry-on loop — but hitting a wall mid-test costs more in wasted time than
+  the headroom costs in money. It is a global scoped cap, so it must come back down before the
+  manual goes company-wide (backlog C12).
 - **Asana-only people run on Haiku 4.5.** They are the heaviest users and the ones the saving is
   meant for: alexandra and jordan were 74% of the first day of spend. Haiku is half price in
   and out, so their requests drop from ~12 cents to roughly 3 once the tool curation lands too.
