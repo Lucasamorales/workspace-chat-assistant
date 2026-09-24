@@ -249,7 +249,6 @@ can cost precision (model, effort, retrieval size) waits for the eval.
 | C9 | Default most people to scoped modules rather than the assistant at the company rollout — the manual is now scoped, so policy questions no longer need free-form Claude | Fewer instructions and tools per request |
 | C10 | Re-read `/costs` after each step; stop when the number stops mattering | Measured, not assumed |
 | C11 | ⚠️ The cost settings were not on `deploy.sh`'s variable list, so editing them changed nothing — fixed; **verify after the next deploy** that `CACHE_TTL` and friends are actually set on the service | `gcloud run services describe buddy-bot` shows them |
-| C12 | **Bring `MONTHLY_USD_CAP_SCOPED` back down before the company rollout.** Raised 5 → 20 for the Asana UAT; it is global, so at rollout ~25 manual users would each carry a $20 ceiling ($500 theoretical against ~$125 at $5) | A deliberate number, set before the manual goes company-wide |
 
 ## Epic 10: what a request costs to send
 
