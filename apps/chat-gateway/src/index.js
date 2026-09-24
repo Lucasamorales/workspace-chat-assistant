@@ -33,10 +33,22 @@ const config = core.loadConfig({
   MAX_HISTORY_CHARS: { type: 'number', min: 500, default: 8000 },
   MAX_OUTPUT_TOKENS: { type: 'number', min: 256, default: 4000 },
   CACHE_TTL: { type: 'enum', values: ['5m', '1h'], default: '1h' },
+  // "manual:claude-haiku-4-5:low" — the model and effort for people scoped to that module.
+  MODULE_TUNING: { type: 'list', default: [] },
+  // How many recent tool results a long request keeps; 0 leaves the request untouched.
+  CLEAR_TOOL_USES: { type: 'number', min: 0, default: 0 },
+  // "claude-haiku-4-5:1:5" — what each model costs per million tokens, in and out.
+  MODEL_PRICES: { type: 'list', default: [] },
   THREAD_TTL_DAYS: { type: 'number', min: 1, default: 30 },
 });
 
 const log = core.createLogger('chat-gateway');
+
+const moduleTuning = core.parseTuning(config.MODULE_TUNING);
+const prices = core.parsePrices(config.MODEL_PRICES, {
+  inPerMTok: config.USD_PER_MTOK_IN,
+  outPerMTok: config.USD_PER_MTOK_OUT,
+});
 
 // ignoreUndefinedProperties: a module leaving an optional field undefined (a Drive file with
 // no link, say) should not take down a write. The field is simply not stored.
@@ -44,11 +56,7 @@ const store = core.createFirestoreStore(new Firestore({ ignoreUndefinedPropertie
 // Access granted from chat by an admin. Config remains the floor: see packages/core/grants.js.
 const grants = core.createGrants({ store });
 
-const usage = core.createUsage({
-  store,
-  capUsd: config.MONTHLY_USD_CAP,
-  prices: { inPerMTok: config.USD_PER_MTOK_IN, outPerMTok: config.USD_PER_MTOK_OUT },
-});
+const usage = core.createUsage({ store, capUsd: config.MONTHLY_USD_CAP, prices });
 
 const modules = config.BUDDY_MODULES.map(name => {
   if (!/^[a-z][a-z0-9]*$/.test(name)) throw new Error(`invalid module name "${name}"`);
@@ -79,6 +87,7 @@ const handleEvent = createEventHandler({
   allowedUsers: config.BUDDY_ALLOWED_USERS,
   grants,
   scopedCapUsd: config.MONTHLY_USD_CAP_SCOPED,
+  moduleTuning,
   appName: config.BUDDY_APP_NAME,
   threads: core.createThreads({
     store,
@@ -94,6 +103,7 @@ const handleEvent = createEventHandler({
     effort: config.EFFORT,
     maxTokens: config.MAX_OUTPUT_TOKENS,
     cacheTtl: config.CACHE_TTL,
+    clearToolUses: config.CLEAR_TOOL_USES,
   }),
   makeModuleContext: core.createContextFactory({ store, sealer, log, access }),
   defer: promise => promise.catch(error => log.error('background task crashed', { error })),

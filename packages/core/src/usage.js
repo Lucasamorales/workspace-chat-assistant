@@ -17,16 +17,27 @@ function monthKey(now = new Date()) {
   return now.toISOString().slice(0, 7);
 }
 
-function costUsd(usage, prices) {
+/**
+ * @param prices  either one {inPerMTok, outPerMTok} pair, or a map of model → pair with a
+ *   `default` entry. A model with no entry falls back to the default rather than costing zero:
+ *   an unpriced model must show up as expensive, not free.
+ */
+function pricesFor(prices, model) {
+  if (!prices || typeof prices.inPerMTok === 'number') return prices;
+  return prices[model] || prices.default || { inPerMTok: 0, outPerMTok: 0 };
+}
+
+function costUsd(usage, prices, model) {
   const input = usage.input_tokens || 0;
   const cacheWrite = usage.cache_creation_input_tokens || 0;
   const cacheRead = usage.cache_read_input_tokens || 0;
   const output = usage.output_tokens || 0;
+  const rate = pricesFor(prices, model);
   return (
-    input * prices.inPerMTok
-    + cacheWrite * prices.inPerMTok * CACHE_WRITE_MULTIPLIER
-    + cacheRead * prices.inPerMTok * CACHE_READ_MULTIPLIER
-    + output * prices.outPerMTok
+    input * rate.inPerMTok
+    + cacheWrite * rate.inPerMTok * CACHE_WRITE_MULTIPLIER
+    + cacheRead * rate.inPerMTok * CACHE_READ_MULTIPLIER
+    + output * rate.outPerMTok
   ) / 1e6;
 }
 
@@ -48,7 +59,7 @@ function createUsage({ store, prices, capUsd, now = () => new Date(), eventTtlDa
     async check() {
       if (current(await col.get(userId)).usd >= cap) throw new BudgetExceededError(cap, now());
     },
-    async record(usage) {
+    async record(usage, model) {
       await col.update(userId, doc => {
         const u = current(doc);
         return {
@@ -57,7 +68,7 @@ function createUsage({ store, prices, capUsd, now = () => new Date(), eventTtlDa
           outputTokens: u.outputTokens + (usage.output_tokens || 0),
           cacheReadTokens: u.cacheReadTokens + (usage.cache_read_input_tokens || 0),
           cacheWriteTokens: u.cacheWriteTokens + (usage.cache_creation_input_tokens || 0),
-          usd: u.usd + costUsd(usage, prices),
+          usd: u.usd + costUsd(usage, prices, model),
         };
       });
     },
@@ -76,6 +87,7 @@ function createUsage({ store, prices, capUsd, now = () => new Date(), eventTtlDa
     meter({ userId, userEmail, trigger = 'message', model = null, capUsd: cap = capUsd }) {
       const budget = forUser(userId, cap);
       const startedAt = now().getTime();
+      let usedModel = model;
       const totals = { calls: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, usd: 0 };
       const tools = [];
 
@@ -85,14 +97,15 @@ function createUsage({ store, prices, capUsd, now = () => new Date(), eventTtlDa
 
         check: () => budget.check(),
 
-        async record(usage) {
+        async record(usage, ranOn = model) {
+          if (ranOn) usedModel = ranOn;
           totals.calls += 1;
           totals.inputTokens += usage.input_tokens || 0;
           totals.outputTokens += usage.output_tokens || 0;
           totals.cacheReadTokens += usage.cache_read_input_tokens || 0;
           totals.cacheWriteTokens += usage.cache_creation_input_tokens || 0;
-          totals.usd += costUsd(usage, prices);
-          await budget.record(usage);
+          totals.usd += costUsd(usage, prices, usedModel);
+          await budget.record(usage, usedModel);
         },
 
         /** Every tool the request ran, in order, with whether it worked. */
@@ -121,7 +134,7 @@ function createUsage({ store, prices, capUsd, now = () => new Date(), eventTtlDa
             tools,
             trigger,
             outcome,
-            model,
+            model: usedModel,
             calls: totals.calls,
             ...totals,
             ms: at.getTime() - startedAt,

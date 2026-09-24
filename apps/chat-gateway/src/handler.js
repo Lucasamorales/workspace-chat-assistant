@@ -57,7 +57,7 @@ function createEventHandler(deps) {
   const {
     registry, chat, store, threads, usage, oauthFlows, claude,
     makeModuleContext, allowedUsers, log, defer, appName = 'Buddy', now = () => Date.now(),
-    grants = null, scopedCapUsd = null,
+    grants = null, scopedCapUsd = null, moduleTuning = {},
   } = deps;
   const events = store.collection('core__events');
   const pendingCol = store.collection('core__pending');
@@ -125,6 +125,20 @@ function createEventHandler(deps) {
     if (base.spaceKind !== 'DM') throw expose(privateOnly);
     if (!base.userEmail) throw expose('Oh no, I couldn\'t read your Google account email, so I can\'t connect accounts right now.');
     return oauthFlows.createLink({ userId: base.userId, userEmail: base.userEmail, moduleName });
+  }
+
+  /**
+   * Which model and effort this person gets.
+   *
+   * Chosen from their scope, never from the tool a request turns out to need: that is only known
+   * after Claude has answered, and switching model mid-conversation throws away the prompt cache
+   * every time. So someone who can only ask the manual runs on the manual's model throughout;
+   * someone with the assistant runs on the default.
+   */
+  function tuningFor(scope) {
+    const scoped = registry.conversationMode(scope) === 'scoped' ? registry.scopedFor(scope) : [];
+    // Only an unambiguous scope picks a model: with two scoped modules, the default is safer.
+    return (scoped.length === 1 && moduleTuning[scoped[0]]) || {};
   }
 
   /**
@@ -323,6 +337,7 @@ function createEventHandler(deps) {
 
     await threads.append(base.threadKey, request.historyText || historyTextOf(request), reply);
     await showText(base, messageName, reply);
+    return reply;
   }
 
   async function postReply(base, reply) {
@@ -356,10 +371,12 @@ function createEventHandler(deps) {
       messageName = await chat.postText(base.space, base.thread, '_Hmm, give me a sec…_');
       // The meter IS the budget — the cap still stops a runaway before any call — and it collects
       // what this request cost, which tools ran and how it ended. Metadata only (0006-costs.md).
+      const tuning = tuningFor(scopeOf(base));
       budget = usage.meter({
         userId: base.userId,
         userEmail: base.userEmail,
         trigger,
+        model: tuning.model || null,
         // A smaller allowance for people who can only drive one module: widening Asana should
         // not quietly widen the bill.
         ...(mode === 'scoped' && scopedCapUsd ? { capUsd: scopedCapUsd } : {}),
@@ -386,6 +403,7 @@ function createEventHandler(deps) {
         let shown = '';
         const result = await runLoop({
           claude, toolset, budget, log,
+          ...tuning,
           system: systemFor(scopeOf(base), toolset.notes),
           messages: [...history, { role: 'user', content: blocks }],
           onProgress: async names => {
@@ -396,8 +414,17 @@ function createEventHandler(deps) {
             await chat.replaceText(messageName, base.space, base.thread, text);
           },
         });
-        await finish(base, messageName, request, result);
+        const answer = await finish(base, messageName, request, result);
         await meterFinish(budget, result);
+        // Let the modules that did the work learn from the answer — the manual caches it, so the
+        // next person asking the same thing gets it for nothing. After the reply, never before it.
+        if (answer && request.text) {
+          defer(registry.afterAnswer(ctxFor, {
+            question: request.text,
+            answer,
+            tools: budget.tools.filter(t => !t.failed).map(t => t.name),
+          }, scopeOf(base)));
+        }
       }, budget);
     } catch (error) {
       if (budget) {
@@ -468,12 +495,16 @@ function createEventHandler(deps) {
     const base = baseOfRecord(record);
     // A resumed request is its own event: the work after an approval costs money of its own,
     // and whether the person approved or declined is worth knowing.
-    const meter = usage.meter({ userId: base.userId, userEmail: base.userEmail, trigger: 'approval' });
+    const tuning = tuningFor(scopeOf(base));
+    const meter = usage.meter({
+      userId: base.userId, userEmail: base.userEmail, trigger: 'approval', model: tuning.model || null,
+    });
     const declined = (record.items || []).every(it => it.state === 'declined');
     try {
       await withToolset(base, async toolset => {
         const result = await resumeLoop({
           claude, toolset, log,
+          ...tuning,
           budget: meter,
           system: systemFor(scopeOf(base), toolset.notes, [AFTER_APPROVAL]),
           saved: JSON.parse(record.loop),

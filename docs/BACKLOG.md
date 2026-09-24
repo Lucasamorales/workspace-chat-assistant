@@ -236,16 +236,17 @@ can cost precision (model, effort, retrieval size) waits for the eval.
 |---|---|---|
 | C1 | ✅ "Who's out?" answered without Claude, in natural language (EN + ES) | Tests; that request costs nothing |
 | C2 | ✅ One-hour prompt cache, 4,000-token output ceiling, history capped by size | Tests |
-| C3 | Shorten module instructions (7 × ~800 chars on every request) without changing behaviour | Tests still pass; instructions ~half |
-| C4 | A small eval: ~20 real questions with known-good answers, run before and after any change to model, effort or retrieval | Runnable; a baseline recorded |
-| C5 | Effort per module (Asana keeps more; looking something up needs less) | Eval holds |
-| C6 | Model per module — Haiku 4.5 for manual and ooo, Sonnet for asana and leave. Model follows the **scope**, never the tool (no mid-thread switching, or the cache is thrown away each time), so the saving lands on scoped people rather than admins | Eval holds |
-| C6a | Record the model on every usage event — today it is always `null`, so `/costs` cannot tell two models apart | An event names its model |
-| C6b | Per-model price table; `/costs` and the monthly cap both read it | A Haiku request is priced at $1/$5, a Sonnet one at $2/$10 |
-| C7 | Answer cache for the manual, keyed on the question embedding we already compute, invalidated by index version; hashes only, never question text | Repeat questions cost nothing |
-| C8 | Context editing (`clear_tool_uses`) for long Asana loops | Fewer tokens per multi-step request |
-| C9 | Default most people to scoped modules rather than the assistant at the company rollout | Fewer instructions and tools per request |
+| C3 | ✅ Module instructions shortened, 5,500 → 1,772 characters, behaviour unchanged | Tests |
+| C4 | ⚠️ Eval written (`docs/EVAL.md`, `evals/manual.md`); the **known-good answers still need filling in** by someone who knows the manual, and no baseline has been run | 20 questions, scored pass/partial/fail |
+| C5 | ✅ Effort per module, via `MODULE_TUNING` | Tests; eval still to run |
+| C6 | ✅ Model per module, chosen from the person's scope and only when that scope is unambiguous (`MODULE_TUNING=manual:claude-haiku-4-5:low`) | Tests; eval still to run |
+| C6a | ✅ Every usage event names the model that ran | Test |
+| C6b | ✅ Per-model prices (`MODEL_PRICES`); an unpriced model falls back to the default rather than costing zero; `/costs` gains a By model line | Tests |
+| C7 | ✅ Answer cache for the manual: embedding-keyed, index-version invalidated, DM only, hash + vector + answer only | Tests; repeat questions never reach Claude |
+| C8 | ⚠️ Context editing built and tested, **off** (`CLEAR_TOOL_USES=0`) until the eval has been run against it | Test |
+| C9 | Default most people to scoped modules rather than the assistant at the company rollout — the manual is now scoped, so policy questions no longer need free-form Claude | Fewer instructions and tools per request |
 | C10 | Re-read `/costs` after each step; stop when the number stops mattering | Measured, not assumed |
+| C11 | ⚠️ The cost settings were not on `deploy.sh`'s variable list, so editing them changed nothing — fixed; **verify after the next deploy** that `CACHE_TTL` and friends are actually set on the service | `gcloud run services describe buddy-bot` shows them |
 
 ## Epic 10: what a request costs to send
 

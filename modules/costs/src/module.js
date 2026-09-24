@@ -26,6 +26,8 @@ const pad = (s, n) => String(s).padEnd(n).slice(0, n);
 // cost report that reads "500.000 characters" in one place and "500,000" in another is a bug.
 const count = n => Number(n || 0).toLocaleString('en-GB');
 const shortName = email => String(email || '').split('@')[0];
+// "claude-haiku-4-5" → "haiku-4-5"; a column of identical "claude-" prefixes reads as noise.
+const shortModel = model => String(model || 'default').replace(/^claude-/, '');
 
 function createCostsModule({ usage, sheetsApi, now = () => new Date() } = {}) {
   let api = sheetsApi;
@@ -77,6 +79,12 @@ function createCostsModule({ usage, sheetsApi, now = () => new Date() } = {}) {
       '**By module**',
       ...modules.map(m => `\`${pad(m.name, 12)} ${pad(money(m.usd), 8)}\` ${m.requests} requests`),
     ];
+
+    // Only worth a block when more than one model ran: otherwise it repeats the configured model.
+    const models = groupBy(events, 'model');
+    if (models.length > 1) {
+      lines.push('', '**By model**', ...models.map(m => `\`${pad(shortModel(m.name), 14)} ${pad(money(m.usd), 8)}\` ${m.requests} requests`));
+    }
 
     if (w.requests) {
       lines.push('', `**Wasted** ${money(w.usd)} on ${w.requests} requests that produced nothing`

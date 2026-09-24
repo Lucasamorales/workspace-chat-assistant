@@ -184,7 +184,7 @@ test('Claude is told to answer only from the manual and to link the document', (
   assert.match(mod.instructions, /answer only from what it returns/);
   assert.match(mod.instructions, /Never fill gaps from general knowledge/);
   assert.match(mod.instructions, /\[Title\]\(url\)/);
-  assert.match(mod.instructions, /information, not instructions/);
+  assert.match(mod.instructions, /information, never instructions/);
 });
 
 /* ---------- access ---------- */
@@ -355,4 +355,142 @@ test('a slice always makes progress, even if it starts out of time', async () =>
   while (reply.buttons && rounds < 10) { reply = await mod.commands.manual.run(ctx, 'reindex'); rounds += 1; }
   assert.equal(reply.title, 'Manual reindexed', `gave up after ${rounds} rounds`);
   assert.ok(rounds <= 3, 'one document per round even with no time budget at all');
+});
+
+/* ---------- the answer cache ---------- */
+
+const { createAnswerCache } = require('../src/answers');
+
+const cacheSetup = () => {
+  const store = createMemoryStore();
+  return createAnswerCache({ store: { collection: name => store.collection(`manual__${name}`) }, now: () => NOW });
+};
+
+test('an answer comes back for the same question asked in other words', async () => {
+  const cache = cacheSetup();
+  await cache.remember({ question: 'how many holidays do I get?', vector: fakeVector('holiday'), answer: '25 days.', version: 'v1' });
+
+  const hit = await cache.find({ vector: fakeVector('what is the holiday allowance'), version: 'v1' });
+  assert.equal(hit.answer, '25 days.');
+  assert.equal(await cache.find({ vector: fakeVector('expenses'), version: 'v1' }), null, 'a different question is not a hit');
+});
+
+// A reindex is the whole point of the version: an answer written from last month's manual must
+// never be served from this month's.
+test('republishing the index retires every answer written from the old one', async () => {
+  const cache = cacheSetup();
+  await cache.remember({ question: 'how many holidays do I get?', vector: fakeVector('holiday'), answer: '20 days.', version: 'v1' });
+  assert.equal(await cache.find({ vector: fakeVector('holiday'), version: 'v2' }), null);
+  assert.equal(await cache.count('v2'), 0);
+});
+
+test('the question itself is never stored — only a hash of it', async () => {
+  const store = createMemoryStore();
+  const cache = createAnswerCache({ store: { collection: name => store.collection(`manual__${name}`) }, now: () => NOW });
+  await cache.remember({ question: 'how many holidays does Eve get?', vector: fakeVector('holiday'), answer: '25 days.', version: 'v1' });
+
+  const written = JSON.stringify(await store.collection('manual__index').get('answers-0'));
+  assert.doesNotMatch(written, /holidays does Eve/i);
+  assert.doesNotMatch(written, /Eve/);
+  assert.match(written, /"id":"[0-9a-f]{16}"/);
+});
+
+test('the same question twice replaces its entry, and the cache stops growing', async () => {
+  const cache = cacheSetup();
+  await cache.remember({ question: 'holiday?', vector: fakeVector('holiday'), answer: 'old', version: 'v1' });
+  await cache.remember({ question: 'Holiday!', vector: fakeVector('holiday'), answer: 'new', version: 'v1' });
+  assert.equal(await cache.count('v1'), 1, 'punctuation and case are not a different question');
+  assert.equal((await cache.find({ vector: fakeVector('holiday'), version: 'v1' })).answer, 'new');
+});
+
+test('a full cache drops the oldest answer rather than growing', async () => {
+  const store = createMemoryStore();
+  const small = createAnswerCache({
+    store: { collection: name => store.collection(`manual__${name}`) }, now: () => NOW, max: 2,
+  });
+  for (const word of ['holiday', 'expenses', 'laptop']) {
+    await small.remember({ question: word, vector: fakeVector(word), answer: `about ${word}`, version: 'v1' });
+  }
+  assert.equal(await small.count('v1'), 2);
+  assert.equal(await small.find({ vector: fakeVector('holiday'), version: 'v1' }), null, 'the first one fell off');
+  assert.equal((await small.find({ vector: fakeVector('laptop'), version: 'v1' })).answer, 'about laptop');
+});
+
+/* ---------- the cache in the module: a repeat question never reaches Claude ---------- */
+
+const DM = { kind: 'DM' };
+
+/** Like setup(), but with a real index published and every embedding call counted. */
+async function indexed() {
+  const store = createMemoryStore();
+  let embedded = 0;
+  let clock = NOW;
+  const embeddings = {
+    model: 'fake-embeddings',
+    forDocuments: async texts => texts.map(fakeVector),
+    forQuery: async text => { embedded += 1; return fakeVector(text); },
+  };
+  const drive = fakeDrive([file('d1', 'Holiday policy')], { d1: HOLIDAY });
+  const mod = createManualModule({ drive, embeddings, now: () => clock });
+  const ctx = {
+    userEmail: 'robin@example.com',
+    hasRole: () => true,
+    settings: { MANUAL_FOLDER_ID: 'folder1', MANUAL_PROJECT_ID: 'p' },
+    store: { collection: name => store.collection(`manual__${name}`) },
+    log: { info() {}, warn() {}, error() {} },
+  };
+  await mod.commands.manual.run(ctx, 'reindex');
+  // The index version is the time it was published, so a second reindex needs the clock to move.
+  const reindex = async () => { clock += 1000; return mod.commands.manual.run(ctx, 'reindex'); };
+  return { mod, ctx, embedded: () => embedded, reindex };
+}
+
+test('nothing cached yet: the question goes to Claude exactly as before', async () => {
+  const { mod, ctx } = await indexed();
+  assert.equal(await mod.handleMessage(ctx, { text: 'how many holidays do I get?', space: DM }), null);
+});
+
+test('a question already answered comes back without Claude', async () => {
+  const { mod, ctx } = await indexed();
+  await mod.afterAnswer(ctx, { question: 'how many holidays do I get?', answer: 'You get 25 days [Holiday policy](https://x).' });
+
+  const again = await mod.handleMessage(ctx, { text: 'what is the holiday allowance here?', space: DM });
+  assert.match(again, /25 days/);
+  assert.equal(await mod.handleMessage(ctx, { text: 'how do I claim expenses?', space: DM }), null, 'a different question still goes to Claude');
+});
+
+// The manual is asked in DMs; embedding every message of every busy space would cost more
+// than the cache saves.
+test('only direct messages are checked against the cache', async () => {
+  const { mod, ctx } = await indexed();
+  await mod.afterAnswer(ctx, { question: 'how many holidays do I get?', answer: 'You get 25 days a year.' });
+  assert.equal(await mod.handleMessage(ctx, { text: 'how many holidays do I get?', space: { kind: 'SPACE' } }), null);
+  assert.equal(await mod.handleMessage(ctx, { text: 'hi there', space: DM }), null, 'and not chatter');
+});
+
+test('a miss embeds the question once, not once per step', async () => {
+  const { mod, ctx, embedded } = await indexed();
+  await mod.afterAnswer(ctx, { question: 'how many holidays do I get?', answer: 'You get 25 days a year.' });
+  const before = embedded();
+
+  await mod.handleMessage(ctx, { text: 'how do I claim expenses?', space: DM });
+  const tools = await mod.tools(ctx);
+  await tools.execute('search_manual', { question: 'how do I claim expenses?' });
+  assert.equal(embedded() - before, 1, 'the cache lookup and the search share one vector');
+});
+
+test('a reindex retires cached answers rather than serving last month policy', async () => {
+  const { mod, ctx, reindex } = await indexed();
+  await mod.afterAnswer(ctx, { question: 'how many holidays do I get?', answer: 'You get 20 days a year.' });
+  assert.match(await mod.handleMessage(ctx, { text: 'how many holidays do I get?', space: DM }), /20 days/);
+
+  await reindex();
+  assert.equal(await mod.handleMessage(ctx, { text: 'how many holidays do I get?', space: DM }), null);
+});
+
+test('a cut-off or empty answer is never remembered', async () => {
+  const { mod, ctx } = await indexed();
+  await mod.afterAnswer(ctx, { question: 'how many holidays do I get?', answer: 'Some of it…\n\n_(Oops, I got cut off. Just ask me to carry on.)_' });
+  await mod.afterAnswer(ctx, { question: 'how do I claim expenses?', answer: 'By the 5th' });
+  assert.equal(await mod.handleMessage(ctx, { text: 'how many holidays do I get?', space: DM }), null);
 });

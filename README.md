@@ -214,6 +214,12 @@ general-purpose chatbot: Claude gets only that module's tools and declines anyth
 smaller monthly allowance (`MONTHLY_USD_CAP_SCOPED`). People with neither get a free "here's what
 I can help with" card. See `docs/decisions/0007-scoped-conversation.md`.
 
+**Which model answers** follows the person's scope, not the tool a request ends up using: someone
+who only has the manual runs on a cheaper model for the whole conversation, someone with the
+assistant runs on the default. It is never switched mid-request — a prompt cache belongs to one
+model — and a person scoped to two modules gets the default rather than a guess. Set with
+`MODULE_TUNING`; anything that changes model or effort goes through `docs/EVAL.md` first.
+
 **Formatting replies:** module text is escaped before it reaches a card, then `**bold**`,
 backtick `code` and `[text](https://link)` become HTML. Never put raw HTML in a reply — it is
 shown literally, on purpose.
@@ -319,8 +325,12 @@ in Secret Manager and are mounted at deploy time.
 | `APP_NAME` | config.env | Name used in messages; match the Chat app name |
 | `MODULES` | config.env | Enabled modules, e.g. `basics,files,asana` |
 | `MODEL`, `EFFORT` | config.env | Claude model and effort level |
-| `MONTHLY_USD_CAP` | config.env | Per-user monthly spend limit |
-| `USD_PER_MTOK_IN` / `_OUT` | config.env | Prices used for the spend limit |
+| `MODULE_TUNING` | config.env | `module:model:effort` — what people scoped to that one module run on |
+| `MODEL_PRICES` | config.env | `model:in:out` per million tokens, so `/costs` prices each model |
+| `MONTHLY_USD_CAP` / `_SCOPED` | config.env | Per-user monthly spend limit; a smaller one for scoped people |
+| `USD_PER_MTOK_IN` / `_OUT` | config.env | Default prices, for any model not in `MODEL_PRICES` |
+| `MAX_OUTPUT_TOKENS`, `MAX_HISTORY_CHARS`, `CACHE_TTL` | config.env | Cost controls (`0009-cost-reduction.md`) |
+| `CLEAR_TOOL_USES` | config.env | Drop the oldest tool results in a long request; `0` is off |
 | `ASANA_CLIENT_ID` | config.env | Asana **MCP app** client ID (not secret) |
 | `anthropic-key` | Secret Manager | Anthropic API key |
 | `asana-mcp-client-secret` | Secret Manager | Asana MCP app client secret |
@@ -342,6 +352,7 @@ Services validate settings at startup and refuse to run with a missing or malfor
    |---|---|
    | `commands` | Slash commands; replies can be text or a card with buttons; `role` restricts a command |
    | `handleMessage` | Handle a message directly without Claude (e.g. a kudos vote); gets mentions, space and sender |
+   | `afterAnswer` | Learn from an answer your tools helped produce, in the background, after the reply |
    | `roles` | Module roles such as `admin`; check with `ctx.hasRole('admin')` |
    | `needsConversation` | Set to `true` if the module only works through Claude, so people without assistant access don't see it |
    | `tools(ctx)` | Actions Claude can take; mark read-only ones with `needsApproval → false` |

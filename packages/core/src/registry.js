@@ -193,6 +193,19 @@ function createRegistry({ modules, env = process.env, log, timeouts = {}, access
       return null;
     },
 
+    /**
+     * Tell the modules whose tools ran what the request ended up answering. Only those modules:
+     * the manual should never learn an answer that came out of Asana. Best effort — a module that
+     * throws here must not turn an answered request into a failed one.
+     */
+    async afterAnswer(ctxFor, { question, answer, tools = [] }, scope) {
+      const used = new Set(tools.map(name => String(name).split('__')[0]));
+      for (const mod of active(scope).filter(m => m.afterAnswer && used.has(m.name))) {
+        const r = await safe(mod, 'afterAnswer', () => mod.afterAnswer(ctxFor(mod), { question, answer, tools }));
+        if (!r.ok) log.warn('afterAnswer failed', { module: mod.name, error: r.error });
+      }
+    },
+
     /** First module that understands the attachment wins. Always returns content blocks. */
     async readAttachment(ctxFor, attachment, scope) {
       for (const mod of active(scope).filter(m => m.readAttachment)) {

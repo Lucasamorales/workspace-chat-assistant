@@ -23,7 +23,24 @@ function votesModule(seen) {
   };
 }
 
-function setup({ assistantAccess = 'robin@example.com', asanaAccess = 'domain:example.com' } = {}) {
+/** A second scoped module, so "which model?" can be asked of someone with more than one. */
+const docsModule = {
+  name: 'docs',
+  allowedIn: ['DM'],
+  needsConversation: true,
+  scopedConversation: true,
+  tools: async () => ({
+    definitions: [{ name: 'search_docs', input_schema: { type: 'object' } }],
+    execute: async () => ({ content: 'nothing' }),
+  }),
+};
+
+function setup({
+  assistantAccess = 'robin@example.com',
+  asanaAccess = 'domain:example.com',
+  docsAccess = 'robin@example.com',
+  moduleTuning = {},
+} = {}) {
   const store = core.createMemoryStore();
   const posted = [];
   const seen = [];
@@ -37,7 +54,7 @@ function setup({ assistantAccess = 'robin@example.com', asanaAccess = 'domain:ex
     replaceWithCard: async () => {},
     download: async () => Buffer.alloc(0),
   };
-  const modules = [require('@buddy/module-basics'), votesModule(seen), require('@buddy/module-asana'), require('@buddy/module-assistant')];
+  const modules = [require('@buddy/module-basics'), votesModule(seen), require('@buddy/module-asana'), docsModule, require('@buddy/module-assistant')];
   const access = core.createAccessPolicy({
     modules,
     env: {
@@ -45,6 +62,7 @@ function setup({ assistantAccess = 'robin@example.com', asanaAccess = 'domain:ex
       BUDDY_ACCESS_VOTES: 'robin@example.com',
       BUDDY_ROLE_VOTES_ADMIN: 'robin@example.com',
       BUDDY_ACCESS_ASANA: asanaAccess,
+      BUDDY_ACCESS_DOCS: docsAccess,
       BUDDY_ACCESS_ASSISTANT: assistantAccess,
     },
   });
@@ -58,9 +76,11 @@ function setup({ assistantAccess = 'robin@example.com', asanaAccess = 'domain:ex
     claude: { create: async params => { claudeCalls += 1; claudeParams.push(params); return { usage: {}, stop_reason: 'end_turn', content: [{ type: 'text', text: 'from Claude' }] }; } },
     makeModuleContext: core.createContextFactory({ store, sealer: core.createLocalSealer(), env: {}, log: quietLog, access }),
     defer: p => background.push(p),
+    moduleTuning,
   });
   const settle = async () => { while (background.length) await background.shift(); };
-  return { handle, settle, posted, seen, claudeCount: () => claudeCalls, claudeParams };
+  const events = () => store.collection('core__usage_events').list({ field: 'at' });
+  return { handle, settle, posted, seen, claudeCount: () => claudeCalls, claudeParams, events };
 }
 
 const TEXT = '@Buddy kudos to @Eve for think big';
@@ -153,4 +173,40 @@ test('with assistant access, ordinary messages go to Claude and Claude-only modu
   const help = await handle(chatEvent(EVE, '/help'));
   assert.match(JSON.stringify(help.cardsV2), /Ask me anything/);
   assert.match(JSON.stringify(help.cardsV2), /Connect Asana/);
+});
+
+// Someone who can only drive one module does not need the model that answers anything.
+test('one scope, one model: a scoped person runs on that module model and effort', async () => {
+  const { handle, settle, claudeParams, events } = setup({
+    moduleTuning: { asana: { model: 'claude-haiku-4-5', effort: 'low' } },
+  });
+  await handle(chatEvent(EVE, 'what are my tasks due this week?'));
+  await settle();
+
+  assert.equal(claudeParams.at(-1).model, 'claude-haiku-4-5');
+  assert.equal(claudeParams.at(-1).effort, 'low');
+  assert.equal((await events()).at(-1).model, 'claude-haiku-4-5', 'and /costs prices it as the model that actually ran');
+});
+
+test('free conversation keeps the default model, whatever is tuned', async () => {
+  const { handle, settle, claudeParams } = setup({
+    assistantAccess: 'domain:example.com',
+    moduleTuning: { asana: { model: 'claude-haiku-4-5', effort: 'low' } },
+  });
+  await handle(chatEvent(EVE, 'write me a poem'));
+  await settle();
+  assert.equal(claudeParams.at(-1).model, undefined, 'the service default applies');
+  assert.equal(claudeParams.at(-1).effort, undefined);
+});
+
+// Two scoped modules means the next message could be about either one, and a request is
+// answered by one model throughout. The safe choice is the default, not a coin toss.
+test('two scopes, no guess: the default model applies', async () => {
+  const { handle, settle, claudeParams } = setup({
+    docsAccess: 'domain:example.com',
+    moduleTuning: { asana: { model: 'claude-haiku-4-5' }, docs: { model: 'claude-haiku-4-5' } },
+  });
+  await handle(chatEvent(EVE, 'what are my tasks due this week?'));
+  await settle();
+  assert.equal(claudeParams.at(-1).model, undefined);
 });

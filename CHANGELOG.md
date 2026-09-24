@@ -11,6 +11,43 @@ live Chat app, and what is still unverified against reality).
 
 ## 2026-09-24
 
+### Added
+- **A cheaper model for people who only use one module.** Someone whose Buddy is just the manual
+  does not need the model that answers anything: `MODULE_TUNING` sets a model and an effort level
+  per module, and it is chosen from the person's **scope**, not from the tool a request turns out
+  to need. That matters twice over — the model cannot change mid-conversation, which would throw
+  away the prompt cache, and the saving lands on the company at large rather than on admins.
+  Prices are now per model (`MODEL_PRICES`), so `/costs` keeps telling the truth once a second
+  model is in play, and it gains a **By model** line when more than one has run.
+- **Repeat questions to the manual are free.** Eighty people will ask "how many holidays do I
+  get?" and deserve the same answer; only the first now costs anything. The cache is keyed on the
+  question's embedding — the vector retrieval needs anyway — so the same question in different
+  words, or in Spanish, still hits, and publishing a new index retires every answer written from
+  the old one. What is stored is a **hash of the question, its vector and the answer**: never the
+  question text, never who asked. A miss, or any error at all, goes to Claude exactly as before.
+- **`afterAnswer`**, a module hook: modules whose tools ran are told what the request answered,
+  in the background, after the person has their reply. It is how the manual learns; a module that
+  throws in it cannot turn an answered request into a failed one.
+- **An eval** (`docs/EVAL.md`, `evals/manual.md`): twenty questions, asked before and after any
+  change to model or effort, scored pass/partial/fail. A change ships only if nothing got worse.
+  The known-good answers still need filling in by someone who knows the manual.
+- **Context editing** (`CLEAR_TOOL_USES`), which drops the oldest tool results inside a long
+  Asana loop instead of re-sending them every step. **Off by default** — it changes what Claude
+  can still see mid-request, so it goes through the eval first.
+
+### Changed
+- **Module instructions cut from 5,500 characters to 1,772** across asana, manual, leave, ooo,
+  kudos and admin. Sent on every request, by every person; the words were doing no work.
+- **The manual is now a scoped module**, so someone can ask about policy without being given
+  free-form Claude — the same split Asana already had (`0007-scoped-conversation.md`).
+
+### Fixed
+- **The cost settings were never reaching Cloud Run.** `deploy.sh` passes a fixed list of
+  variables, and `MAX_OUTPUT_TOKENS`, `MAX_HISTORY_CHARS`, `CACHE_TTL` and
+  `MONTHLY_USD_CAP_SCOPED` were not on it: editing them in `infra/config.env` changed nothing,
+  and the service ran on its built-in defaults. The defaults happened to match, so no behaviour
+  was wrong — but the knobs were not connected to anything.
+
 ### Changed
 - **"Who's out?" is answered without Claude.** The most-asked question at company scale has one
   right answer and a fixed shape, so `ooo` now answers it directly — in the words people actually

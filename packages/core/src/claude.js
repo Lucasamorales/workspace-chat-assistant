@@ -18,21 +18,43 @@ function withSearch(tools) {
   return deferred && loaded ? [TOOL_SEARCH, ...tools] : tools.map(({ defer_loading, ...t }) => t);
 }
 
-function createClaude({ apiKey, model, effort, maxTokens = 4000, cacheTtl = '1h', client }) {
+/**
+ * Dropping the oldest tool results once a request gets long. In an Asana loop the results of
+ * step one are dead weight by step six, but they are re-sent — and re-paid for — on every call.
+ *
+ * Off unless CLEAR_TOOL_USES is set, because it changes what Claude can still see: the number is
+ * how many recent tool uses stay untouched.
+ */
+const clearing = keep => ({
+  edits: [{
+    type: 'clear_tool_uses_20250919',
+    trigger: { type: 'input_tokens', value: 30000 },
+    keep: { type: 'tool_uses', value: keep },
+    clear_at_least: { type: 'input_tokens', value: 5000 },
+  }],
+});
+
+function createClaude({ apiKey, model, effort, maxTokens = 4000, cacheTtl = '1h', clearToolUses = 0, client }) {
   const anthropic = client || new Anthropic({ apiKey });
   return {
-    create({ system, tools, messages }) {
+    /**
+     * @param opts.model   overrides the default for this request. Chosen from the person's scope,
+     *   never mid-conversation: a cache belongs to one model, so switching throws it away.
+     * @param opts.effort  likewise — looking something up needs less than a multi-step write.
+     */
+    create({ system, tools, messages, model: modelFor, effort: effortFor, maxTokens: cap }) {
       const withTools = withSearch(tools);
       return anthropic.messages.create({
-        model,
-        max_tokens: maxTokens,
+        model: modelFor || model,
+        max_tokens: cap || maxTokens,
         system,
         ...(withTools && withTools.length ? { tools: withTools } : {}),
         messages,
         // Caches system + tools + history. An hour rather than the default five minutes: chat
         // comes in bursts, and it is the first request after a gap that pays full price.
         cache_control: { type: 'ephemeral', ttl: cacheTtl },
-        output_config: { effort },
+        output_config: { effort: effortFor || effort },
+        ...(clearToolUses ? { context_management: clearing(clearToolUses) } : {}),
       });
     },
   };

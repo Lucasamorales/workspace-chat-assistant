@@ -81,3 +81,25 @@ effort or retrieval.
   people's data. Rejected.
 - **Batch API (50% off).** Not applicable: every request here is someone waiting in a chat window.
 - **Fast mode.** The opposite of this document.
+
+## As built (2026-09-24)
+
+All ten are in, with three things worth knowing that the plan did not say:
+
+- **The model is chosen from the scope, in the handler, once per request** (`tuningFor`), and only
+  when the scope is unambiguous. Someone scoped to two modules gets the default: a request is
+  answered by one model throughout, and guessing which of two it should be is worse than not
+  guessing. Configured as `MODULE_TUNING=manual:claude-haiku-4-5:low`, priced by `MODEL_PRICES`.
+- **The answer cache lives in the module, not the gateway** — read in `handleMessage` (so a hit
+  never reaches Claude) and written in `afterAnswer`, a new hook the registry only offers to
+  modules whose tools actually ran. The question is embedded at most once per message: the cache
+  lookup, the retrieval and the write share one vector.
+- **Only direct messages are checked** against the cache. Embedding every message of every busy
+  space would cost more than the cache saves.
+
+Two are deliberately left off:
+
+- `CLEAR_TOOL_USES=0`. Context editing changes what Claude can still see inside a request, so it
+  waits for the eval.
+- The eval's known-good answers. `evals/manual.md` has the twenty questions; the answers need
+  someone who knows the manual, and inventing them would defeat the purpose.

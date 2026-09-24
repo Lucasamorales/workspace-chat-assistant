@@ -69,7 +69,20 @@ The Sheet must be shared as **Editor** with `buddy-bot@your-gcp-project.iam.gser
 and it must be a **Google Sheet**: a spreadsheet uploaded to Drive stays an Excel file until it is
 opened and saved as one, and the Sheets API cannot read those.
 
+## More than one model
+
+Each usage event names the model that answered it, and `MODEL_PRICES` gives each model its own
+price per million tokens, so a Haiku request is not priced as a Sonnet one. A model with no entry
+falls back to `USD_PER_MTOK_IN`/`_OUT`: an unpriced model must look expensive, never free.
+
+`/costs` grows a **By model** block once more than one has run — before that it would only repeat
+what the config already says.
+
 ## Deliberate omissions
+
+- **A cached answer is not a request.** When the manual answers from its cache, nothing reached
+  Claude and nothing is recorded — the same as "who's out?". Savings show up as requests that
+  stopped happening, not as a line item.
 
 - **No tool for Claude.** Costs are read with a command only, so no conversation can be steered
   into reporting on someone.

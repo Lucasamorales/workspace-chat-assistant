@@ -84,6 +84,10 @@
  *   someone with this module but not the assistant can talk to it in words, and Claude is given
  *   only this module's tools and told to decline anything else. It makes "use Asana by asking"
  *   an ordinary permission without handing out free-form Claude.
+ * @property {(ctx: ModuleContext, answered: {question: string, answer: string, tools: string[]}) => Promise<void>} [afterAnswer]
+ *   Called in the background after Claude answered a request in which one of this module's tools
+ *   ran. For learning from an answer — caching it, say — never for replying: the person already
+ *   has theirs. A throw is logged and ignored.
  * @property {(ctx: ModuleContext, message: ChatMessage) => Promise<Reply|null>} [handleMessage]
  *   Handle a message directly, without Claude (e.g. a kudos vote). Return null to pass.
  *   Modules are asked in BUDDY_MODULES order; the first non-null reply wins.
@@ -117,7 +121,7 @@ const FIELDS = [
   'name', 'description', 'allowedIn', 'settings', 'instructions',
   'commands', 'readAttachment', 'tools', 'oauth', 'status',
   'examples', 'quickActions', 'connected', 'roles', 'handleMessage', 'conversation',
-  'needsConversation', 'scopedConversation',
+  'needsConversation', 'scopedConversation', 'afterAnswer',
 ];
 const SPACE_KINDS = ['DM', 'SPACE'];
 
@@ -151,7 +155,7 @@ function validateModule(mod, source = 'module') {
   for (const [cmd, spec] of Object.entries(mod.commands || {})) {
     if (spec && spec.role !== undefined && !roles.includes(spec.role)) fail(`command "${cmd}" uses undeclared role "${spec.role}"`);
   }
-  for (const hook of ['readAttachment', 'tools', 'status', 'quickActions', 'connected', 'handleMessage']) {
+  for (const hook of ['readAttachment', 'tools', 'status', 'quickActions', 'connected', 'handleMessage', 'afterAnswer']) {
     if (mod[hook] !== undefined && typeof mod[hook] !== 'function') fail(`${hook} must be a function`);
   }
   if (mod.examples !== undefined && !(Array.isArray(mod.examples) && mod.examples.every(e => typeof e === 'string'))) {

@@ -56,3 +56,18 @@ test('no tools at all means no tools field, not an empty one', async () => {
   await claude.create({ system: 's', tools: [], messages: [] });
   assert.equal('tools' in sent[0], false);
 });
+
+test('context editing is off unless asked for, and asks to keep the recent tool results', async () => {
+  const sent = [];
+  const client = { messages: { create: async params => { sent.push(params); return { usage: {} }; } } };
+
+  const off = createClaude({ model: 'claude-sonnet-5', effort: 'medium', client });
+  await off.create({ system: 's', messages: [] });
+  assert.equal(sent[0].context_management, undefined);
+
+  const on = createClaude({ model: 'claude-sonnet-5', effort: 'medium', clearToolUses: 3, client });
+  await on.create({ system: 's', messages: [] });
+  const [edit] = sent[1].context_management.edits;
+  assert.equal(edit.type, 'clear_tool_uses_20250919');
+  assert.equal(edit.keep.value, 3);
+});

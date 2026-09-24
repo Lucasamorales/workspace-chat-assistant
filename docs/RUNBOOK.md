@@ -158,6 +158,10 @@ gcloud projects add-iam-policy-binding your-gcp-project --member="serviceAccount
 - [ ] Change a line in a policy doc → `/manual reindex` → "1 updated", and the new answer is used
 - [ ] A non-admin gets "only admins" for reindex, but can still ask questions
 - [ ] Compare three answers against the old Internal-RAG widget before retiring it
+- [ ] Ask the same question twice, worded differently the second time → the second answer comes
+      back instantly and identically (the answer cache), and the logs say `manual answered from cache`
+- [ ] `/manual reindex` → ask it a third time → it goes to Claude again, because a new index
+      retires the cached answers
 
 ## 5f. Admin module check
 
@@ -201,6 +205,22 @@ Deletes `legacy-chat-bot`, the ClickUp/old Asana/old state secrets, and removes 
 
 A cache hit rate below 50% means conversations are re-sending history at full price — worth
 looking at before anything else on the bill.
+
+Once more than one model has run, `/costs` also shows a **By model** block.
+
+### 6a-i. After a deploy that changes cost settings
+
+The settings only do something if they reach the service — they were not on `deploy.sh`'s list
+until 2026-09-24, so this is worth checking once:
+
+```bash
+gcloud run services describe buddy-bot --region=europe-west1 --project=your-gcp-project --format='value(spec.template.spec.containers[0].env)' | tr ',' '
+' | grep -E 'CACHE_TTL|MAX_OUTPUT|MAX_HISTORY|MODULE_TUNING|MODEL_PRICES|CLEAR_TOOL'
+```
+
+- [ ] Every setting you edited in `infra/config.env` appears
+- [ ] Run the eval (`docs/EVAL.md`) before and after any change to `MODULE_TUNING` or
+      `CLEAR_TOOL_USES` — a cheaper wrong answer is not cheaper
 
 ## 6b. Who can use what
 

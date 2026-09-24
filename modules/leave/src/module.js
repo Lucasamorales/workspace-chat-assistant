@@ -175,12 +175,10 @@ function createLeaveModule({ impersonator, calendar, now = () => new Date() } = 
     needsConversation: true,
     settings: ['LEAVE_TEAM_EMAIL'],
     examples: ['Book Remy out 12–16 October', 'Riley is off Friday morning', 'Cancel Charlie\'s leave on the 3rd'],
-    instructions: 'Leave is booked with the book_leave tool and removed with cancel_leave. Dates are YYYY-MM-DD, '
-      + 'type is full, am or pm. Never guess dates: if the person is vague, ask. This module is used by the accounts '
-      + 'team to record leave for colleagues, so "person" is usually someone else: pass their work email. People '
-      + 'without the admin role can only book their own leave, so do not offer to book for others. Working hours '
-      + 'come from each person\'s saved shift; if a half-day is asked for and I do not know theirs, ask which shift '
-      + 'they work instead of inventing hours. It is remembered afterwards.',
+    instructions: 'book_leave and cancel_leave. Dates YYYY-MM-DD; type full, am or pm. Never guess a date — ask. '
+      + 'Accounts records leave for colleagues, so "person" is usually someone else\'s work email; without the admin '
+      + 'role a person can only book their own, so do not offer otherwise. Hours come from their saved shift; for a '
+      + 'half-day with no shift known, ask which one rather than inventing hours.',
 
     commands: {
       leave: {

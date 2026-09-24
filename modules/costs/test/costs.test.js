@@ -324,3 +324,22 @@ test('a request that failed before Claude answered is still recorded', async () 
   const quiet = usage.meter({ userId: '111', userEmail: 'robin@example.com' });
   assert.equal(await quiet.finish({ outcome: 'answered' }), null);
 });
+
+test('/costs splits by model once more than one is in play, and stays quiet when it is not', async () => {
+  const oneModel = setup({
+    events: [event({ model: 'claude-sonnet-5', usd: 0.5 }), event({ model: 'claude-sonnet-5', usd: 0.5 })],
+  });
+  assert.doesNotMatch((await oneModel.mod.commands.costs.run(oneModel.ctx, '')).text, /By model/);
+
+  const { mod, ctx } = setup({
+    events: [
+      event({ model: 'claude-sonnet-5', usd: 0.90 }),
+      event({ model: 'claude-haiku-4-5', usd: 0.10 }),
+    ],
+  });
+  const reply = await mod.commands.costs.run(ctx, '');
+  assert.match(reply.text, /\*\*By model\*\*/);
+  assert.match(reply.text, /sonnet-5/);
+  assert.match(reply.text, /haiku-4-5/);
+  assert.doesNotMatch(reply.text, /claude-haiku/, 'the repeated "claude-" prefix is dropped');
+});
