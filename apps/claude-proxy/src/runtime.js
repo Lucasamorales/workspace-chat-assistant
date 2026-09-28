@@ -15,8 +15,15 @@ const { createStreamParser } = require('./stream');
 
 const STUB = path.join(__dirname, 'stub-mcp.js');
 
-function createRuntime({ bin, workRoot, callbackUrl, source = process.env, spawnImpl, nodePath = process.execPath }) {
+function createRuntime({ bin, workRoot, callbackUrl, source = process.env, spawnImpl, nodePath = process.execPath, log = null }) {
   fs.mkdirSync(workRoot, { recursive: true });
+  // A proxy that was killed never ran its cleanup: its CLIs exit with it (their input closes), but
+  // their folders stay. Nothing from a previous run can still be in use, so clear them now — only
+  // folders named like session ids, so a PROXY_WORK_DIR pointed somewhere real loses nothing.
+  const SESSION_DIR = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  const leftovers = fs.readdirSync(workRoot).filter(name => SESSION_DIR.test(name));
+  for (const name of leftovers) fs.rmSync(path.join(workRoot, name), { recursive: true, force: true });
+  if (leftovers.length && log) log.info('cleared session folders left by a previous run', { count: leftovers.length });
 
   function spawnSession(plan) {
     const id = crypto.randomUUID();

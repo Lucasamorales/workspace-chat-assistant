@@ -166,6 +166,52 @@ test('a CLI logged in with an API key is refused, never answered', async () => {
   }
 });
 
+// The gap the first real run found: the window is reported just after the reply, so a proxy that
+// answered straight away would have answered before it knew this reply was billed as overage.
+test('a reply billed as overage is refused, even the very first one', async () => {
+  const p = await setup();
+  try {
+    const res = await p.post(request([user('hello')], { system: 'You are Buddy. FAKE_OVERAGE_IN_USE' }));
+    assert.equal(res.status, 403);
+    assert.match(res.body.error.message, /billing overage/);
+    assert.ok(!p.saw('request answered'), 'nothing reached Buddy before the check');
+  } finally {
+    await p.close();
+  }
+});
+
+// Structural rather than a race: with extra usage off, no reply can be billed per use at all.
+test('an account with extra usage switched on is refused before anything is answered', async () => {
+  const p = await setup();
+  try {
+    const res = await p.post(request([user('hello')], { system: 'You are Buddy. FAKE_EXTRA_USAGE_ON' }));
+    assert.equal(res.status, 403);
+    assert.match(res.body.error.message, /extra usage is switched on/);
+  } finally {
+    await p.close();
+  }
+});
+
+test('the first reply waits for the window; later ones in the same process do not', async () => {
+  const p = await setup({ limits: { windowWaitMs: 5000 } });
+  try {
+    const first = await p.post(request([user('please rename task 123')]));
+    assert.equal(first.body.usage.buddy_subscription.five_hour_utilization, 0.25, 'known on the first reply');
+    const call = first.body.content.find(b => b.type === 'tool_use');
+    const started = Date.now();
+    const second = await p.post(request([
+      user('please rename task 123'),
+      { role: 'assistant', content: first.body.content },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: call.id, content: 'Renamed.' }] },
+    ]));
+    assert.ok(Date.now() - started < 2500, 'no waiting for a report the CLI only sends once');
+    assert.equal(second.body.usage.buddy_subscription.five_hour_utilization, 0.25, 'carries the last one known');
+    assert.ok(!p.saw('no subscription window reported for this reply; answering on the last one known'));
+  } finally {
+    await p.close();
+  }
+});
+
 test('the proxy answers nobody without its secret, and does not stream', async () => {
   const p = await setup();
   try {

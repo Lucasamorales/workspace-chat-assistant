@@ -47,7 +47,7 @@ async function main() {
   let sessions;
   const callback = createCallbackServer({ sessions: { onStubCall: (...a) => sessions.onStubCall(...a) }, log: log.child('stub') });
   const callbackUrl = await callback.listen();
-  const runtime = createRuntime({ bin, workRoot: env.PROXY_WORK_DIR || path.join(os.tmpdir(), 'buddy-claude-proxy'), callbackUrl });
+  const runtime = createRuntime({ bin, workRoot: env.PROXY_WORK_DIR || path.join(os.tmpdir(), 'buddy-claude-proxy'), callbackUrl, log });
   sessions = createSessions({ spawnSession: runtime.spawnSession, log: log.child('sessions'), limits });
 
   const host = env.PROXY_HOST || '127.0.0.1';

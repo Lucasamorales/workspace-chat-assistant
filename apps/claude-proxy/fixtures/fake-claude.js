@@ -20,7 +20,10 @@ const args = process.argv.slice(2);
 const arg = name => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
 const system = fs.readFileSync(arg('--system-prompt-file'), 'utf8');
 const authSource = (system.match(/FAKE_AUTH=(\S+)/) || [])[1] || 'none';
+const overage = /FAKE_OVERAGE_IN_USE/.test(system);
+const overageStatus = /FAKE_EXTRA_USAGE_ON/.test(system) ? 'allowed' : 'rejected';
 const model = arg('--model');
+let reported = false;
 
 const emit = obj => process.stdout.write(`${JSON.stringify(obj)}\n`);
 let n = 0;
@@ -44,6 +47,11 @@ function message(blocks, stopReason) {
   });
   emit({ type: 'stream_event', event: { type: 'message_delta', delta: { stop_reason: stopReason }, usage: { output_tokens: 20 } } });
   emit({ type: 'stream_event', event: { type: 'message_stop' } });
+  // Like the real CLI: the window is reported just *after* the first reply, then not again.
+  if (!reported) {
+    reported = true;
+    emit({ type: 'rate_limit_event', rate_limit_info: { status: 'allowed', isUsingOverage: overage, overageStatus, unifiedWindows: { five_hour: { utilization: 0.25, resetsAt: 1790610000 }, seven_day: { utilization: 0.05 } } } });
+  }
 }
 
 async function main() {
@@ -58,7 +66,6 @@ async function main() {
   }
   const builtins = arg('--tools') === 'ToolSearch' ? ['ToolSearch'] : [];
   emit({ type: 'system', subtype: 'init', model, tools: [...builtins, ...tools], mcp_servers: client ? [{ name: 'buddy', status: 'connected' }] : [], apiKeySource: authSource });
-  emit({ type: 'rate_limit_event', rate_limit_info: { status: 'allowed', isUsingOverage: false, unifiedWindows: { five_hour: { utilization: 0.25, resetsAt: 1790610000 }, seven_day: { utilization: 0.05 } } } });
 
   const rl = readline.createInterface({ input: process.stdin });
   for await (const line of rl) {

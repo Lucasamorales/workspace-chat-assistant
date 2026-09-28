@@ -30,6 +30,7 @@ const DEFAULT_LIMITS = {
   idleMs: 10 * 60 * 1000,       // keep a finished thread's process for its next message
   spareMs: 10 * 60 * 1000,
   unmatchedMs: 10 * 1000,       // a stub call that arrives before its tool_use has been parsed
+  windowWaitMs: 1500,           // the subscription window is reported just after each reply
   maxProcesses: 4,
   spares: true,
 };
@@ -54,16 +55,24 @@ function createSessions({ spawnSession, log, limits: overrides = {}, now = () =>
       id: proc.id, token: proc.token, proc, plan,
       state: 'starting', spare: false, authSource: undefined, guardFailed: null,
       rateLimit: null, turn: null, pending: new Map(), results: new Map(), unmatched: [],
-      lastExchange: null, requestUserText: '', endReason: null,
+      lastExchange: null, requestUserText: '', endReason: null, inits: 0, onWindow: null,
       createdAt: now(), lastActiveAt: now(), turns: 0, apiCalls: 0, timer: null,
     };
     sessions.set(s.id, s);
 
+    // The CLI announces itself again at the start of every user turn; each one is re-checked.
     proc.parser.on('init', ev => {
+      s.inits += 1;
       s.authSource = ev.apiKeySource;
-      const buddy = (ev.tools || []).filter(t => fromCli(t)).length;
       const servers = (ev.mcp_servers || []).map(m => `${m.name}:${m.status}`);
-      log.info('cli ready', { ...brief(s), ms: now() - s.createdAt, model: ev.model, buddyTools: buddy, builtins: (ev.tools || []).filter(t => !fromCli(t)), servers, authSource: ev.apiKeySource });
+      if (s.inits === 1) {
+        log.info('cli ready', {
+          ...brief(s), ms: now() - s.createdAt, model: ev.model, buddyTools: (ev.tools || []).filter(t => fromCli(t)).length,
+          builtins: (ev.tools || []).filter(t => !fromCli(t)), servers, authSource: ev.apiKeySource,
+        });
+      } else {
+        log.info('cli started a new turn', { ...brief(s), turn: s.inits, authSource: ev.apiKeySource });
+      }
       // The whole experiment rests on this: no API key, ever. 'none' means the subscription login.
       if (ev.apiKeySource !== 'none') guard(s, `the CLI authenticated with "${ev.apiKeySource}", not the subscription`);
       if (plan.tools.length && !servers.includes('buddy:connected')) log.warn('stub MCP server not connected', { ...brief(s), servers });
@@ -78,6 +87,19 @@ function createSessions({ spawnSession, log, limits: overrides = {}, now = () =>
         sevenDay: w.seven_day && w.seven_day.utilization, overage: info.isUsingOverage, overageStatus: info.overageStatus,
       });
       if (info.isUsingOverage === true) guard(s, 'the subscription is billing overage — that is pay-per-use');
+      // Stronger than catching overage in the act: refuse to run at all while the account *could*
+      // bill per use. The CLI reports the window once per process, not per reply, so a reply that
+      // began overage could otherwise leave before the report arrived. With extra usage off, no
+      // reply can be billed per use at all. ("rejected" is what an account without it reports.)
+      else if (info.overageStatus !== undefined && info.overageStatus !== 'rejected') {
+        guard(s, `extra usage is switched on for this Claude account (status "${info.overageStatus}"); turn it off so nothing can be billed per use`);
+      }
+      // A reply waiting on this report can go now — unless the guard above has just refused it.
+      if (s.onWindow) {
+        const release = s.onWindow;
+        s.onWindow = null;
+        release();
+      }
     });
 
     proc.parser.on('message', msg => onMessage(s, msg));
@@ -221,7 +243,7 @@ function createSessions({ spawnSession, log, limits: overrides = {}, now = () =>
       s.state = 'holding';
       // Armed before answering: if the guard ends the session instead, ending clears the timer.
       armExpiry(s, limits.holdMs, 'held too long: Buddy never sent the tool results');
-      finishTurn(s, msg);
+      finishAfterWindow(s, msg);
       return;
     }
 
@@ -235,7 +257,34 @@ function createSessions({ spawnSession, log, limits: overrides = {}, now = () =>
 
     s.state = 'idle';
     armExpiry(s, limits.idleMs, 'idle', { graceful: true });
-    finishTurn(s, msg);
+    finishAfterWindow(s, msg);
+  }
+
+  /**
+   * The CLI reports the subscription window a few milliseconds *after* the first reply of a
+   * process — and then only when something changes. Answering before that first report would
+   * mean answering before anything is known about how the account bills (the first real run
+   * caught exactly that). So a process's first reply waits for it; later ones answer at once,
+   * and any later report still triggers the guard on the spot.
+   */
+  function finishAfterWindow(s, msg) {
+    const t = s.turn;
+    if (!t) return;
+    if (s.rateLimit) {
+      finishTurn(s, msg);
+      return;
+    }
+    let timer = null;
+    const release = () => {
+      timers.clearTimeout(timer);
+      if (s.turn === t) finishTurn(s, msg);
+    };
+    timer = timers.setTimeout(() => {
+      s.onWindow = null;
+      log.warn('no subscription window reported for this reply; answering on the last one known', { ...brief(s), rid: t.rid, waitedMs: limits.windowWaitMs });
+      release();
+    }, limits.windowWaitMs);
+    s.onWindow = release;
   }
 
   function finishTurn(s, msg) {
