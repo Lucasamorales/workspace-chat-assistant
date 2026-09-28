@@ -66,8 +66,19 @@ conversation, it is replayed as text, with earlier tool calls spelled out as alr
 other people wrote; the worst a prompt injection achieves is a tool call that comes back to Buddy,
 where approval cards still gate every write — the same as on the API.
 
-**One person, by construction.** `CLAUDE_PROXY_USERS` is a config rule like `BUDDY_ACCESS_*`, and
-a test proves nobody else reaches the proxy. Empty means the experiment is off.
+**Only the people listed, by construction.** `CLAUDE_PROXY_USERS` is a config rule like
+`BUDDY_ACCESS_*`, and a test proves nobody else reaches the proxy. Empty means the experiment is
+off. Every permission — allowed users, module access, roles, scoped conversation, grants,
+approval cards — is still decided in `buddy-bot` per person; the proxy only ever receives the
+tools and prompt that person was already allowed.
+
+**Two people never share a process.** Buddy's prompt does not name the asker, so two accounts
+with the same permissions send the same prompt and tools — and keyed on those alone, one could
+continue in the process holding the other's conversation (found when a second account was
+proposed). Every request now carries its owner as the API's `metadata.user_id`, an opaque hash of
+the Chat user id, never an email; spares, thread continuations and held calls are per owner, a
+request without one is refused, and tool results naming someone else's held call are refused
+without touching it. The test for it fails with the owner taken out of the key.
 
 **The proxy answers nobody without the shared secret**, compared in constant time; it binds to
 localhost, and the loopback channel the stub uses is on a separate random port the tunnel never

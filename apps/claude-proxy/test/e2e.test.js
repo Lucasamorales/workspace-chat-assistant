@@ -57,9 +57,10 @@ async function setup({ limits = {} } = {}) {
 }
 
 const TOOLS = [{ name: 'update_tasks', description: 'Update tasks. Changes real data.', input_schema: { type: 'object' } }];
-const request = (messages, { system = 'You are Buddy.', tools = TOOLS } = {}) => ({
+const request = (messages, { system = 'You are Buddy.', tools = TOOLS, owner = 'owner-robin' } = {}) => ({
   model: 'claude-sonnet-5', max_tokens: 16000, system: [{ type: 'text', text: system }], tools, messages,
   cache_control: { type: 'ephemeral', ttl: '1h' }, output_config: { effort: 'medium' },
+  ...(owner ? { metadata: { user_id: owner } } : {}),
 });
 const user = text => ({ role: 'user', content: [{ type: 'text', text }] });
 
@@ -232,6 +233,68 @@ test('a spare process is started ahead of time, and the next new conversation ta
     assert.ok(p.saw('spare started'));
     await p.post(request([user('a different conversation')]));
     assert.ok(p.saw('using a spare'), 'no cold start for the second conversation');
+  } finally {
+    await p.close();
+  }
+});
+
+/* ---------- two accounts, same permissions: never one process ---------- */
+
+// Buddy's prompt does not name the asker, so two accounts with the same permissions send the
+// same prompt and tools. Without the owner in the key, B could continue in A's process.
+test('a second account never continues in the first account\'s process, even with the same prompt', async () => {
+  const p = await setup();
+  try {
+    const a = await p.post(request([user('hello')], { owner: 'owner-a' }));
+    assert.equal(a.body.content[0].text, 'echo: hello');
+    // B's history happens to match A's exchange word for word.
+    const b = await p.post(request([user('hello'), { role: 'assistant', content: 'echo: hello' }, user('what did I ask?')], { owner: 'owner-b' }));
+    assert.equal(b.status, 200);
+    assert.ok(!p.saw('continuing the thread in its own process'), 'B started its own process');
+    assert.match(b.body.content[0].text, /conversation_so_far/, 'B was answered from its own history, replayed');
+  } finally {
+    await p.close();
+  }
+});
+
+test('a warm spare is only ever taken by the person it was started for', async () => {
+  const p = await setup({ limits: { spares: true } });
+  try {
+    await p.post(request([user('hello')], { owner: 'owner-a' }));
+    await p.post(request([user('something else')], { owner: 'owner-b' }));
+    assert.ok(!p.saw('using a spare'), 'A\'s spare stayed A\'s');
+    await p.post(request([user('another thing')], { owner: 'owner-a' }));
+    assert.ok(p.saw('using a spare'), 'and A did get it');
+  } finally {
+    await p.close();
+  }
+});
+
+test('tool results naming someone else\'s held call are refused, and the call stays held', async () => {
+  const p = await setup();
+  try {
+    const first = await p.post(request([user('please rename task 123')], { owner: 'owner-a' }));
+    const call = first.body.content.find(b => b.type === 'tool_use');
+    const stolen = await p.post(request([
+      user('please rename task 123'),
+      { role: 'assistant', content: first.body.content },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: call.id, content: 'Renamed.' }] },
+    ], { owner: 'owner-b' }));
+    assert.equal(stolen.status, 403);
+    assert.match(stolen.body.error.message, /belongs to someone else/);
+    assert.equal(p.sessions.stats().heldCalls, 1, 'A\'s call is untouched');
+  } finally {
+    await p.close();
+  }
+});
+
+test('a request that does not say whose it is gets no session at all', async () => {
+  const p = await setup();
+  try {
+    const res = await p.post(request([user('hello')], { owner: null }));
+    assert.equal(res.status, 400);
+    assert.match(res.body.error.message, /never shared between people/);
+    assert.equal(p.sessions.stats().live, 0);
   } finally {
     await p.close();
   }

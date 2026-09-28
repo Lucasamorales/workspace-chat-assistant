@@ -445,13 +445,19 @@ function createSessions({ spawnSession, log, limits: overrides = {}, now = () =>
     const plan = planFor(body);
     const turn = turnKind(body.messages);
     log.info('request', {
-      rid, kind: turn.kind, model: plan.model, effort: plan.effort, tools: plan.tools.length, toolSearch: plan.toolSearch,
-      messages: (body.messages || []).length, ignored: plan.ignored, live: sessions.size,
+      rid, owner: plan.owner.slice(0, 8), kind: turn.kind, model: plan.model, effort: plan.effort, tools: plan.tools.length,
+      toolSearch: plan.toolSearch, messages: (body.messages || []).length, ignored: plan.ignored, live: sessions.size,
     });
 
     if (turn.kind === 'tool_results') {
       const ids = turn.results.map(r => r.id);
       const s = byToolUse.get(ids[0]);
+      // Tool-use ids are unguessable and only ever returned to their owner, so this should never
+      // fire. If it does, something is badly wrong upstream: refuse rather than guess.
+      if (s && s.plan.owner !== plan.owner) {
+        log.error('tool results for another person\'s conversation', { rid, owner: plan.owner.slice(0, 8), sid: s.id.slice(0, 8) });
+        throw failure('That conversation belongs to someone else.', 403, 'permission_error');
+      }
       const live = s && s.state === 'holding' && !s.turn && s.pending.size === ids.length && ids.every(id => s.pending.has(id));
       if (live) {
         log.info('resuming a held session', { ...brief(s), rid, results: ids.length, declined: turn.results.filter(r => r.isError).length });

@@ -304,6 +304,10 @@ CLAUDE_PROXY_URL=https://<the tunnel's address>
 Deploying from `develop` replaces `main`'s build for everyone, so keep `develop` up to date with
 `main` first. Everyone not listed is answered by the API as before.
 
+More than one account (comma-separated) works, each with its own permissions exactly as set by
+`BUDDY_ACCESS_*` and `BUDDY_ROLE_*`; the proxy keeps their conversations in separate processes.
+They all draw on the **one** subscription the CLI is logged in with — its window is shared.
+
 **6. Check it:**
 
 - [ ] In the proxy window: `request`, `starting a session`, `cli ready` with `authSource: "none"`, `request answered`

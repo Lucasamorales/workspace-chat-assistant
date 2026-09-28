@@ -19,6 +19,7 @@ const BODY = {
   messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
   cache_control: { type: 'ephemeral', ttl: '1h' },
   output_config: { effort: 'medium' },
+  metadata: { user_id: 'owner-robin' },
 };
 
 test('a request becomes a CLI plan: Buddy tools only, the API tool search dropped, deferral noticed', () => {
@@ -29,6 +30,14 @@ test('a request becomes a CLI plan: Buddy tools only, the API tool search droppe
   assert.equal(plan.toolSearch, true, 'something was deferred, so the CLI gets its own ToolSearch');
   assert.equal(plan.effort, 'medium');
   assert.deepEqual(plan.ignored, ['cache_control'], 'what has no CLI equivalent is named, not silently lost');
+});
+
+test('the owner is part of the key, and a request without one is refused', () => {
+  const other = structuredClone(BODY);
+  other.metadata.user_id = 'owner-second';
+  assert.notEqual(planFor(other).configHash, planFor(BODY).configHash, 'same permissions, different person, different process');
+  const { metadata, ...anonymous } = BODY;
+  assert.throws(() => planFor(anonymous), /never shared between people/);
 });
 
 test('the same configuration always hashes the same, and a different day does not', () => {

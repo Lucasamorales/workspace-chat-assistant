@@ -30,6 +30,11 @@ live Chat app, and what is still unverified against reality).
   never sees an API key; every turn is refused unless it reports a subscription login; the proxy
   refuses to run while the account has extra usage switched on; `buddy-bot` never retries the
   proxy or falls back to the API. Each check has a test that fails without it.
+- **Two accounts never share a proxy process.** Buddy's prompt doesn't name the asker, so two
+  accounts with the same permissions looked identical to the proxy, and one could have continued
+  in the process holding the other's conversation. Requests now carry an opaque owner id
+  (`metadata.user_id`, a hash, never an email); spares, continuations and held calls are per
+  person, and a request without an owner is refused.
 - **The CLI can act on nothing**: restricted, no built-in tools except ToolSearch, only the stub's
   tools, every permission prompt refused, an empty working folder. The reference repo ran it with
   `--dangerously-skip-permissions`; with Buddy's untrusted input, that would let a line in an Asana

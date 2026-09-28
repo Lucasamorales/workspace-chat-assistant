@@ -429,6 +429,7 @@ function createEventHandler(deps) {
           claude, toolset, budget, log,
           ...tuning,
           backend,
+          owner: base.userId,
           system: systemFor(scopeOf(base), toolset.notes),
           messages: [...history, { role: 'user', content: blocks }],
           onProgress: async names => {
@@ -547,6 +548,7 @@ function createEventHandler(deps) {
           claude, toolset, log,
           ...tuning,
           backend,
+          owner: base.userId,
           budget: meter,
           system: systemFor(scopeOf(base), toolset.notes, [AFTER_APPROVAL]),
           saved: JSON.parse(record.loop),

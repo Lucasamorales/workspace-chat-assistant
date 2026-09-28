@@ -18,15 +18,28 @@ const PREFIX = 'mcp__buddy__';
 const toCli = name => `${PREFIX}${name}`;
 const fromCli = name => (typeof name === 'string' && name.startsWith(PREFIX) ? name.slice(PREFIX.length) : null);
 
-const HANDLED = new Set(['model', 'max_tokens', 'system', 'tools', 'messages', 'output_config']);
+const HANDLED = new Set(['model', 'max_tokens', 'system', 'tools', 'messages', 'output_config', 'metadata']);
 const hash = value => crypto.createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 
 const systemText = system => (Array.isArray(system)
   ? system.filter(b => b && b.type === 'text').map(b => b.text).join('\n\n')
   : String(system || ''));
 
-/** What a session is configured with: everything that has to be fixed when the CLI starts. */
+/**
+ * What a session is configured with: everything that has to be fixed when the CLI starts — and
+ * whose it is.
+ *
+ * The owner is part of the key on purpose. Buddy's prompt does not name the person asking, so
+ * two accounts with the same permissions produce the same prompt and tools; keyed on those
+ * alone, one person's next message could continue in the process holding someone else's
+ * conversation. `metadata.user_id` is the API's own field for this, and Buddy sends it as an
+ * opaque hash. A request without one is refused rather than risk a shared process.
+ */
 function planFor(body) {
+  const owner = body.metadata && typeof body.metadata.user_id === 'string' ? body.metadata.user_id : '';
+  if (!owner) {
+    throw Object.assign(new Error('metadata.user_id is required, so conversations are never shared between people.'), { status: 400, type: 'invalid_request_error' });
+  }
   const all = Array.isArray(body.tools) ? body.tools : [];
   // Server tools (the API's tool search) have a `type`; Buddy's own tools do not.
   const tools = all.filter(t => !t.type).map(t => ({
@@ -35,6 +48,7 @@ function planFor(body) {
     inputSchema: t.input_schema || { type: 'object' },
   }));
   const plan = {
+    owner,
     model: body.model,
     effort: body.output_config && body.output_config.effort,
     maxTokens: body.max_tokens,
@@ -43,7 +57,7 @@ function planFor(body) {
     toolSearch: all.some(t => t.defer_loading),
     ignored: Object.keys(body).filter(k => !HANDLED.has(k)),
   };
-  plan.configHash = hash({ m: plan.model, e: plan.effort, x: plan.maxTokens, s: plan.system, t: plan.tools, q: plan.toolSearch });
+  plan.configHash = hash({ o: owner, m: plan.model, e: plan.effort, x: plan.maxTokens, s: plan.system, t: plan.tools, q: plan.toolSearch });
   return plan;
 }
 

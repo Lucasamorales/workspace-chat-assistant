@@ -225,6 +225,7 @@ test('only the people in CLAUDE_PROXY_USERS are answered through the subscriptio
 
   // Background work finishes in either order; who got which is checked on the events below.
   assert.deepEqual(claudeParams.map(p => p.backend).sort(), ['api', 'subscription']);
+  assert.equal(claudeParams.find(p => p.backend === 'subscription').owner, '111', 'each request says whose it is');
   const recorded = await events();
   assert.deepEqual(recorded.map(e => [e.userEmail, e.backend]).sort(), [
     ['eve@example.com', 'api'],

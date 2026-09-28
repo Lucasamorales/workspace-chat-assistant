@@ -1,5 +1,6 @@
 /** The one place that calls the Anthropic API. Kept thin so tests can swap it out. */
 
+const crypto = require('crypto');
 const { Anthropic } = require('@anthropic-ai/sdk');
 
 /**
@@ -35,6 +36,12 @@ const clearing = keep => ({
 });
 
 const expose = message => Object.assign(new Error(message), { expose: true });
+
+/**
+ * Who a subscription request is for, as the proxy sees it: opaque, stable per person, not their
+ * email. The proxy keys its processes on it so two people's conversations never share one.
+ */
+const ownerKey = owner => crypto.createHash('sha256').update(`buddy-user:${owner}`).digest('hex').slice(0, 32);
 
 /**
  * @param proxy  experiment (docs/decisions/0010-subscription-proxy.md): `{ url, secret }` for the
@@ -79,8 +86,9 @@ function createClaude({ apiKey, model, effort, maxTokens = 16000, cacheTtl = '1h
      *   never mid-conversation: a cache belongs to one model, so switching throws it away.
      * @param opts.effort  likewise — looking something up needs less than a multi-step write.
      * @param opts.backend 'subscription' for the one person on the proxy experiment; else the API.
+     * @param opts.owner   who the request is for — required on the subscription, never sent to the API.
      */
-    create({ system, tools, messages, model: modelFor, effort: effortFor, maxTokens: cap, backend = 'api' }) {
+    create({ system, tools, messages, model: modelFor, effort: effortFor, maxTokens: cap, backend = 'api', owner = null }) {
       const withTools = withSearch(tools);
       const params = {
         model: modelFor || model,
@@ -94,7 +102,9 @@ function createClaude({ apiKey, model, effort, maxTokens = 16000, cacheTtl = '1h
         output_config: { effort: effortFor || effort },
         ...(clearToolUses ? { context_management: clearing(clearToolUses) } : {}),
       };
-      return backend === 'subscription' ? viaSubscription(params) : anthropic.messages.create(params);
+      if (backend !== 'subscription') return anthropic.messages.create(params);
+      if (!owner) return Promise.reject(new Error('a subscription request needs its owner, so the proxy never mixes two people'));
+      return viaSubscription({ ...params, metadata: { user_id: ownerKey(owner) } });
     },
   };
 }

@@ -55,11 +55,11 @@ function combineItems(items) {
   return { content: lines.join('\n\n'), isError: allFailed };
 }
 
-async function drive({ claude, system, toolset, budget, maxSteps, log, onProgress, model, effort, maxTokens, backend }, messages, stepsUsed) {
+async function drive({ claude, system, toolset, budget, maxSteps, log, onProgress, model, effort, maxTokens, backend, owner }, messages, stepsUsed) {
   let steps = stepsUsed;
   while (steps < maxSteps) {
     await budget.check();
-    const res = await claude.create({ system, tools: toolset.definitions, messages, model, effort, maxTokens, backend });
+    const res = await claude.create({ system, tools: toolset.definitions, messages, model, effort, maxTokens, backend, owner });
     steps += 1;
     await budget.record(res.usage || {}, res.model || model);
     messages.push({ role: 'assistant', content: res.content });

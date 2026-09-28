@@ -98,7 +98,7 @@ function twoBackends({ proxyFails = null } = {}) {
 
 test('a subscription request goes to the proxy, and everyone else still goes to the API', async () => {
   const { claude, api, viaProxy } = twoBackends();
-  await claude.create({ system: 's', messages: [], backend: 'subscription' });
+  await claude.create({ system: 's', messages: [], backend: 'subscription', owner: '111' });
   await claude.create({ system: 's', messages: [] });
   assert.equal(viaProxy.length, 1);
   assert.equal(api.length, 1, 'the default is the API');
@@ -111,7 +111,7 @@ test('when the proxy fails, nothing falls back to the API — the error says so'
     status: 403, error: { type: 'error', error: { type: 'permission_error', message: 'Refused: extra usage is switched on.' } },
   });
   const { claude, api } = twoBackends({ proxyFails: refused });
-  await assert.rejects(claude.create({ system: 's', messages: [], backend: 'subscription' }), err => {
+  await assert.rejects(claude.create({ system: 's', messages: [], backend: 'subscription', owner: '111' }), err => {
     assert.equal(err.expose, true, 'shown to the person, not swallowed');
     assert.equal(err.message, "The subscription proxy couldn't answer: Refused: extra usage is switched on.");
     return true;
@@ -119,12 +119,24 @@ test('when the proxy fails, nothing falls back to the API — the error says so'
   assert.equal(api.length, 0, 'the API was never called');
 
   const offline = twoBackends({ proxyFails: new Error('fetch failed') });
-  await assert.rejects(offline.claude.create({ system: 's', messages: [], backend: 'subscription' }), /not reachable/);
+  await assert.rejects(offline.claude.create({ system: 's', messages: [], backend: 'subscription', owner: '111' }), /not reachable/);
   assert.equal(offline.api.length, 0);
 });
 
 test('a subscription request with no proxy configured fails rather than using the API', async () => {
   const { claude, sent } = fake();
-  await assert.rejects(claude.create({ system: 's', messages: [], backend: 'subscription' }), /not configured/);
+  await assert.rejects(claude.create({ system: 's', messages: [], backend: 'subscription', owner: '111' }), /not configured/);
   assert.equal(sent.length, 0);
+});
+
+test('the proxy is told whose request it is — as an opaque id, never an email — and the API is not', async () => {
+  const { claude, api, viaProxy } = twoBackends();
+  await claude.create({ system: 's', messages: [], backend: 'subscription', owner: '111' });
+  await claude.create({ system: 's', messages: [], backend: 'subscription', owner: '222' });
+  await claude.create({ system: 's', messages: [] });
+  const [a, b] = viaProxy.map(p => p.metadata.user_id);
+  assert.match(a, /^[0-9a-f]{32}$/);
+  assert.notEqual(a, b, 'two people, two owners');
+  assert.equal(api[0].metadata, undefined, 'API requests are unchanged');
+  await assert.rejects(claude.create({ system: 's', messages: [], backend: 'subscription' }), /needs its owner/);
 });
