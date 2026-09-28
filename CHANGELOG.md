@@ -9,6 +9,37 @@ live Chat app, and what is still unverified against reality).
 
 ---
 
+## 2026-09-28 — experiment, `develop` only
+
+### Added
+- **Buddy on a Claude subscription, for one person** (`apps/claude-proxy`, decision
+  `0010-subscription-proxy.md`). A proxy on the PC where Claude Code is logged in answers the
+  Anthropic Messages API by running the Claude CLI. `buddy-bot` sends the people in
+  `CLAUDE_PROXY_USERS` there through a tunnel; everyone else stays on the API. Modules, access,
+  scoped conversation and approval cards are unchanged — they all run in `buddy-bot`.
+- **Held sessions**: when the model asks for one of Buddy's tools, the CLI waits inside the call
+  while Buddy runs it — behind its approval card when it writes — and the same process carries on,
+  so history is never replayed. A thread's next message continues in the same process; a warm
+  spare answers a new conversation in 1.1s instead of 2.1s.
+- **Experiment logs** on the PC, one JSON line per step, content never recorded.
+- **`/costs` shows subscription use apart**: requests, share of the five-hour and weekly windows,
+  and what the API would have charged. Subscription replies cost $0 and never touch the cap.
+
+### Security
+- **No API billing and no fallback to the API.** The CLI gets an allow-listed environment and
+  never sees an API key; every turn is refused unless it reports a subscription login; the proxy
+  refuses to run while the account has extra usage switched on; `buddy-bot` never retries the
+  proxy or falls back to the API. Each check has a test that fails without it.
+- **The CLI can act on nothing**: restricted, no built-in tools except ToolSearch, only the stub's
+  tools, every permission prompt refused, an empty working folder. The reference repo ran it with
+  `--dangerously-skip-permissions`; with Buddy's untrusted input, that would let a line in an Asana
+  task run commands on the PC.
+
+### Infrastructure
+- `deploy.sh` passes `CLAUDE_PROXY_USERS` and `CLAUDE_PROXY_URL`, and mounts `claude-proxy-secret`,
+  only when someone is listed. The Dockerfile lists the new workspace so the lockfile matches; the
+  proxy itself never runs in the image.
+
 ## 2026-09-24
 
 ### Changed

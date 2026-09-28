@@ -147,6 +147,8 @@ apps/
     src/voice.js         Buddy's tone of voice (instructions for Claude)
   oauth-gateway/       buddy-oauth: /auth/<module>/start and /callback, plus Buddy's images at /assets
     public/              pixel-art avatar, faces and GIFs
+  claude-proxy/        experiment, develop only: one person's Buddy answered on a Claude
+                       subscription, from their PC (docs/decisions/0010-subscription-proxy.md)
 packages/
   core/                shared building blocks — the only code modules and apps share
     src/agent-loop.js    Claude tool loop with the approval pause/resume
@@ -331,6 +333,8 @@ in Secret Manager and are mounted at deploy time.
 | `USD_PER_MTOK_IN` / `_OUT` | config.env | Default prices, for any model not in `MODEL_PRICES` |
 | `MAX_OUTPUT_TOKENS`, `MAX_HISTORY_CHARS`, `CACHE_TTL` | config.env | Cost controls (`0009-cost-reduction.md`) |
 | `CLEAR_TOOL_USES` | config.env | Drop the oldest tool results in a long request; `0` is off |
+| `CLAUDE_PROXY_USERS`, `CLAUDE_PROXY_URL` | config.env | Experiment (`develop`): who is answered on a Claude subscription via the proxy; empty is off. RUNBOOK §6c |
+| `claude-proxy-secret` | Secret Manager | Experiment only: shared by `buddy-bot` and the proxy |
 | `ASANA_CLIENT_ID` | config.env | Asana **MCP app** client ID (not secret) |
 | `anthropic-key` | Secret Manager | Anthropic API key |
 | `asana-mcp-client-secret` | Secret Manager | Asana MCP app client secret |

@@ -256,6 +256,70 @@ every role, and anyone listed there.
 - New starters also need the Chat app shared with them in the console (until visibility goes
   company-wide at the merge).
 
+## 6c. Experiment: Buddy on a Claude subscription (`develop` only)
+
+One person's Buddy answered by the Claude CLI on their own subscription, through
+`apps/claude-proxy` on their PC. Why and what it guarantees: `docs/decisions/0010-subscription-proxy.md`.
+Everyone else stays on the API throughout. PowerShell, from the repo root.
+
+**1. The shared secret — once.** Written by node, not PowerShell, which would add a line ending:
+
+```powershell
+New-Item -ItemType Directory -Force "$HOME\.buddy" | Out-Null
+node -e "require('fs').writeFileSync(require('os').homedir()+'/.buddy/proxy-secret.txt', require('crypto').randomBytes(32).toString('hex'))"
+gcloud secrets create claude-proxy-secret --replication-policy=automatic --data-file="$HOME\.buddy\proxy-secret.txt" --project=your-gcp-project
+gcloud secrets add-iam-policy-binding claude-proxy-secret --member=serviceAccount:buddy-bot@your-gcp-project.iam.gserviceaccount.com --role=roles/secretmanager.secretAccessor --project=your-gcp-project
+```
+
+**2. Check the account can't bill per use.** In Claude's settings, extra usage must be **off**. The
+proxy refuses to run while it is on; that is the rule that makes "no pay-per-use" hold.
+
+**3. Start the proxy** and leave the window open:
+
+```powershell
+$env:CLAUDE_PROXY_SECRET_FILE = "$HOME\.buddy\proxy-secret.txt"
+node apps/claude-proxy/src/index.js
+```
+
+- [ ] It prints `proxy listening` with the path and version of `claude.exe`
+
+**4. A tunnel to it**, so Cloud Run can reach `127.0.0.1:8787`. Quickest, no account needed — the
+URL changes on every restart, and each change needs a redeploy:
+
+```powershell
+cloudflared tunnel --url http://127.0.0.1:8787
+```
+
+A named Cloudflare tunnel (needs a domain on Cloudflare) or Tailscale Funnel gives a URL that
+stays the same. Whichever: only the proxy's port goes through it, and nothing answers without the
+secret.
+
+**5. Point buddy-bot at it** in `infra/config.env`, commit, deploy from `develop`:
+
+```
+CLAUDE_PROXY_USERS=robin@example.com
+CLAUDE_PROXY_URL=https://<the tunnel's address>
+```
+
+Deploying from `develop` replaces `main`'s build for everyone, so keep `develop` up to date with
+`main` first. Everyone not listed is answered by the API as before.
+
+**6. Check it:**
+
+- [ ] In the proxy window: `request`, `starting a session`, `cli ready` with `authSource: "none"`, `request answered`
+- [ ] "what's due for me this week?" → an answer, and `/costs` shows **On the subscription**
+- [ ] Create a task → approval card → Approve → the proxy logs `resuming a held session`, not `replaying`
+- [ ] Stop the proxy, send a message → *"The subscription proxy couldn't answer: the proxy is not
+      reachable"*. Nothing is answered through the API instead.
+- [ ] Someone not listed still gets answers as usual
+
+**Turning it off:** empty `CLAUDE_PROXY_USERS`, deploy. The proxy settings and secret leave the
+service with it.
+
+**Reading the logs:** `apps/claude-proxy/logs/proxy-<date>.jsonl`, one line per step — see
+`apps/claude-proxy/README.md`. `replaying: no live session holds these tool calls` and
+`guard refused the session` are the two lines worth searching for first.
+
 ## 7. Everyday operations
 
 | Task | How |

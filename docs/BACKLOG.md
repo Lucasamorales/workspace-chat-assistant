@@ -229,6 +229,22 @@ Decision: `docs/decisions/0004-admin-module.md`. Config stays the floor; grants 
 | G11 | ✅ RUNBOOK §6b: read access with `/access` | Docs |
 | G12 | Try it live: grant a colleague a module, confirm they can use it and nobody else changed | After deploy |
 
+## Epic 12: experiment — Buddy on a Claude subscription (`develop` only)
+
+Decision `0010-subscription-proxy.md`. One person, by config; never merged into `main` unless the
+result says it should be.
+
+| # | Item | Done when |
+|---|---|---|
+| S0 | ✅ Spike on the real CLI: native tool calls, held calls, caching across processes, tool search, auth and overage flags; history injection repeats writes | `scratchpad` report |
+| S1 | ✅ `apps/claude-proxy`: held sessions, thread continuation, warm spares, replay fallback | 26 tests; real-CLI smoke test |
+| S2 | ✅ No API billing: allow-listed environment, subscription login checked every turn, refuses to run with extra usage on, no fallback | Tests fail with each check removed |
+| S3 | ✅ Buddy routes `CLAUDE_PROXY_USERS` to the proxy; $0 against the cap; `/costs` shows the window and API-equivalent | Tests; real handler + real CLI with an approval card |
+| S4 | Secret in Secret Manager, tunnel up, deploy from `develop` | RUNBOOK §6c checks pass |
+| S5 | An approval that waits several minutes, through the tunnel | `resuming a held session`, not `replaying` |
+| S6 | A week of real use against the API baseline: tool-call success, latency, window per request | Written into `0010`, whatever it says |
+| S7 | *If spares keep being starved:* evict idle threads for a spare, or raise `PROXY_MAX_PROCESSES` | Measured, not guessed |
+
 ## Epic 11: cheap enough for the whole company
 
 Decision: `docs/decisions/0009-cost-reduction.md`. Order is cheapest risk first; anything that
