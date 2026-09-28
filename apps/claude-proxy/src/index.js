@@ -11,7 +11,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { createExperimentLog } = require('./log');
-const { resolveClaudeBin, cleanEnv } = require('./cli');
+const { resolveClaudeBin, cleanEnv, readLogin } = require('./cli');
 const { createRuntime } = require('./runtime');
 const { createSessions, DEFAULT_LIMITS } = require('./sessions');
 const { createCallbackServer } = require('./callback');
@@ -48,6 +48,11 @@ async function main() {
   const bin = resolveClaudeBin(env);
   const version = spawnSync(bin, ['--version'], { encoding: 'utf8', env: cleanEnv(env), shell: false, windowsHide: true });
   if (version.status !== 0) fail(`claude at ${bin} did not run: ${(version.stderr || version.error || '').toString().slice(0, 200)}`);
+
+  // Before accepting anything: which Claude account answers, and is it a subscription at all.
+  const login = readLogin({ bin, source: env });
+  if (!login.ok) fail(login.why);
+  log.info('cli login', { account: login.account, plan: login.plan });
 
   const numberOr = (value, fallback) => (Number.isFinite(Number(value)) && value !== '' && value !== undefined ? Number(value) : fallback);
   const limits = {

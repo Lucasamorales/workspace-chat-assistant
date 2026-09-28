@@ -225,3 +225,16 @@ test('startup clears only the folders of runs that are gone, never a live one or
   assert.deepEqual(fs.readdirSync(root).sort(), ['keep-me', 'run-222', 'run-999'], 'the dead run went; the live one and a stranger stayed');
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+/* ---------- the login, checked before anything is accepted ---------- */
+
+const { checkLogin } = require('../src/cli');
+
+test('only a claude.ai login is a subscription; anything else stops the proxy starting', () => {
+  assert.deepEqual(checkLogin({ loggedIn: true, authMethod: 'claude.ai', email: 'robin@example.com', subscriptionType: 'max' }),
+    { ok: true, account: 'robin@example.com', plan: 'max' });
+  assert.match(checkLogin({ loggedIn: false, authMethod: 'none' }).why, /not logged in/);
+  assert.match(checkLogin({ loggedIn: true, authMethod: 'api_key' }).why, /not a Claude subscription/);
+  assert.match(checkLogin({ loggedIn: true, authMethod: 'console' }).why, /not a Claude subscription/);
+  assert.equal(checkLogin(null).ok, false);
+});

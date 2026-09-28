@@ -94,6 +94,29 @@ function envFor(plan, source = process.env) {
   });
 }
 
+/**
+ * Which Claude login the CLI will use, from `claude auth status`, and whether it may be used.
+ * Only a claude.ai login is a subscription; anything else — an API key, a Console login, nobody
+ * — stops the proxy before it accepts a single request. (Every turn is still checked as well:
+ * the login can change while the proxy runs.)
+ */
+function checkLogin(status) {
+  if (!status || !status.loggedIn) return { ok: false, why: 'the CLI is not logged in to a Claude account (run: claude auth login)' };
+  if (status.authMethod !== 'claude.ai') {
+    return { ok: false, why: `the CLI is logged in with "${status.authMethod}", not a Claude subscription (run: claude auth logout, then claude auth login)` };
+  }
+  return { ok: true, account: status.email, plan: status.subscriptionType };
+}
+
+function readLogin({ bin, source = process.env, run = spawnSync }) {
+  const r = run(bin, ['auth', 'status'], { encoding: 'utf8', env: cleanEnv(source), shell: false, windowsHide: true });
+  try {
+    return checkLogin(JSON.parse(r.stdout));
+  } catch {
+    return { ok: false, why: `could not read the CLI's login (${String(r.stderr || r.error || 'no output').trim().slice(0, 200)})` };
+  }
+}
+
 function spawnCli({ bin, plan, files, cwd, source = process.env, spawnImpl = spawn }) {
   return spawnImpl(bin, buildArgs(plan, files), {
     cwd,
@@ -115,4 +138,4 @@ function killTree(child) {
   try { child.kill('SIGTERM'); } catch { /* already gone */ }
 }
 
-module.exports = { cleanEnv, resolveClaudeBin, buildArgs, envFor, spawnCli, killTree, KEEP_ENV };
+module.exports = { cleanEnv, resolveClaudeBin, buildArgs, envFor, spawnCli, killTree, checkLogin, readLogin, KEEP_ENV };
