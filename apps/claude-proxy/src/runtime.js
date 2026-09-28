@@ -15,15 +15,46 @@ const { createStreamParser } = require('./stream');
 
 const STUB = path.join(__dirname, 'stub-mcp.js');
 
-function createRuntime({ bin, workRoot, callbackUrl, source = process.env, spawnImpl, nodePath = process.execPath, log = null }) {
-  fs.mkdirSync(workRoot, { recursive: true });
-  // A proxy that was killed never ran its cleanup: its CLIs exit with it (their input closes), but
-  // their folders stay. Nothing from a previous run can still be in use, so clear them now — only
-  // folders named like session ids, so a PROXY_WORK_DIR pointed somewhere real loses nothing.
-  const SESSION_DIR = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-  const leftovers = fs.readdirSync(workRoot).filter(name => SESSION_DIR.test(name));
-  for (const name of leftovers) fs.rmSync(path.join(workRoot, name), { recursive: true, force: true });
-  if (leftovers.length && log) log.info('cleared session folders left by a previous run', { count: leftovers.length });
+const RUN_DIR = /^run-(\d+)$/;
+
+const alive = pid => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === 'EPERM'; // exists, just not ours to signal
+  }
+};
+
+/**
+ * A proxy that was killed never ran its cleanup: its CLIs exit with it (their input closes), but
+ * their folders stay. So each proxy works in its own `run-<pid>` folder, and on startup clears the
+ * folders of runs whose process is gone — never one that is still alive. (The first version swept
+ * everything and, with a second proxy running, tried to delete the first one's live sessions.)
+ * Only `run-<pid>` folders are ever touched, so a PROXY_WORK_DIR pointed somewhere real loses
+ * nothing, and a folder Windows still holds open is skipped rather than fatal.
+ */
+function prepareWorkRoot(root, { log, pid = process.pid, isAlive = alive } = {}) {
+  fs.mkdirSync(root, { recursive: true });
+  let cleared = 0;
+  for (const name of fs.readdirSync(root)) {
+    const match = name.match(RUN_DIR);
+    if (!match || Number(match[1]) === pid || isAlive(Number(match[1]))) continue;
+    try {
+      fs.rmSync(path.join(root, name), { recursive: true, force: true });
+      cleared += 1;
+    } catch (error) {
+      if (log) log.warn('could not clear a previous run\'s folder', { folder: name, why: error.code || error.message });
+    }
+  }
+  if (cleared && log) log.info('cleared folders left by previous runs', { count: cleared });
+  const mine = path.join(root, `run-${pid}`);
+  fs.mkdirSync(mine, { recursive: true });
+  return mine;
+}
+
+function createRuntime({ bin, workRoot: root, callbackUrl, source = process.env, spawnImpl, nodePath = process.execPath, log = null }) {
+  const workRoot = prepareWorkRoot(root, { log });
 
   function spawnSession(plan) {
     const id = crypto.randomUUID();
@@ -86,4 +117,4 @@ function createRuntime({ bin, workRoot, callbackUrl, source = process.env, spawn
   return { spawnSession };
 }
 
-module.exports = { createRuntime, STUB };
+module.exports = { createRuntime, prepareWorkRoot, STUB };

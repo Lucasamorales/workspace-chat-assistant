@@ -60,7 +60,7 @@ function createEventHandler(deps) {
   const {
     registry, chat, store, threads, usage, oauthFlows, claude,
     makeModuleContext, allowedUsers, log, defer, appName = 'Buddy', now = () => Date.now(),
-    grants = null, scopedCapUsd = null, moduleTuning = {},
+    grants = null, scopedCapUsd = null, moduleTuning = {}, subscriptionUsers = [],
   } = deps;
   const events = store.collection('core__events');
   const pendingCol = store.collection('core__pending');
@@ -138,6 +138,18 @@ function createEventHandler(deps) {
    * every time. So someone who can only ask the manual runs on the manual's model throughout;
    * someone with the assistant runs on the default.
    */
+  /**
+   * Experiment (0010-subscription-proxy.md): who is answered through the subscription proxy
+   * instead of the API. Per person, from config, in the same format as BUDDY_ACCESS_* — empty
+   * means nobody, and then this build behaves exactly as without the experiment. It never widens
+   * what anyone can do: only where their answer is computed.
+   */
+  const onSubscription = subscriptionUsers.length
+    ? parseRule(subscriptionUsers.join(','), 'CLAUDE_PROXY_USERS')
+    : () => false;
+  const backendFor = base => (onSubscription({ email: base.userEmail, id: base.userId ? `users/${base.userId}` : '' })
+    ? 'subscription' : 'api');
+
   function tuningFor(scope) {
     const scoped = registry.conversationMode(scope) === 'scoped' ? registry.scopedFor(scope) : [];
     // Only an unambiguous scope picks a model: with two scoped modules, the default is safer.
@@ -382,11 +394,13 @@ function createEventHandler(deps) {
       // The meter IS the budget — the cap still stops a runaway before any call — and it collects
       // what this request cost, which tools ran and how it ended. Metadata only (0006-costs.md).
       const tuning = tuningFor(scopeOf(base));
+      const backend = backendFor(base);
       budget = usage.meter({
         userId: base.userId,
         userEmail: base.userEmail,
         trigger,
         model: tuning.model || null,
+        backend,
         // A smaller allowance for people who can only drive one module: widening Asana should
         // not quietly widen the bill.
         ...(mode === 'scoped' && scopedCapUsd ? { capUsd: scopedCapUsd } : {}),
@@ -414,6 +428,7 @@ function createEventHandler(deps) {
         const result = await runLoop({
           claude, toolset, budget, log,
           ...tuning,
+          backend,
           system: systemFor(scopeOf(base), toolset.notes),
           messages: [...history, { role: 'user', content: blocks }],
           onProgress: async names => {
@@ -520,8 +535,10 @@ function createEventHandler(deps) {
     // A resumed request is its own event: the work after an approval costs money of its own,
     // and whether the person approved or declined is worth knowing.
     const tuning = tuningFor(scopeOf(base));
+    // Decided again at resume time, from config: an approval never changes who answers.
+    const backend = backendFor(base);
     const meter = usage.meter({
-      userId: base.userId, userEmail: base.userEmail, trigger: 'approval', model: tuning.model || null,
+      userId: base.userId, userEmail: base.userEmail, trigger: 'approval', model: tuning.model || null, backend,
     });
     const declined = (record.items || []).every(it => it.state === 'declined');
     try {
@@ -529,6 +546,7 @@ function createEventHandler(deps) {
         const result = await resumeLoop({
           claude, toolset, log,
           ...tuning,
+          backend,
           budget: meter,
           system: systemFor(scopeOf(base), toolset.notes, [AFTER_APPROVAL]),
           saved: JSON.parse(record.loop),

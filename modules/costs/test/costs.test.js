@@ -343,3 +343,31 @@ test('/costs splits by model once more than one is in play, and stays quiet when
   assert.match(reply.text, /haiku-4-5/);
   assert.doesNotMatch(reply.text, /claude-haiku/, 'the repeated "claude-" prefix is dropped');
 });
+
+/* ---------- experiment 0010: the subscription proxy ---------- */
+
+test('/costs keeps subscription requests out of the API figures and reports the window instead', async () => {
+  const sub = over => event({
+    backend: 'subscription', usd: 0, apiEquivalentUsd: 0.04, ms: 1500,
+    subscription: { fiveHour: 0.31, sevenDay: 0.04, resetsAt: 1790610000, usingOverage: false }, ...over,
+  });
+  const { mod, ctx } = setup({
+    events: [
+      event({ userEmail: 'remy@example.com', module: 'asana', usd: 0.10 }),
+      sub({ at: '2026-09-22T10:00:00.000Z' }),
+      sub({ at: '2026-09-22T11:00:00.000Z', subscription: { fiveHour: 0.35, sevenDay: 0.05, resetsAt: 1790610000, usingOverage: false } }),
+    ],
+  });
+  const reply = await mod.commands.costs.run(ctx, '');
+  assert.match(reply.text, /\*\*10\.0¢\*\* over \*\*1 requests\*\*/, 'the API average is not diluted by $0 requests');
+  assert.match(reply.text, /On the subscription/);
+  assert.match(reply.text, /2 requests · 35% of the 5-hour window · 5% of the week/, 'the latest window, not the first');
+  assert.match(reply.text, /Would have cost \*\*8\.0¢\*\* on the API/);
+});
+
+test('/costs with only subscription use says so, rather than "nothing yet"', async () => {
+  const { mod, ctx } = setup({ events: [event({ backend: 'subscription', usd: 0, apiEquivalentUsd: 0.02, subscription: { fiveHour: 0.2 } })] });
+  const reply = await mod.commands.costs.run(ctx, '');
+  assert.match(reply.text, /No API conversations yet/);
+  assert.match(reply.text, /On the subscription/);
+});

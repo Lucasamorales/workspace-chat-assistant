@@ -40,6 +40,7 @@ function setup({
   asanaAccess = 'domain:example.com',
   docsAccess = 'robin@example.com',
   moduleTuning = {},
+  subscriptionUsers = [],
 } = {}) {
   const store = core.createMemoryStore();
   const posted = [];
@@ -77,6 +78,7 @@ function setup({
     makeModuleContext: core.createContextFactory({ store, sealer: core.createLocalSealer(), env: {}, log: quietLog, access }),
     defer: p => background.push(p),
     moduleTuning,
+    subscriptionUsers,
   });
   const settle = async () => { while (background.length) await background.shift(); };
   const events = () => store.collection('core__usage_events').list({ field: 'at' });
@@ -209,4 +211,30 @@ test('two scopes, no guess: the default model applies', async () => {
   await handle(chatEvent(EVE, 'what are my tasks due this week?'));
   await settle();
   assert.equal(claudeParams.at(-1).model, undefined);
+});
+
+// Experiment 0010: one person is answered through the subscription proxy; nobody else is.
+test('only the people in CLAUDE_PROXY_USERS are answered through the subscription', async () => {
+  const { handle, settle, claudeParams, events } = setup({
+    assistantAccess: 'domain:example.com',
+    subscriptionUsers: ['robin@example.com'],
+  });
+  await handle(chatEvent(ROBIN, 'hello', { name: 'spaces/dm-robin', spaceType: 'DIRECT_MESSAGE' }));
+  await handle(chatEvent(EVE, 'hello'));
+  await settle();
+
+  // Background work finishes in either order; who got which is checked on the events below.
+  assert.deepEqual(claudeParams.map(p => p.backend).sort(), ['api', 'subscription']);
+  const recorded = await events();
+  assert.deepEqual(recorded.map(e => [e.userEmail, e.backend]).sort(), [
+    ['eve@example.com', 'api'],
+    ['robin@example.com', 'subscription'],
+  ]);
+});
+
+test('with nobody listed, everyone is on the API and the experiment changes nothing', async () => {
+  const { handle, settle, claudeParams } = setup({ assistantAccess: 'domain:example.com' });
+  await handle(chatEvent(ROBIN, 'hello', { name: 'spaces/dm-robin', spaceType: 'DIRECT_MESSAGE' }));
+  await settle();
+  assert.deepEqual(claudeParams.map(p => p.backend), ['api']);
 });

@@ -199,3 +199,20 @@ test('usage is logged under names the redactor leaves alone', () => {
   assert.equal(entry.authSource, 'none');
   assert.ok(entry.at, 'every line is timestamped: there is no Cloud Logging on a PC');
 });
+
+/* ---------- the work folder ---------- */
+
+const fs = require('fs');
+const os = require('os');
+const pathLib = require('path');
+const { prepareWorkRoot } = require('../src/runtime');
+
+// The bug a second proxy instance found: the first version swept every session folder, live ones too.
+test('startup clears only the folders of runs that are gone, never a live one or anything else', () => {
+  const root = fs.mkdtempSync(pathLib.join(os.tmpdir(), 'buddy-proxy-root-'));
+  for (const name of ['run-111', 'run-222', 'keep-me']) fs.mkdirSync(pathLib.join(root, name, 'session'), { recursive: true });
+  const mine = prepareWorkRoot(root, { pid: 999, isAlive: pid => pid === 222 });
+  assert.equal(mine, pathLib.join(root, 'run-999'));
+  assert.deepEqual(fs.readdirSync(root).sort(), ['keep-me', 'run-222', 'run-999'], 'the dead run went; the live one and a stranger stayed');
+  fs.rmSync(root, { recursive: true, force: true });
+});

@@ -73,3 +73,58 @@ test('context editing is off unless asked for, and asks to keep the recent tool 
   assert.equal(edit.type, 'clear_tool_uses_20250919');
   assert.equal(edit.keep.value, 3);
 });
+
+/* ---------- the subscription proxy experiment (0010) ---------- */
+
+function twoBackends({ proxyFails = null } = {}) {
+  const api = [];
+  const viaProxy = [];
+  const claude = createClaude({
+    model: 'claude-sonnet-5',
+    effort: 'medium',
+    client: { messages: { create: async params => { api.push(params); return { usage: {}, content: [] }; } } },
+    proxyClient: {
+      messages: {
+        create: async params => {
+          viaProxy.push(params);
+          if (proxyFails) throw proxyFails;
+          return { usage: { buddy_subscription: { five_hour_utilization: 0.3 } }, content: [] };
+        },
+      },
+    },
+  });
+  return { claude, api, viaProxy };
+}
+
+test('a subscription request goes to the proxy, and everyone else still goes to the API', async () => {
+  const { claude, api, viaProxy } = twoBackends();
+  await claude.create({ system: 's', messages: [], backend: 'subscription' });
+  await claude.create({ system: 's', messages: [] });
+  assert.equal(viaProxy.length, 1);
+  assert.equal(api.length, 1, 'the default is the API');
+  assert.deepEqual(viaProxy[0].cache_control, { type: 'ephemeral', ttl: '1h' }, 'the proxy gets exactly what the API would');
+});
+
+// The rule Robin set for the experiment: using the API instead would defeat its purpose.
+test('when the proxy fails, nothing falls back to the API — the error says so', async () => {
+  const refused = Object.assign(new Error('403 {"type":"error"}'), {
+    status: 403, error: { type: 'error', error: { type: 'permission_error', message: 'Refused: extra usage is switched on.' } },
+  });
+  const { claude, api } = twoBackends({ proxyFails: refused });
+  await assert.rejects(claude.create({ system: 's', messages: [], backend: 'subscription' }), err => {
+    assert.equal(err.expose, true, 'shown to the person, not swallowed');
+    assert.equal(err.message, "The subscription proxy couldn't answer: Refused: extra usage is switched on.");
+    return true;
+  });
+  assert.equal(api.length, 0, 'the API was never called');
+
+  const offline = twoBackends({ proxyFails: new Error('fetch failed') });
+  await assert.rejects(offline.claude.create({ system: 's', messages: [], backend: 'subscription' }), /not reachable/);
+  assert.equal(offline.api.length, 0);
+});
+
+test('a subscription request with no proxy configured fails rather than using the API', async () => {
+  const { claude, sent } = fake();
+  await assert.rejects(claude.create({ system: 's', messages: [], backend: 'subscription' }), /not configured/);
+  assert.equal(sent.length, 0);
+});

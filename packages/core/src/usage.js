@@ -91,18 +91,27 @@ function createUsage({ store, prices, capUsd, cacheTtl = '1h', now = () => new D
      *
      * Metadata only: what was asked and what came back are never recorded.
      */
-    meter({ userId, userEmail, trigger = 'message', model = null, capUsd: cap = capUsd }) {
+    /**
+     * @param backend  'subscription' for the proxy experiment (0010-subscription-proxy.md). Those
+     *   requests cost nothing in dollars and never touch the monthly cap — the cap is API money.
+     *   What they do use is the subscription's window, so that is recorded instead, with the
+     *   API price they would have had, for the comparison the experiment is for.
+     */
+    meter({ userId, userEmail, trigger = 'message', model = null, capUsd: cap = capUsd, backend = 'api' }) {
       const budget = forUser(userId, cap);
       const startedAt = now().getTime();
+      const onSubscription = backend === 'subscription';
       let usedModel = model;
       const totals = { calls: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, usd: 0 };
+      let apiEquivalentUsd = 0;
+      let window = null;
       const tools = [];
 
       return {
         get totals() { return { ...totals }; },
         get tools() { return [...tools]; },
 
-        check: () => budget.check(),
+        check: () => (onSubscription ? Promise.resolve() : budget.check()),
 
         async record(usage, ranOn = model) {
           if (ranOn) usedModel = ranOn;
@@ -111,7 +120,13 @@ function createUsage({ store, prices, capUsd, cacheTtl = '1h', now = () => new D
           totals.outputTokens += usage.output_tokens || 0;
           totals.cacheReadTokens += usage.cache_read_input_tokens || 0;
           totals.cacheWriteTokens += usage.cache_creation_input_tokens || 0;
-          totals.usd += costUsd(usage, prices, usedModel, cacheTtl);
+          const priced = costUsd(usage, prices, usedModel, cacheTtl);
+          if (onSubscription) {
+            apiEquivalentUsd += priced;
+            if (usage.buddy_subscription) window = usage.buddy_subscription;
+            return;
+          }
+          totals.usd += priced;
           await budget.record(usage, usedModel);
         },
 
@@ -144,6 +159,16 @@ function createUsage({ store, prices, capUsd, cacheTtl = '1h', now = () => new D
             model: usedModel,
             calls: totals.calls,
             ...totals,
+            backend,
+            ...(onSubscription ? {
+              apiEquivalentUsd,
+              subscription: window ? {
+                fiveHour: window.five_hour_utilization ?? null,
+                sevenDay: window.seven_day_utilization ?? null,
+                resetsAt: window.five_hour_resets_at ?? null,
+                usingOverage: window.using_overage ?? null,
+              } : null,
+            } : {}),
             ms: at.getTime() - startedAt,
             expireAt: new Date(at.getTime() + eventTtlDays * 24 * 3600 * 1000),
           };

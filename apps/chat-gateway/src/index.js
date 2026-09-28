@@ -42,9 +42,20 @@ const config = core.loadConfig({
   // "claude-haiku-4-5:1:5" — what each model costs per million tokens, in and out.
   MODEL_PRICES: { type: 'list', default: [] },
   THREAD_TTL_DAYS: { type: 'number', min: 1, default: 30 },
+  // Experiment (docs/decisions/0010-subscription-proxy.md): these people are answered through the
+  // subscription proxy instead of the API. Empty means nobody, and the experiment is off.
+  CLAUDE_PROXY_USERS: { type: 'list', default: [] },
+  CLAUDE_PROXY_URL: { type: 'url' },
+  CLAUDE_PROXY_SECRET: { type: 'secret', minLength: 32 },
 });
 
 const log = core.createLogger('chat-gateway');
+
+// Someone routed to a proxy that isn't configured would get an error on every message. Refuse to
+// start instead, the same way a missing access rule does.
+if (config.CLAUDE_PROXY_USERS.length && !(config.CLAUDE_PROXY_URL && config.CLAUDE_PROXY_SECRET)) {
+  throw new Error('CLAUDE_PROXY_USERS is set, so CLAUDE_PROXY_URL and CLAUDE_PROXY_SECRET are required');
+}
 
 const moduleTuning = core.parseTuning(config.MODULE_TUNING);
 const prices = core.parsePrices(config.MODEL_PRICES, {
@@ -90,6 +101,7 @@ const handleEvent = createEventHandler({
   grants,
   scopedCapUsd: config.MONTHLY_USD_CAP_SCOPED,
   moduleTuning,
+  subscriptionUsers: config.CLAUDE_PROXY_USERS,
   appName: config.BUDDY_APP_NAME,
   threads: core.createThreads({
     store,
@@ -106,6 +118,8 @@ const handleEvent = createEventHandler({
     maxTokens: config.MAX_OUTPUT_TOKENS,
     cacheTtl: config.CACHE_TTL,
     clearToolUses: config.CLEAR_TOOL_USES,
+    proxy: config.CLAUDE_PROXY_URL ? { url: config.CLAUDE_PROXY_URL, secret: config.CLAUDE_PROXY_SECRET } : null,
+    log: log.child('claude'),
   }),
   makeModuleContext: core.createContextFactory({ store, sealer, log, access }),
   defer: promise => promise.catch(error => log.error('background task crashed', { error })),

@@ -6,6 +6,7 @@
  * reachable from Cloud Run, never an open port.
  */
 
+const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
@@ -24,9 +25,20 @@ function fail(message) {
   process.exit(1);
 }
 
+/**
+ * The shared secret, from CLAUDE_PROXY_SECRET or a file named by CLAUDE_PROXY_SECRET_FILE. The
+ * file is the easier route on Windows: PowerShell 5.1 adds a line ending when it pipes text and
+ * writes UTF-16 with `>`, and either would silently make the secret not match buddy-bot's.
+ */
+function readSecret() {
+  if (env.CLAUDE_PROXY_SECRET) return env.CLAUDE_PROXY_SECRET.trim();
+  if (!env.CLAUDE_PROXY_SECRET_FILE) return '';
+  return fs.readFileSync(env.CLAUDE_PROXY_SECRET_FILE, 'utf8').replace(/^﻿/, '').trim();
+}
+
 async function main() {
-  const secret = env.CLAUDE_PROXY_SECRET || '';
-  if (secret.length < 32) fail('CLAUDE_PROXY_SECRET must be set, 32 characters or more (the same value buddy-bot uses).');
+  const secret = readSecret();
+  if (secret.length < 32) fail('Set CLAUDE_PROXY_SECRET or CLAUDE_PROXY_SECRET_FILE: 32 characters or more, the same value buddy-bot uses.');
   if (env.ANTHROPIC_API_KEY) {
     // Not needed to refuse anything — the CLI never sees this environment — but a key sitting here
     // means someone expected API billing somewhere, and that should be looked at.

@@ -122,3 +122,28 @@ test('usage: a one-hour cache write is priced as one, not as a five-minute one',
   const perModel = { default: prices, 'claude-haiku-4-5': { inPerMTok: 1, outPerMTok: 5 } };
   assert.equal(costUsd(write, perModel, 'claude-haiku-4-5', '1h'), 2);
 });
+
+// Experiment 0010: the cap is API money, and a subscription reply spends none of it.
+test('usage: a subscription reply costs no dollars and never hits the cap, but its window is kept', async () => {
+  const store = createMemoryStore();
+  const usage = createUsage({ store, prices: { inPerMTok: 2, outPerMTok: 10 }, capUsd: 1 });
+  // Already over the cap on the API.
+  await usage.forUser('u').record({ output_tokens: 200_000 });
+
+  const meter = usage.meter({ userId: 'u', userEmail: 'robin@example.com', backend: 'subscription' });
+  await meter.check();
+  await meter.record({
+    input_tokens: 1e6, output_tokens: 0,
+    buddy_subscription: { five_hour_utilization: 0.31, seven_day_utilization: 0.04, five_hour_resets_at: 1790610000, using_overage: false },
+  }, 'claude-sonnet-5');
+  const event = await meter.finish();
+
+  assert.equal(event.backend, 'subscription');
+  assert.equal(event.usd, 0, 'nothing billed');
+  assert.equal(event.apiEquivalentUsd, 2, 'what the API would have charged, for the comparison');
+  assert.deepEqual(event.subscription, { fiveHour: 0.31, sevenDay: 0.04, resetsAt: 1790610000, usingOverage: false });
+  assert.equal((await usage.forUser('u').get()).usd, 2, 'the API spend is untouched by subscription use');
+
+  const api = usage.meter({ userId: 'u', userEmail: 'x', backend: 'api' });
+  await assert.rejects(api.check(), /allowance/, 'the API cap still applies to API requests');
+});
