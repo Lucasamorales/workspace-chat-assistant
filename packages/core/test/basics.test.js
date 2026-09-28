@@ -147,3 +147,20 @@ test('usage: a subscription reply costs no dollars and never hits the cap, but i
   const api = usage.meter({ userId: 'u', userEmail: 'x', backend: 'api' });
   await assert.rejects(api.check(), /allowance/, 'the API cap still applies to API requests');
 });
+
+// Replies can name a dated model; with Opus as the default price, a dated Sonnet reply looked up
+// by exact name would have been billed as Opus in /costs.
+test('usage: a dated model id is priced as the model it names, not the default', () => {
+  const prices = {
+    default: { inPerMTok: 4, outPerMTok: 20 },
+    'claude-sonnet-5': { inPerMTok: 2, outPerMTok: 10 },
+    'claude-opus-5': { inPerMTok: 5, outPerMTok: 25 },
+    'claude-opus-5-5': { inPerMTok: 4, outPerMTok: 20 },
+  };
+  const million = { input_tokens: 1e6 };
+  assert.equal(costUsd(million, prices, 'claude-sonnet-5-20260801'), 2);
+  assert.equal(costUsd(million, prices, 'claude-opus-5-5-20260901'), 4, 'the longer name wins over claude-opus-5');
+  assert.equal(costUsd(million, prices, 'claude-opus-5-20260101'), 5);
+  assert.equal(costUsd(million, prices, 'claude-sonnet-50'), 4, 'a prefix must end at a dash, or sonnet-5 would claim sonnet-50');
+  assert.equal(costUsd(million, prices, 'something-new'), 4, 'unknown still costs the default');
+});

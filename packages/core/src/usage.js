@@ -30,7 +30,15 @@ function monthKey(now = new Date()) {
  */
 function pricesFor(prices, model) {
   if (!prices || typeof prices.inPerMTok === 'number') return prices;
-  return prices[model] || prices.default || { inPerMTok: 0, outPerMTok: 0 };
+  if (prices[model]) return prices[model];
+  // Replies can name their model with a date on the end ("claude-haiku-4-5-20251001"); the
+  // price belongs to the name it starts with. Longest match wins, so a "claude-opus-5-5" entry is
+  // never shadowed by a shorter "claude-opus-5" one.
+  const name = String(model || '');
+  const match = Object.keys(prices)
+    .filter(key => key !== 'default' && name.startsWith(`${key}-`))
+    .sort((a, b) => b.length - a.length)[0];
+  return (match && prices[match]) || prices.default || { inPerMTok: 0, outPerMTok: 0 };
 }
 
 function costUsd(usage, prices, model, cacheTtl = '1h') {
