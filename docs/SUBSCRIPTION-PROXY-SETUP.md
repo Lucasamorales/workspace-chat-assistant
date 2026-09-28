@@ -255,6 +255,7 @@ The two lines worth searching for first are `replaying:` (a held session was los
 | *"Invalid proxy key"* | The two sides have different secrets | `buddy-bot` not redeployed since step 4, or the proxy is reading an old file |
 | `cannot start` … *not logged in* / *not a Claude subscription* | The CLI isn't on a subscription login | Step 3 |
 | `guard refused` … *extra usage is switched on* | That Claude account allows pay-per-use | Turn extra usage off, restart the proxy |
+| Buddy calls you by the proxy's Claude account instead of yours | `buddy-bot` is older than 2026-09-28's fix: the CLI tells the model its own account's email | Deploy `develop` again |
 | Answers seem to come from the wrong Claude account | The task runs as a different Windows user than you think | `claude auth status` as the user the task runs as |
 | `cannot start` … *Could not find claude.exe* | Claude Code isn't where npm puts it | Set `CLAUDE_BIN` (step 1) |
 | An account not listed is answered by the API | Working as intended | Only `CLAUDE_PROXY_USERS` is routed to the proxy |

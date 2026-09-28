@@ -25,6 +25,12 @@ live Chat app, and what is still unverified against reality).
   rule would have put the Asana testers on Opus; this one puts them on Sonnet as intended.
 
 ### Fixed
+- **On the subscription proxy, every account was taken for the Claude account's owner.** The
+  Claude CLI tells the model the email of the account it is logged into, on every request and with
+  no way to turn it off. With the proxy's CLI on one Claude account, whoever asked was addressed as
+  that person. `buddy-bot` now tells the model, for subscription requests only, who is really
+  asking, and that any other email in its context belongs to the machine; API requests are
+  unchanged. The display name is flattened to one short line first, since anyone can set theirs.
 - **A dated model id was priced at the default.** Replies can name their model with a date on
   the end (`claude-haiku-4-5-20251001`), and the price lookup only matched exact names. With Opus
   as the default price, a dated Sonnet reply would have shown in `/costs` at twice its cost; it now

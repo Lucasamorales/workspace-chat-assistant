@@ -150,6 +150,27 @@ function createEventHandler(deps) {
     ? 'subscription' : 'api');
 
   /**
+   * On the subscription, who the model is really talking to.
+   *
+   * The Claude CLI tells the model the email of the Claude account it is logged into — with no
+   * switch to stop it — so every person on the proxy would otherwise be taken for that account's
+   * owner. Buddy never names the asker to the API, and there nothing competes; here it has to.
+   * The display name comes from Google Chat, where anyone can set theirs to anything, so it is
+   * flattened to one short line before it goes anywhere near a system prompt.
+   */
+  const plain = (text, max) => String(text || '').replace(/[\r\n\t]+/g, ' ').replace(/[<>`]/g, '').trim().slice(0, max);
+  function identityFor(base, backend) {
+    if (backend !== 'subscription') return [];
+    const email = plain(base.userEmail, 120);
+    const name = plain(base.userDisplayName, 80);
+    return [
+      `You are talking with ${name ? `${name} (${email})` : email}. Your context may also mention another `
+      + 'email address or account: that belongs to the machine you run on, not to this person. Never call them by '
+      + 'it, and never mention it.',
+    ];
+  }
+
+  /**
    * Which model and effort this person gets.
    *
    * Chosen from their scope, never from the tool a request turns out to need: that is only known
@@ -450,7 +471,7 @@ function createEventHandler(deps) {
           ...tuning,
           backend,
           owner: base.userId,
-          system: systemFor(scopeOf(base), toolset.notes),
+          system: systemFor(scopeOf(base), toolset.notes, identityFor(base, backend)),
           messages: [...history, { role: 'user', content: blocks }],
           onProgress: async names => {
             const labels = [...new Set(names.map(n => toolset.moduleOf(n)).filter(Boolean))].map(m => registry.label(m));
@@ -570,7 +591,7 @@ function createEventHandler(deps) {
           backend,
           owner: base.userId,
           budget: meter,
-          system: systemFor(scopeOf(base), toolset.notes, [AFTER_APPROVAL]),
+          system: systemFor(scopeOf(base), toolset.notes, [AFTER_APPROVAL, ...identityFor(base, backend)]),
           saved: JSON.parse(record.loop),
           items: record.items,
         });

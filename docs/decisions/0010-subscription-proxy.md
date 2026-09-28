@@ -80,6 +80,18 @@ the Chat user id, never an email; spares, thread continuations and held calls ar
 request without one is refused, and tool results naming someone else's held call are refused
 without touching it. The test for it fails with the owner taken out of the key.
 
+**The model is told who is really asking.** The CLI adds its own context to every request,
+whatever the system prompt — *"The user's email address is …"*, the email of the Claude account it
+is logged into, and an environment block with the machine's folder path, date and model. There is
+no switch to stop it. So with the proxy's CLI on one Claude account, every person on the proxy was
+taken for that account's owner (found on the move to a second PC and a second Claude account).
+`buddy-bot` now tells the model, for subscription requests only, who is really asking, and that
+any other email or account in its context belongs to the machine. Checked on the real CLI: logged
+in as one account and asked by another, the model named the asker; with the line removed, it named
+the machine's account. The display name comes from Google Chat, so it is flattened to one short
+line first. (The earlier claim that `--restricted` kept everything personal out was true of
+settings and tools, not of this.)
+
 **The proxy answers nobody without the shared secret**, compared in constant time; it binds to
 localhost, and the loopback channel the stub uses is on a separate random port the tunnel never
 reaches, with a per-session secret.
