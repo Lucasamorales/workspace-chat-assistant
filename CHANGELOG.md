@@ -12,6 +12,17 @@ live Chat app, and what is still unverified against reality).
 ## 2026-09-28 — experiment, `develop` only
 
 ### Added
+- **The proxy checks its Claude login before it starts**, and logs which account and plan it
+  will answer on. Anything but a `claude.ai` subscription login — an API key, a Console login, none
+  — stops it starting, with the command that fixes it; every turn is still checked as well.
+
+### Docs
+- **`docs/SUBSCRIPTION-PROXY-SETUP.md`**: moving the experiment to a new PC and making it
+  permanent — which Claude account it runs on and how to change it, a new shared secret, the proxy
+  as a scheduled task that survives reboots, a named Cloudflare tunnel whose address never changes,
+  and connecting Buddy and deploying.
+
+### Added
 - **Buddy on a Claude subscription, for one person** (`apps/claude-proxy`, decision
   `0010-subscription-proxy.md`). A proxy on the PC where Claude Code is logged in answers the
   Anthropic Messages API by running the Claude CLI. `buddy-bot` sends the people in

@@ -262,6 +262,10 @@ One person's Buddy answered by the Claude CLI on their own subscription, through
 `apps/claude-proxy` on their PC. Why and what it guarantees: `docs/decisions/0010-subscription-proxy.md`.
 Everyone else stays on the API throughout. PowerShell, from the repo root.
 
+This section is the quick way, for a first try. For a **new PC**, or to make it **permanent** — a
+task that survives reboots, and a named tunnel whose address never changes — follow
+`docs/SUBSCRIPTION-PROXY-SETUP.md` instead.
+
 **1. The shared secret — once.** Written by node, not PowerShell, which would add a line ending:
 
 ```powershell
