@@ -29,6 +29,12 @@ const APPROVAL_ACTIONS = [ACTIONS.APPROVE, ACTIONS.CANCEL, ACTIONS.APPROVE_ALL, 
 const BASE_PROMPT = VOICE_GUIDE;
 
 const expose = message => Object.assign(new Error(message), { expose: true });
+
+// Model families from weakest to strongest, matched inside the model id ("claude-opus-5-5" → opus).
+// A model outside the list ranks below all of them, so it never wins by accident.
+const FAMILIES = ['haiku', 'sonnet', 'opus', 'mythos', 'fable'];
+const strength = model => FAMILIES.findIndex(f => String(model || '').includes(f));
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const hash = s => crypto.createHash('sha256').update(s).digest('hex');
 const newId = () => crypto.randomBytes(24).toString('base64url');
 
@@ -61,6 +67,7 @@ function createEventHandler(deps) {
     registry, chat, store, threads, usage, oauthFlows, claude,
     makeModuleContext, allowedUsers, log, defer, appName = 'Buddy', now = () => Date.now(),
     grants = null, scopedCapUsd = null, moduleTuning = {}, subscriptionUsers = [],
+    defaultModel = null, defaultEffort = null,
   } = deps;
   const events = store.collection('core__events');
   const pendingCol = store.collection('core__pending');
@@ -131,14 +138,6 @@ function createEventHandler(deps) {
   }
 
   /**
-   * Which model and effort this person gets.
-   *
-   * Chosen from their scope, never from the tool a request turns out to need: that is only known
-   * after Claude has answered, and switching model mid-conversation throws away the prompt cache
-   * every time. So someone who can only ask the manual runs on the manual's model throughout;
-   * someone with the assistant runs on the default.
-   */
-  /**
    * Experiment (0010-subscription-proxy.md): who is answered through the subscription proxy
    * instead of the API. Per person, from config, in the same format as BUDDY_ACCESS_* — empty
    * means nobody, and then this build behaves exactly as without the experiment. It never widens
@@ -150,10 +149,31 @@ function createEventHandler(deps) {
   const backendFor = base => (onSubscription({ email: base.userEmail, id: base.userId ? `users/${base.userId}` : '' })
     ? 'subscription' : 'api');
 
+  /**
+   * Which model and effort this person gets.
+   *
+   * Chosen from their scope, never from the tool a request turns out to need: that is only known
+   * after Claude has answered, and switching model mid-conversation throws away the prompt cache
+   * every time. So it is fixed per person: someone with the assistant runs on the default, and
+   * someone scoped to modules runs on the *strongest* model any of those modules needs — a module
+   * with no setting of its own counts as the default — at that module's effort.
+   *
+   * Strongest rather than "only when there is one module": the manual is open to everyone, so
+   * nearly every Asana user also has the manual, and the first version of this rule gave up and
+   * used the default for all of them. Asana's setting reached nobody. Taking the strongest means a
+   * module that needs more is never answered with less, whatever else the person can use.
+   */
   function tuningFor(scope) {
-    const scoped = registry.conversationMode(scope) === 'scoped' ? registry.scopedFor(scope) : [];
-    // Only an unambiguous scope picks a model: with two scoped modules, the default is safer.
-    return (scoped.length === 1 && moduleTuning[scoped[0]]) || {};
+    if (registry.conversationMode(scope) !== 'scoped') return {};
+    const options = registry.scopedFor(scope)
+      .map(name => ({ model: defaultModel, effort: defaultEffort, ...(moduleTuning[name] || {}) }));
+    if (!options.length) return {};
+    const best = options.reduce((a, b) => {
+      const byModel = strength(b.model) - strength(a.model);
+      if (byModel) return byModel > 0 ? b : a;
+      return EFFORTS.indexOf(b.effort) > EFFORTS.indexOf(a.effort) ? b : a;
+    });
+    return best.model === defaultModel && best.effort === defaultEffort ? {} : { model: best.model, effort: best.effort };
   }
 
   /**

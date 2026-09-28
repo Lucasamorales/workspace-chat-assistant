@@ -127,3 +127,19 @@ Reverted to 16,000, and two guards added so the shape of the failure cannot recu
 The lesson for the rest of this document: a lever that changes a **limit** is not the same as a
 lever that changes an **amount**. Levers 1, 3, 4, 5, 9 and 10 reduce what is sent or generated,
 and are real savings. Lever 2 only narrowed what was possible.
+
+## Amendment, 2026-09-28: the per-scope model reached nobody
+
+Lever 7 said a model would apply only to someone scoped to exactly **one** module, so a
+conversation never had to guess. But the manual is open to the whole domain, so everyone with Asana
+also has the manual — two scoped modules — and the rule fell back to the default for all of them.
+The usage records showed it: every request from the Asana testers ran on Sonnet 5, none on Haiku.
+
+The rule is now: the **strongest** model any of the person's scoped modules needs, at that module's
+effort, with an unconfigured module counting as the default. It is still fixed per person, so a
+conversation still never switches model.
+
+And the models moved up, not down. Admins and everyone with the assistant now run on **Opus 5.5**
+(the default); Asana users without the assistant run on **Sonnet 5**; the manual stays on Haiku for
+anyone who has only that. The opposite of this record's original plan to move Asana down to Haiku:
+precision first, then cost.

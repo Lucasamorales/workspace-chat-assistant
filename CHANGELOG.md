@@ -9,6 +9,27 @@ live Chat app, and what is still unverified against reality).
 
 ---
 
+## 2026-09-28
+
+### Changed
+- **Admins and everyone with the assistant run on Opus 5.5; Asana users run on Sonnet 5.** The
+  default model is now Opus, at the same medium effort, and Asana's own setting is Sonnet, so
+  alexandra and jordan stay on Sonnet. Opus is twice Sonnet's price: Riley's API requests cost
+  twice as much against her $15 allowance, and on the subscription proxy Opus uses the window
+  faster. The default prices (`USD_PER_MTOK_IN/OUT`) are now Opus's, so an unlisted model still
+  looks expensive, and Sonnet has its own entry in `MODEL_PRICES`.
+- **A person scoped to several modules gets the strongest model any of them needs**, at that
+  module's effort; a module with no setting counts as the default. The first rule only tuned
+  someone with exactly *one* scoped module — and because the manual is open to everyone, every
+  Asana user also has it, so Asana's setting reached nobody. With Opus as the default, the old
+  rule would have put the Asana testers on Opus; this one puts them on Sonnet as intended.
+
+### Fixed
+- **A dated model id was priced at the default.** Replies can name their model with a date on
+  the end (`claude-haiku-4-5-20251001`), and the price lookup only matched exact names. With Opus
+  as the default price, a dated Sonnet reply would have shown in `/costs` at twice its cost; it now
+  takes the price of the name it starts with.
+
 ## 2026-09-28 — experiment, `develop` only
 
 ### Added

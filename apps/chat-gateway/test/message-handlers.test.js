@@ -41,6 +41,8 @@ function setup({
   docsAccess = 'robin@example.com',
   moduleTuning = {},
   subscriptionUsers = [],
+  defaultModel = 'claude-sonnet-5',
+  defaultEffort = 'medium',
 } = {}) {
   const store = core.createMemoryStore();
   const posted = [];
@@ -79,6 +81,8 @@ function setup({
     defer: p => background.push(p),
     moduleTuning,
     subscriptionUsers,
+    defaultModel,
+    defaultEffort,
   });
   const settle = async () => { while (background.length) await background.shift(); };
   const events = () => store.collection('core__usage_events').list({ field: 'at' });
@@ -203,14 +207,38 @@ test('free conversation keeps the default model, whatever is tuned', async () =>
 
 // Two scoped modules means the next message could be about either one, and a request is
 // answered by one model throughout. The safe choice is the default, not a coin toss.
-test('two scopes, no guess: the default model applies', async () => {
+// Bel's case: Asana plus the manual, which everyone has. The first version of the rule gave up
+// on two modules and used the default, so Asana's setting reached nobody.
+test('two scopes: the strongest model either needs, at that module\'s effort', async () => {
   const { handle, settle, claudeParams } = setup({
     docsAccess: 'domain:example.com',
-    moduleTuning: { asana: { model: 'claude-haiku-4-5' }, docs: { model: 'claude-haiku-4-5' } },
+    moduleTuning: { asana: { model: 'claude-opus-5-5', effort: 'medium' }, docs: { model: 'claude-haiku-4-5', effort: 'low' } },
   });
   await handle(chatEvent(EVE, 'what are my tasks due this week?'));
   await settle();
-  assert.equal(claudeParams.at(-1).model, undefined);
+  assert.equal(claudeParams.at(-1).model, 'claude-opus-5-5');
+  assert.equal(claudeParams.at(-1).effort, 'medium');
+});
+
+test('a module with no setting counts as the default, so nobody is answered with less', async () => {
+  const { handle, settle, claudeParams } = setup({
+    docsAccess: 'domain:example.com',
+    moduleTuning: { docs: { model: 'claude-haiku-4-5', effort: 'low' } },
+  });
+  await handle(chatEvent(EVE, 'what are my tasks due this week?'));
+  await settle();
+  assert.equal(claudeParams.at(-1).model, undefined, 'Asana has no setting: the default Sonnet beats the manual\'s Haiku');
+});
+
+test('two modules on the same model: the higher effort of the two', async () => {
+  const { handle, settle, claudeParams } = setup({
+    docsAccess: 'domain:example.com',
+    moduleTuning: { asana: { model: 'claude-haiku-4-5', effort: 'medium' }, docs: { model: 'claude-haiku-4-5', effort: 'low' } },
+  });
+  await handle(chatEvent(EVE, 'what are my tasks due this week?'));
+  await settle();
+  assert.equal(claudeParams.at(-1).model, 'claude-haiku-4-5');
+  assert.equal(claudeParams.at(-1).effort, 'medium');
 });
 
 // Experiment 0010: one person is answered through the subscription proxy; nobody else is.

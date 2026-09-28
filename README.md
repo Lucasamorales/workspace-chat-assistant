@@ -216,11 +216,12 @@ general-purpose chatbot: Claude gets only that module's tools and declines anyth
 smaller monthly allowance (`MONTHLY_USD_CAP_SCOPED`). People with neither get a free "here's what
 I can help with" card. See `docs/decisions/0007-scoped-conversation.md`.
 
-**Which model answers** follows the person's scope, not the tool a request ends up using: someone
-who only has the manual runs on a cheaper model for the whole conversation, someone with the
-assistant runs on the default. It is never switched mid-request — a prompt cache belongs to one
-model — and a person scoped to two modules gets the default rather than a guess. Set with
-`MODULE_TUNING`; anything that changes model or effort goes through `docs/EVAL.md` first.
+**Which model answers** follows the person, not the tool a request ends up using. Someone with the
+assistant runs on the default (`MODEL`, `EFFORT`). Someone scoped to modules runs on the
+*strongest* model any of those modules needs, at that module's effort — a module with no
+`MODULE_TUNING` entry counts as the default — so a module that needs more is never answered with
+less. It is never switched mid-conversation: a prompt cache belongs to one model. Anything that
+changes model or effort goes through `docs/EVAL.md` first.
 
 **Formatting replies:** module text is escaped before it reaches a card, then `**bold**`,
 backtick `code` and `[text](https://link)` become HTML. Never put raw HTML in a reply — it is

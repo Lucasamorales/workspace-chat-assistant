@@ -101,6 +101,9 @@ const handleEvent = createEventHandler({
   grants,
   scopedCapUsd: config.MONTHLY_USD_CAP_SCOPED,
   moduleTuning,
+  // What a module with no MODULE_TUNING entry of its own counts as, when models are compared.
+  defaultModel: config.MODEL,
+  defaultEffort: config.EFFORT,
   subscriptionUsers: config.CLAUDE_PROXY_USERS,
   appName: config.BUDDY_APP_NAME,
   threads: core.createThreads({
