@@ -1,0 +1,16 @@
+{
+  "name": "@buddy/claude-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Experiment: answers Anthropic Messages API calls through the Claude CLI on one person's subscription",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@buddy/core": "*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "express": "^5.2.1"
+  }
+}
