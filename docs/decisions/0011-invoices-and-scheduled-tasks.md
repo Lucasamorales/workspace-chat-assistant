@@ -4,7 +4,7 @@ Date: 2026-09-29 · Status: accepted (Robin) · Unverified live: see "Still to c
 
 ## Context
 
-Google Cloud's invoice PDFs have to be downloaded by hand from Billing → Documents every month.
+Google Cloud's invoice PDFs have to be downloaded by hand from Billing → Invoices every month.
 There is no API for them: the Billing API returns costs, never the invoice documents. Robin wanted
 them fetched automatically, emailed, and visible in Buddy with a command and a message when a new
 one arrives. Robin only for now, with room to add others.

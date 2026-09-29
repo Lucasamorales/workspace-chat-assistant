@@ -12,7 +12,7 @@ const PDF = Buffer.from('%PDF-1.7 fake');
 const NOW = Date.parse('2026-09-29T13:00:00Z');
 const quiet = { info() {}, warn() {}, error() {} };
 
-function fakePage({ rows = [], url = 'https://console.cloud.google.com/billing/x/documents', body = PDF, signInFields = 0 } = {}) {
+function fakePage({ rows = [], url = 'https://console.cloud.google.com/billing/x/invoices?organizationId=1', body = PDF, signInFields = 0 } = {}) {
   const frame = {
     url: () => url,
     evaluate: async () => rows.map((r, index) => ({ index, label: 'Download PDF', href: `https://payments.google.com/doc/${index}.pdf`, rowText: r })),

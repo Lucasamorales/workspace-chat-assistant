@@ -11,6 +11,12 @@ live Chat app, and what is still unverified against reality).
 
 ## 2026-09-29
 
+### Fixed
+- **The invoice fetcher opened an empty page.** the company's invoices are listed at
+  `billing/<account>/invoices?organizationId=000000000000`, not `/documents`; without the
+  organisation in the URL the console shows nothing. `organizationId` is now in the fetcher's
+  CONFIG and checked before a run.
+
 ### Added
 - **`invoices` module: Google Cloud's invoices in Buddy.** `/invoices` lists the invoice PDFs in a
   Drive folder, newest first, each linked; `/invoices check` says whether Buddy can read the folder

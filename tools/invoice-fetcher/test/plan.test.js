@@ -86,7 +86,7 @@ test('every alert says what happened and what to do', () => {
 
 test('config: the defaults point at Google only, and a missing Drive folder is caught before anything runs', () => {
   const config = loadConfig(__dirname); // no config.local.json here
-  assert.equal(config.documentsUrl, 'https://console.cloud.google.com/billing/XXXXXX-XXXXXX-XXXXXX/documents');
+  assert.equal(config.documentsUrl, 'https://console.cloud.google.com/billing/XXXXXX-XXXXXX-XXXXXX/invoices?organizationId=000000000000');
   assert.match(problems(config).join(' '), /outputDir is empty/);
   assert.deepEqual(problems(config, { needOutput: false }), []);
   assert.match(problems({ ...config, outputDir: 'x', documentsUrl: 'https://evil.example/billing' }).join(' '), /console\.cloud\.google\.com/);

@@ -78,7 +78,7 @@ function plan(candidates, state, { now, timeZone, maxPerRun }) {
   if (!byId.size) {
     throw new FetchError('layout', candidates.length
       ? `Found ${candidates.length} download buttons but none in a row I could recognise as an invoice.`
-      : 'Found no invoices at all on the billing documents page.');
+      : 'Found no invoices at all on the billing invoices page.');
   }
   const firstRun = !state.initialisedAt;
   const toFetch = [...byId.values()].filter(d => !state.documents[d.id]);

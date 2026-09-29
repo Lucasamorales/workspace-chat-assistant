@@ -10,9 +10,12 @@ const HOME = path.join(process.env.LOCALAPPDATA || path.join(require('node:os').
 
 const DEFAULTS = {
   billingAccountId: 'XXXXXX-XXXXXX-XXXXXX', // "Your Company"
+  // The console only lists this account's invoices with its organisation in the URL; without it
+  // the page loads empty.
+  organizationId: '000000000000',
   // Where the invoice PDFs are listed. Only ever this Google page: the tool never follows a link
   // to anywhere but Google.
-  documentsUrl: 'https://console.cloud.google.com/billing/{account}/documents',
+  documentsUrl: 'https://console.cloud.google.com/billing/{account}/invoices?organizationId={organization}',
   timeZone: 'America/Argentina/Buenos_Aires',
 
   // The folder Drive for desktop syncs, shared as Viewer with buddy-bot, whose id is
@@ -51,7 +54,7 @@ function loadConfig(dir = __dirname) {
   const config = { ...DEFAULTS, ...local, mail: { ...DEFAULTS.mail, ...(local.mail || {}) } };
   if (typeof config.mail.to === 'string') config.mail.to = config.mail.to.split(',');
   config.mail.to = config.mail.to.map(e => e.trim().toLowerCase()).filter(Boolean);
-  config.documentsUrl = config.documentsUrl.replace('{account}', config.billingAccountId);
+  config.documentsUrl = config.documentsUrl.replace('{account}', config.billingAccountId).replace('{organization}', config.organizationId);
   return config;
 }
 
@@ -59,6 +62,7 @@ function loadConfig(dir = __dirname) {
 function problems(config, { needOutput = true, needMail = true } = {}) {
   const out = [];
   if (!/^[0-9A-F]{6}-[0-9A-F]{6}-[0-9A-F]{6}$/.test(config.billingAccountId)) out.push(`billingAccountId "${config.billingAccountId}" doesn't look like a billing account id (XXXXXX-XXXXXX-XXXXXX).`);
+  if (!/^\d{6,20}$/.test(String(config.organizationId))) out.push(`organizationId "${config.organizationId}" should be the number after organizationId= in the invoices page URL.`);
   if (new URL(config.documentsUrl).hostname !== 'console.cloud.google.com') out.push('documentsUrl must be on console.cloud.google.com.');
   if (needOutput && !config.outputDir) out.push('outputDir is empty: set it in config.local.json to the Drive for desktop folder, e.g. "G:\\\\My Drive\\\\Buddy invoices".');
   if (needMail && !config.mail.to.length) out.push('mail.to is empty: nobody would get the invoices or the alerts.');
