@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-time: lets Cloud Scheduler wake buddy-bot every weekday morning, so a module can say
-# something first — today, "your Google Cloud bill should be ready". Safe to run again: it
+# something first — today, "your Google Cloud receipt should be ready". Safe to run again: it
 # updates what exists.
 #
 # The service stays private. Cloud Scheduler signs each call as its own service account, which

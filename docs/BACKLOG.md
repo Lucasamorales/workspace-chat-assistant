@@ -93,7 +93,7 @@ shorter list: see "Proven in use" at the bottom of this section.
 | R3 | ✅ **Direct message handlers**: contract hook `handleMessage(ctx, message)` for exact matches (kudos votes, "who is out") that run before Claude | Ordered, one winner, isolated like other hooks |
 | R4 | ✅ **Mentions in context**: pass Chat user mentions (name, email, id) to modules | Kudos can read tagged teammates without parsing text |
 | R5 | ✅ **Google API access pattern**: Sheets as `buddy-bot`; calendars via delegation with no key, fenced in module code | README "Adding a module"; `0003-ooo.md`, `0004-admin-module.md` |
-| R6 | **Scheduled jobs hook** `onSchedule(ctx, task)` driven by Cloud Scheduler → authenticated endpoint | done 2026-09-29 for invoices (Epic 13); daily task only |
+| R6 | **Scheduled jobs hook** `onSchedule(ctx, task)` driven by Cloud Scheduler → authenticated endpoint | done 2026-09-29 for receipts (Epic 13); daily task only |
 | R7 | **Module template + test helpers** (`@buddy/core/testing`: fake ctx, fake store, fake event) | New module = copy folder, add to config, tests run standalone |
 | R8 | `docs/ADDING_A_MODULE.md` | Covers contract, access, settings, storage, tests, deploy |
 | R9 | Optional: Google Group membership for access rules (Cloud Identity API) | `ACCESS_KUDOS=group:wholeteam@example.com` works |
@@ -229,24 +229,24 @@ Decision: `docs/decisions/0004-admin-module.md`. Config stays the floor; grants 
 | G11 | ✅ RUNBOOK §6b: read access with `/access` | Docs |
 | G12 | Try it live: grant a colleague a module, confirm they can use it and nobody else changed | After deploy |
 
-## Epic 13: `invoices` module (bill reminders)
+## Epic 13: `receipts` module (receipt reminders)
 
-Decision: `docs/decisions/0011-invoices-and-scheduled-tasks.md`. Built 2026-09-29, **not yet run
+Decision: `docs/decisions/0011-receipts-and-scheduled-tasks.md`. Built 2026-09-29, **not yet run
 for real**. A PC fetcher that downloaded the PDFs was built and dropped the same day: Google signs
 remote-controlled browsers out.
 
 | # | Item | Status |
 |---|---|---|
 | I1 | `onSchedule` hook, `/tasks/:task` route, caller-pinned OIDC check, DM delivery with both access checks | done — unverified live |
-| I2 | `invoices` module: bills added in chat, reminders on the due day, Downloaded / Remind me tomorrow, `/invoices` | done — unverified live |
+| I2 | `receipts` module: receipts added in chat, reminders on the due day, Downloaded / Remind me tomorrow, `/receipts` | done — unverified live |
 | I3 | `infra/scheduler.sh`, `BUDDY_SCHEDULER_EMAIL`, deploy, add Google Cloud (RUNBOOK §5h) | todo — Robin |
 | I4 | Confirm `spaces.findDirectMessage` works with the app's credentials from a scheduled call | todo — first scheduled run |
 | I5 | After I3–I4 pass: `feat:` commit marking it verified | todo |
 | I6 | File names: tell people what to call the file, or rename it in the folder behind an approval card (needs Editor on the folder) | later — on hold (Robin) |
-| I9 | No commands needed: "invoices" shortcut, per-bill buttons, "+ Add a bill", add/change/stop bills by asking (scoped, behind approval cards) | done — unverified live |
-| I10 | Run `docs/EVAL.md` for invoices on Sonnet (`MODULE_TUNING`): adding, changing and refusing bills in words | todo — before the accounts person uses it |
-| I11 | Give the accounts person `BUDDY_ACCESS_INVOICES` and `BUDDY_ROLE_INVOICES_ADMIN` (and the Chat app), and put their email on the bills | todo — Robin, when ready |
-| I12 | A proper form (Chat dialog: Name / Link / When) for adding bills, if talking to it isn't enough. Needs dialog support in core | later |
+| I9 | No commands needed: "receipts" shortcut, per-receipt buttons, "+ Add a receipt", add/change/stop receipts by asking (scoped, behind approval cards) | done — unverified live |
+| I10 | Run `docs/EVAL.md` for receipts on Sonnet (`MODULE_TUNING`): adding, changing and refusing receipts in words | todo — before the accounts person uses it |
+| I11 | Give the accounts person `BUDDY_ACCESS_RECEIPTS` and `BUDDY_ROLE_RECEIPTS_ADMIN` (and the Chat app), and put their email on the receipts | config done (Robin); still: the Chat app, and their email on each receipt |
+| I12 | A proper form (Chat dialog: Name / Link / When) for adding receipts, if talking to it isn't enough. Needs dialog support in core | later |
 | I7 | Public holidays for working days (Argentina, UK), if a reminder a day early turns out to matter | later |
 | I8 | Move the costs Sheet rollup onto the daily task instead of riding the first message of the week | later |
 

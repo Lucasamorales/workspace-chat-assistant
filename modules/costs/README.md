@@ -38,7 +38,7 @@ order is the contract: **never reorder, only add to the right**, or old rows sto
 The write happens on the first message after a week turns over — `buddy-bot` only accepts calls
 from Google Chat, and opening it to a scheduler would mean a new invoker and a new public path for
 a job that can ride an ordinary message. A finished week is written once; the week in progress is
-never written. `/costs sheet` forces it. (A scheduled path now exists for invoice reminders, decision 0011;
+never written. `/costs sheet` forces it. (A scheduled path now exists for receipt reminders, decision 0011;
 moving the rollup onto it is BACKLOG I8.)
 
 A Sheet failure is logged and never shown: whoever happened to send the message that triggered the

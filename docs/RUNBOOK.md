@@ -197,9 +197,9 @@ gcloud projects add-iam-policy-binding your-gcp-project --member="serviceAccount
 - [ ] Revoke someone listed in `infra/config.env` → Buddy says it's set in the file; they keep it
 - [ ] A non-admin has no `/access` command and cannot grant anything
 
-## 5h. Invoice reminders
+## 5h. Receipt reminders
 
-Decision: `docs/decisions/0011-invoices-and-scheduled-tasks.md`. `invoices` is in `MODULES` and
+Decision: `docs/decisions/0011-receipts-and-scheduled-tasks.md`. `receipts` is in `MODULES` and
 needs no setting to start; reminders need the scheduler.
 
 1. **Scheduler (once).** From PowerShell:
@@ -207,23 +207,29 @@ needs no setting to start; reminders need the scheduler.
    & "C:\Program Files\Git\bin\bash.exe" infra/scheduler.sh
    ```
    Put the email it prints in `BUDDY_SCHEDULER_EMAIL` (`infra/config.env`), commit, deploy.
-2. **Add Google Cloud** in a DM with Buddy:
+2. **Once, after the deploy that renamed `invoices` to `receipts`:** copy what was saved under the
+   old name (the Docusign receipt, so far). It only copies, and is safe to run twice:
+   ```powershell
+   & "C:\Program Files\Git\bin\bash.exe" infra/migrate-invoices-to-receipts.sh
    ```
-   /invoices add Google Cloud | https://console.cloud.google.com/billing/XXXXXX-XXXXXX-XXXXXX/invoices?organizationId=000000000000 | 5th working day
+   Then `/receipts` should list Docusign.
+3. **Add Google Cloud** in a DM with Buddy:
+   ```
+   /receipts add Google Cloud | https://console.cloud.google.com/billing/XXXXXX-XXXXXX-XXXXXX/invoices?organizationId=000000000000 | 5th working day
    ```
 
-- [ ] `/invoices` → Google Cloud, "ready on the 5th working day", this month's status, and the link opens the invoices page
-- [ ] `/invoices preview Google Cloud` → the reminder card: Open Google Cloud · Invoices folder · ✓ Downloaded · Remind me tomorrow
-- [ ] Type just `invoices` → the same card as `/invoices`, with Open / ✓ Downloaded per bill and **+ Add a bill**
+- [ ] `/receipts` → Google Cloud, "ready on the 5th working day", this month's status, and the link opens Google's Billing → Invoices page
+- [ ] `/receipts preview Google Cloud` → the reminder card: Open Google Cloud · Receipts folder · ✓ Downloaded · Remind me tomorrow
+- [ ] Type just `receipts` → the same card as `/receipts`, with Open / ✓ Downloaded per receipt and **+ Add a receipt**
 - [ ] "Add Adobe, it's ready on the 1st, here's the page: https://account.adobe.com/billing" → approval card
-      "Add a bill: Adobe", Ready "1st of the month · next: 1 <month>" → **Approve** → Adobe is in `invoices`
-- [ ] "Adobe is ready on the 3rd working day now" → "Change a bill: Adobe", Ready shows "(was 1st of the month…)"
+      "Add a receipt: Adobe", Ready "1st of the month · next: 1 <month>" → **Approve** → Adobe is in `receipts`
+- [ ] "Adobe is ready on the 3rd working day now" → "Change a receipt: Adobe", Ready shows "(was 1st of the month…)"
 - [ ] "Add Canva, ready on the 2nd" (no link) → Buddy asks for the link; no card
-- [ ] "stop reminding me about Adobe" → "Stop reminders: Adobe" → **Approve** → gone from `invoices`
-- [ ] Press **✓ Downloaded** on the preview → "October done"; `/invoices` shows "downloaded by robin"
-- [ ] Someone without `invoices.admin` gets "Only invoices admins…" for `add`; someone without access has no `/invoices`
+- [ ] "stop reminding me about Adobe" → "Stop reminders: Adobe" → **Approve** → gone from `receipts`
+- [ ] Press **✓ Downloaded** on the preview → "October done"; `/receipts` shows "downloaded by robin"
+- [ ] Someone without `receipts.admin` gets "Only receipts admins…" for `add`; someone without access has no `/receipts`
 - [ ] `gcloud scheduler jobs run buddy-daily --location=europe-west1 --project=your-gcp-project`
-      → the log line `scheduled task finished` (`sent`, `skipped`); a reminder only if a bill is due and not done
+      → the log line `scheduled task finished` (`sent`, `skipped`); a reminder only if a receipt is due and not done
 - [ ] An anonymous `curl -X POST <bot url>/tasks/daily` → 403
 - [ ] On the 5th working day of next month, at 09:00: the reminder arrives by itself
 

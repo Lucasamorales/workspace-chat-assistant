@@ -1,11 +1,16 @@
-# 0011 — Invoice reminders, and letting Buddy speak first
+# 0011 — Receipt reminders, and letting Buddy speak first
 
 Date: 2026-09-29 · Status: accepted (Robin) · Unverified live: see "Still to check"
+
+> **Renamed the same day:** the module was built as `invoices` and renamed `receipts` (Robin). The
+> old name is retired everywhere — command, settings, storage — and what was saved under it is
+> copied across once by `infra/migrate-invoices-to-receipts.sh`. Below, "invoices" means Google's
+> own documents and page; the module is `receipts`.
 
 ## Context
 
 Google Cloud's billing documents have to be downloaded by hand from Billing → Invoices every
-month. Robin wanted Buddy to take care of it, and to be able to add other bills the same way.
+month. Robin wanted Buddy to take care of it, and to be able to add other receipts the same way.
 
 Two things Buddy could not do: get the PDFs, and say anything without being asked — `buddy-bot`
 only accepted calls from Google Chat.
@@ -32,14 +37,15 @@ much to keep working for one PDF a month.
 
 ### Buddy reminds; people download
 
-The `invoices` module knows each bill's download page and when it's usually ready ("5th working
-day", "day 1"). On that day at 09:00 it DMs the bill's list with a button to the page; someone
+The `receipts` module knows each receipt's download page and when it's usually ready ("5th working
+day", "day 1"). On that day at 09:00 it DMs the receipt's list with a button to the page; someone
 downloads it and presses **Downloaded**, which closes the month for everyone. Unanswered, it
-reminds again every two working days, three times at most. Bills are added in chat by an invoices
-admin, so a new one needs no deploy.
+reminds again every two working days, three times at most. Receipts are added in chat by a
+receipts admin — by command or just by asking, behind an approval card — so a new one needs no
+deploy.
 
-It holds no login, fetches nothing, reads no files. Its only data is the bills and who marked each
-month done.
+It holds no login, fetches nothing, reads no files. Its only data is the receipts and who marked
+each month done.
 
 ### Scheduled tasks: a second, narrow way in
 
@@ -57,7 +63,7 @@ delivers the notes by DM.
 - **DMs only, and only existing ones.** A Chat app can't open a DM; people who have never messaged
   Buddy are skipped and counted.
 - **Contained.** Each hook runs with the registry's timeout and try/catch; one failing module (or
-  one failing bill) doesn't stop the rest.
+  one failing receipt) doesn't stop the rest.
 - **Safe to run twice.** A reminder is recorded as sent when it's handed over, so a second run the
   same day sends nothing.
 
@@ -71,6 +77,6 @@ new invoker"): the invoker now exists, narrowly. The rollup can move onto it lat
 
 ## Consequences
 
-- Downloading stays a person's job: about ten seconds a month per bill, prompted.
+- Downloading stays a person's job: about ten seconds a month per receipt, prompted.
 - `buddy-bot` has a second invoker. It is checked as tightly as Google Chat.
-- The same reminders work for any bill with a download page, not just Google Cloud.
+- The same reminders work for anything with a download page, not just Google Cloud.

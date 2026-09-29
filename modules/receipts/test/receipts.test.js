@@ -1,35 +1,35 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { validateModule, createMemoryStore } = require('@buddy/core');
-const { createInvoicesModule } = require('../src/module');
+const { createReceiptsModule } = require('../src/module');
 const { dueDate, parseReady, standing, afterReminder, addWorkdays, MAX_REMINDERS } = require('../src/schedule');
-const { parseBill } = require('../src/bills');
+const { parseReceipt } = require('../src/receipts');
 
 const TZ = 'America/Argentina/Buenos_Aires';
-const GCP = 'https://console.cloud.google.com/billing/XXXXXX-XXXXXX-XXXXXX/invoices?organizationId=000000000000';
+const GCP = 'https://console.cloud.google.com/billing/XXXXXX-XXXXXX-XXXXXX/receipts?organizationId=000000000000';
 // 09:00 in Buenos Aires (UTC-3) on a given day.
 const at = date => Date.parse(`${date}T12:00:00Z`);
 
 function setup({ admin = true, email = 'robin@example.com', folder = '1UaRlFoSIiRoanmiq_FDHnBMPqCycf6t9' } = {}) {
   const clock = { now: at('2026-09-29') };
   const store = createMemoryStore();
-  const mod = createInvoicesModule({ now: () => clock.now });
+  const mod = createReceiptsModule({ now: () => clock.now });
   const ctxFor = (who = email, isAdmin = admin) => ({
     userEmail: who,
-    settings: { INVOICES_TIMEZONE: TZ, INVOICES_FOLDER_ID: folder },
-    store: { collection: name => store.collection(`m_invoices__${name}`) },
+    settings: { RECEIPTS_TIMEZONE: TZ, RECEIPTS_FOLDER_ID: folder },
+    store: { collection: name => store.collection(`m_receipts__${name}`) },
     hasRole: role => role === 'admin' && isAdmin,
     log: { info() {}, warn() {}, error() {} },
   });
-  const run = (args, ctx = ctxFor()) => mod.commands.invoices.run(ctx, args);
+  const run = (args, ctx = ctxFor()) => mod.commands.receipts.run(ctx, args);
   const system = ctxFor('', false);
   return { mod, clock, ctxFor, run, daily: () => mod.onSchedule(system, 'daily'), store };
 }
 const addGcp = run => run(`add Google Cloud | ${GCP} | 5th working day`);
 
-test('module satisfies the contract', () => validateModule(createInvoicesModule()));
+test('module satisfies the contract', () => validateModule(createReceiptsModule()));
 
-/* ---------- when a bill is due ---------- */
+/* ---------- when a receipt is due ---------- */
 
 test('the 5th working day of October 2026 is Wednesday the 7th (the 1st is a Thursday)', () => {
   assert.equal(dueDate({ kind: 'workday', n: 5 }, '2026-10'), '2026-10-07');
@@ -49,28 +49,28 @@ test('"when it\'s ready" in the words people use', () => {
 });
 
 test('reminders: on the due day, then every 2 working days, 3 times at most, never at weekends', () => {
-  const bill = { ready: { kind: 'workday', n: 5 } };
-  assert.equal(standing(bill, null, '2026-10-06').state, 'upcoming');
-  let s = standing(bill, null, '2026-10-07');
+  const receipt = { ready: { kind: 'workday', n: 5 } };
+  assert.equal(standing(receipt, null, '2026-10-06').state, 'upcoming');
+  let s = standing(receipt, null, '2026-10-07');
   assert.equal(s.remindNow, true);
   let month = afterReminder(null, '2026-10-07');
   assert.equal(month.nextOn, '2026-10-09');
-  assert.equal(standing(bill, month, '2026-10-07').remindNow, false, 'not twice on the same day');
-  assert.equal(standing(bill, month, '2026-10-08').remindNow, false);
+  assert.equal(standing(receipt, month, '2026-10-07').remindNow, false, 'not twice on the same day');
+  assert.equal(standing(receipt, month, '2026-10-08').remindNow, false);
   month = afterReminder(month, '2026-10-09'); // Friday → next is Tuesday
   assert.equal(month.nextOn, '2026-10-13');
-  assert.equal(standing(bill, { ...month, nextOn: '2026-10-10' }, '2026-10-10').remindNow, false, 'Saturday: no');
+  assert.equal(standing(receipt, { ...month, nextOn: '2026-10-10' }, '2026-10-10').remindNow, false, 'Saturday: no');
   month = afterReminder(month, '2026-10-13');
-  s = standing(bill, month, '2026-10-15');
+  s = standing(receipt, month, '2026-10-15');
   assert.equal(s.remindNow, undefined);
   assert.equal(s.gaveUp, true);
   assert.equal(month.reminded.length, MAX_REMINDERS);
   assert.equal(addWorkdays('2026-10-09', 1), '2026-10-12');
 });
 
-/* ---------- adding bills ---------- */
+/* ---------- adding receipts ---------- */
 
-test('an admin adds a bill; it defaults to reminding them', async () => {
+test('an admin adds a receipt; it defaults to reminding them', async () => {
   const { run } = setup();
   const reply = await addGcp(run);
   assert.equal(reply.title, 'Added: Google Cloud');
@@ -81,22 +81,22 @@ test('an admin adds a bill; it defaults to reminding them', async () => {
 
 test('what an admin types is checked, with a sentence saying what to fix', () => {
   const by = { addedBy: 'robin@example.com' };
-  assert.throws(() => parseBill('Google Cloud', by), /Use: `\/invoices add/);
-  assert.throws(() => parseBill(`X | http://example.com | day 1`, by), /isn't an https link/);
-  assert.throws(() => parseBill(`X | javascript:alert(1) | day 1`, by), /isn't an https link/);
-  assert.throws(() => parseBill(`X | ${GCP} | whenever`, by), /don't understand "whenever"/);
-  assert.throws(() => parseBill(`X | ${GCP} | day 1 | riley`, by), /this isn't one: riley/);
-  const bill = parseBill(`Figma | https://www.figma.com/billing | day 1 | Riley@example.com, robin@example.com`, by);
-  assert.equal(bill.id, 'figma');
-  assert.deepEqual(bill.remind, ['riley@example.com', 'robin@example.com']);
+  assert.throws(() => parseReceipt('Google Cloud', by), /Use: `\/receipts add/);
+  assert.throws(() => parseReceipt(`X | http://example.com | day 1`, by), /isn't an https link/);
+  assert.throws(() => parseReceipt(`X | javascript:alert(1) | day 1`, by), /isn't an https link/);
+  assert.throws(() => parseReceipt(`X | ${GCP} | whenever`, by), /don't understand "whenever"/);
+  assert.throws(() => parseReceipt(`X | ${GCP} | day 1 | riley`, by), /this isn't one: riley/);
+  const receipt = parseReceipt(`Figma | https://www.figma.com/billing | day 1 | Riley@example.com, robin@example.com`, by);
+  assert.equal(receipt.id, 'figma');
+  assert.deepEqual(receipt.remind, ['riley@example.com', 'robin@example.com']);
 });
 
-test('only invoices admins add, remove or preview; everyone with access lists and marks done', async () => {
+test('only receipts admins add, remove or preview; everyone with access lists and marks done', async () => {
   const s = setup();
   await addGcp(s.run);
   const riley = s.ctxFor('riley@example.com', false);
-  assert.match(await s.run(`add Figma | https://www.figma.com | day 1`, riley), /Only invoices admins/);
-  assert.match(await s.run('remove Google Cloud', riley), /Only invoices admins/);
+  assert.match(await s.run(`add Figma | https://www.figma.com | day 1`, riley), /Only receipts admins/);
+  assert.match(await s.run('remove Google Cloud', riley), /Only receipts admins/);
   const list = await s.run('', riley);
   assert.match(list.text, /Google Cloud/);
   assert.doesNotMatch(list.text, /Reminds:/, 'who is reminded is for admins');
@@ -112,11 +112,11 @@ test('the daily check reminds on the due day, with the link, the folder and the 
   s.clock.now = at('2026-10-07');
   const [note] = await s.daily();
   assert.deepEqual(note.to, ['robin@example.com']);
-  assert.equal(note.reply.title, '🧾 Google Cloud: this month\'s bill should be ready');
-  assert.deepEqual(note.reply.buttons.map(b => b.text), ['Open Google Cloud', 'Invoices folder', '✓ Downloaded', 'Remind me tomorrow']);
+  assert.equal(note.reply.title, '🧾 Google Cloud: this month\'s receipt should be ready');
+  assert.deepEqual(note.reply.buttons.map(b => b.text), ['Open Google Cloud', 'Receipts folder', '✓ Downloaded', 'Remind me tomorrow']);
   assert.equal(note.reply.buttons[0].url, GCP);
   assert.equal(note.reply.buttons[1].url, 'https://drive.google.com/drive/folders/1UaRlFoSIiRoanmiq_FDHnBMPqCycf6t9');
-  assert.deepEqual(note.reply.buttons[2], { text: '✓ Downloaded', command: 'invoices', args: 'done google-cloud 2026-10', replace: true });
+  assert.deepEqual(note.reply.buttons[2], { text: '✓ Downloaded', command: 'receipts', args: 'done google-cloud 2026-10', replace: true });
   assert.deepEqual(await s.daily(), [], 'the task running twice in a day sends nothing new');
 });
 
@@ -148,7 +148,7 @@ test('"Remind me tomorrow" moves it to the next working day without using up a r
   assert.match(note.reply.text, /Reminder 2 of 3/);
 });
 
-test('a bill can be marked done early, typed by name, before any reminder', async () => {
+test('a receipt can be marked done early, typed by name, before any reminder', async () => {
   const s = setup();
   await addGcp(s.run);
   s.clock.now = at('2026-10-02');
@@ -157,48 +157,48 @@ test('a bill can be marked done early, typed by name, before any reminder', asyn
   assert.deepEqual(await s.daily(), []);
 });
 
-test('unknown bills and removed bills', async () => {
+test('unknown receipts and removed receipts', async () => {
   const s = setup();
-  assert.match(await s.run('done nope'), /I don't know that bill/);
+  assert.match(await s.run('done nope'), /I don't know that receipt/);
   await addGcp(s.run);
   assert.match(await s.run('remove Google Cloud'), /Removed \*\*Google Cloud\*\*/);
   s.clock.now = at('2026-10-07');
-  assert.deepEqual(await s.daily(), [], 'a removed bill is never reminded about');
+  assert.deepEqual(await s.daily(), [], 'a removed receipt is never reminded about');
 });
 
-test('/invoices: each bill with its own buttons, and "+ Add a bill" for admins', async () => {
+test('/receipts: each receipt with its own buttons, and "+ Add a receipt" for admins', async () => {
   const s = setup();
   const empty = await s.run('');
-  assert.match(empty.text, /No bills yet. Press \*\*\+ Add a bill\*\*/);
-  assert.deepEqual(empty.buttons, [{ text: '+ Add a bill', command: 'invoices', args: 'new' }]);
+  assert.match(empty.text, /No receipts yet. Press \*\*\+ Add a receipt\*\*/);
+  assert.deepEqual(empty.buttons, [{ text: '+ Add a receipt', command: 'receipts', args: 'new' }]);
   await addGcp(s.run);
   await s.run(`add Figma | https://www.figma.com/billing | day 1`);
   s.clock.now = at('2026-10-07');
   await s.run('done figma 2026-10');
   const list = await s.run('');
-  assert.equal(list.title, '🧾 Invoices — October');
+  assert.equal(list.title, '🧾 Receipts — October');
   assert.match(list.text, /\*\*Figma\*\* · ready on the 1st of the month\n✅ October: downloaded by robin on 7 Oct/);
   assert.match(list.text, /\*\*Google Cloud\*\* · ready on the 5th working day\n⏳ October: due since 7 Oct, not downloaded yet/);
-  assert.deepEqual(list.buttons.map(b => b.text), ['Open Figma', 'Open Google Cloud', '✓ Google Cloud downloaded', '+ Add a bill', 'Invoices folder']);
+  assert.deepEqual(list.buttons.map(b => b.text), ['Open Figma', 'Open Google Cloud', '✓ Google Cloud downloaded', '+ Add a receipt', 'Receipts folder']);
   assert.equal(list.buttons[0].url, 'https://www.figma.com/billing');
 
   const riley = await s.run('', s.ctxFor('riley@example.com', false));
-  assert.ok(!riley.buttons.some(b => b.text === '+ Add a bill'), 'only admins get "+ Add a bill"');
+  assert.ok(!riley.buttons.some(b => b.text === '+ Add a receipt'), 'only admins get "+ Add a receipt"');
 });
 
-test('"+ Add a bill" says what to tell Buddy; typing "invoices" alone shows the card for free', async () => {
+test('"+ Add a receipt" says what to tell Buddy; typing "receipts" alone shows the card for free', async () => {
   const s = setup();
   const start = await s.run('new');
-  assert.equal(start.title, 'Add a bill');
-  assert.match(start.text, /the \*\*link\*\* to the page where the bill is downloaded/);
-  assert.match(await s.run('new', s.ctxFor('riley@example.com', false)), /Only invoices admins/);
+  assert.equal(start.title, 'Add a receipt');
+  assert.match(start.text, /the \*\*link\*\* to the page where the receipt is downloaded/);
+  assert.match(await s.run('new', s.ctxFor('riley@example.com', false)), /Only receipts admins/);
 
   const dm = text => ({ text, argumentText: text, space: { kind: 'DM' } });
   const ctx = s.ctxFor();
-  assert.match((await s.mod.handleMessage(ctx, dm('Invoices'))).title, /🧾 Invoices/);
-  assert.ok(await s.mod.handleMessage(ctx, dm('bills?')));
-  assert.equal(await s.mod.handleMessage(ctx, dm('what bills are due this week?')), null, 'a question goes to Claude');
-  assert.equal(await s.mod.handleMessage(ctx, { ...dm('invoices'), space: { kind: 'SPACE' } }), null, 'DMs only');
+  assert.match((await s.mod.handleMessage(ctx, dm('Receipts'))).title, /🧾 Receipts/);
+  assert.ok(await s.mod.handleMessage(ctx, dm('receipts?')));
+  assert.equal(await s.mod.handleMessage(ctx, dm('what receipts are due this week?')), null, 'a question goes to Claude');
+  assert.equal(await s.mod.handleMessage(ctx, { ...dm('receipts'), space: { kind: 'SPACE' } }), null, 'DMs only');
 });
 
 test('preview shows an admin the reminder without counting it', async () => {

@@ -24,6 +24,6 @@
     "@buddy/module-admin": "*",
     "@buddy/module-manual": "*",
     "@buddy/module-costs": "*",
-    "@buddy/module-invoices": "*"
+    "@buddy/module-receipts": "*"
   }
 }

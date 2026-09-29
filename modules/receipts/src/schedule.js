@@ -1,13 +1,13 @@
 /**
- * When a bill is due, and whether to remind someone about it today. Plain functions over
+ * When a receipt is due, and whether to remind someone about it today. Plain functions over
  * YYYY-MM-DD strings: no clock, no storage, no Chat, so every rule is tested on its own.
  *
  * Working days are Monday to Friday. Public holidays aren't known, so a holiday can make a
  * reminder a day early: harmless for a reminder, and better than a holiday list to maintain.
  */
 
-// A bill that nobody marks as downloaded is reminded about this many times in a month, then left
-// alone (it still shows as pending in /invoices). Nagging forever teaches people to ignore Buddy.
+// A receipt that nobody marks as downloaded is reminded about this many times in a month, then left
+// alone (it still shows as pending in /receipts). Nagging forever teaches people to ignore Buddy.
 const MAX_REMINDERS = 3;
 // Working days between reminders when nobody has pressed anything.
 const GAP_WORKDAYS = 2;
@@ -37,7 +37,7 @@ function today(now, timeZone) {
 }
 
 /**
- * The day a bill is due in a month ("2026-10").
+ * The day a receipt is due in a month ("2026-10").
  *   { kind: 'workday', n: 5 }  the 5th working day (the last one, if the month has fewer)
  *   { kind: 'day', n: 31 }     that day of the month (the last day, in a shorter month)
  */
@@ -72,12 +72,12 @@ function ordinal(n) {
 const describeReady = ready => (ready.kind === 'workday' ? `${ordinal(ready.n)} working day` : `${ordinal(ready.n)} of the month`);
 
 /**
- * Where a bill stands today, and whether to remind now. `period` is this month's record:
+ * Where a receipt stands today, and whether to remind now. `period` is this month's record:
  * { done: {by, at} | null, reminded: [dates], nextOn: date | null }.
  */
-function standing(bill, period, date) {
+function standing(receipt, period, date) {
   const month = date.slice(0, 7);
-  const due = dueDate(bill.ready, month);
+  const due = dueDate(receipt.ready, month);
   const p = period || {};
   if (p.done) return { state: 'done', due, month, done: p.done };
   if (date < due) return { state: 'upcoming', due, month };

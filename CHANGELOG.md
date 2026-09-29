@@ -11,6 +11,22 @@ live Chat app, and what is still unverified against reality).
 
 ## 2026-09-29
 
+### Changed
+- **The `invoices` module is now `receipts`** (Robin), and the old name is retired: Buddy answers
+  `/receipts` and the word **receipts** (or **recibos**); `/invoices` and "invoices" no longer do
+  anything. Everything keyed on the name moved with it: `BUDDY_ACCESS_RECEIPTS`,
+  `BUDDY_ROLE_RECEIPTS_ADMIN`, `RECEIPTS_FOLDER_ID`, `RECEIPTS_TIMEZONE`, `receipts` in `MODULES`
+  and `MODULE_TUNING`, the package (`@buddy/module-receipts`) and its storage (`m_receipts__*`).
+  Cards and approval cards say "receipt" throughout ("+ Add a receipt", "Receipts folder"), and
+  Claude's tools are `list_receipts`, `save_receipt`, `remove_receipt`, `mark_downloaded`.
+  Google's own "Billing → Invoices" page keeps its name. The entries below describe it as built,
+  under the old name.
+
+### Infrastructure
+- `infra/migrate-invoices-to-receipts.sh`, once, right after the deploy: copies what the live
+  `invoices` module saved (one receipt so far, Docusign) into `m_receipts__*`. It only copies,
+  skips anything already there and deletes nothing.
+
 ### Added
 - **`invoices` module: reminders when a bill is ready.** An invoices admin adds a bill in chat
   (`/invoices add Name | link | 5th working day | who`). On the due day at 09:00 Buddy DMs that
@@ -19,7 +35,7 @@ live Chat app, and what is still unverified against reality).
   reminds every two working days, three times at most. `/invoices` shows every bill, this month's
   status and the links; `preview` shows an admin the card. Google Cloud is the first bill; any bill
   with a download page works. Robin only (`BUDDY_ACCESS_INVOICES`, `BUDDY_ROLE_INVOICES_ADMIN`).
-  `docs/decisions/0011-invoices-and-scheduled-tasks.md`.
+  `docs/decisions/0011-receipts-and-scheduled-tasks.md`.
 - **Invoices without commands**, for the accounts team. Typing **invoices** (or **bills**) shows the
   card for free; each bill has its own **Open** and **✓ Downloaded** buttons, and admins get
   **+ Add a bill**. Bills are added, changed and stopped by just saying so ("Add Adobe, it's ready
