@@ -9,6 +9,46 @@ live Chat app, and what is still unverified against reality).
 
 ---
 
+## 2026-09-29
+
+### Added
+- **`invoices` module: Google Cloud's invoices in Buddy.** `/invoices` lists the invoice PDFs in a
+  Drive folder, newest first, each linked; `/invoices check` says whether Buddy can read the folder
+  and who is told about new ones. Once a day Buddy DMs `INVOICES_NOTIFY` when new invoices arrive —
+  one message, with a button to see them all; switching it on announces only the last week. Robin
+  only (`BUDDY_ACCESS_INVOICES`). Not in `MODULES` yet: it needs the folder id first, or buddy-bot
+  won't start. `docs/decisions/0011-invoices-and-scheduled-tasks.md`.
+- **`tools/invoice-fetcher`, on a PC.** Google has no API for invoice PDFs, so a script opens the
+  billing console weekly (Mondays 10:00, catching up if the PC was off) in its own Chrome profile —
+  signed into by hand, once — saves new PDFs into that Drive folder through Drive for desktop, and
+  emails them. It emails an alert with a screenshot when the session expires or the page changes.
+  `inspect` mode shows what the page offers, to fix the selectors; `dry-run` changes nothing. The
+  first run saves the whole history but emails only the last 35 days. Own package and tests, never
+  deployed.
+- **Modules can speak first: the `onSchedule` hook.** Cloud Scheduler calls `POST /tasks/daily` on
+  buddy-bot; each module returns what to tell whom, and Buddy delivers it by DM.
+
+### Security
+- **`/tasks` is a second way into buddy-bot, and as narrow as the first.** Only the
+  `buddy-scheduler` account may invoke it (Cloud Run IAM), and the app checks the token was issued
+  to that exact account: Google Chat's token is refused on `/tasks`, the scheduler's everywhere
+  else. The route doesn't exist unless `BUDDY_SCHEDULER_EMAIL` is set. A scheduled message reaches
+  someone only if they may talk to Buddy **and** use the module that wrote it.
+- The fetcher never types a password or answers a sign-in challenge, only downloads from Google
+  hosts, checks every file is a real PDF, never replaces or deletes a file, and reads its Gmail app
+  password from Windows Credential Manager. Buddy reads the folder with `drive.readonly` and never
+  holds a Google login.
+
+### Infrastructure
+- `infra/scheduler.sh` (once): the `buddy-scheduler` account, `run.invoker` on buddy-bot only, and
+  the `buddy-daily` job at 12:00 Buenos Aires. `deploy.sh` passes `BUDDY_SCHEDULER_EMAIL` when set.
+
+### Deployed
+- Nothing yet. Unverified against reality: the billing page's layout (`SELECTORS`), DM lookup from a
+  scheduled call, Gmail app passwords on the Workspace (BACKLOG Epic 13).
+
+---
+
 ## 2026-09-28
 
 ### Changed

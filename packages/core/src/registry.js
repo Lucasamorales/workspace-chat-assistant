@@ -108,9 +108,32 @@ function createRegistry({ modules, env = process.env, log, timeouts = {}, access
     }
   }
 
+  /**
+   * A scheduled wake-up: every enabled module with onSchedule, no person behind it. Each one's
+   * notes are checked for shape here, so a module can only ever name work emails and a reply —
+   * never a space, a thread or anything else to post into. Delivery, and the access check on
+   * every recipient, happen in the gateway.
+   */
+  async function runScheduled(ctxFor, task) {
+    const out = [];
+    for (const mod of [...byName.values()].filter(m => m.onSchedule)) {
+      const r = await safe(mod, `onSchedule.${task}`, () => mod.onSchedule(ctxFor(mod), task));
+      if (!r.ok) {
+        out.push({ module: mod.name, failed: true, notes: [] });
+        continue;
+      }
+      const notes = (Array.isArray(r.value) ? r.value : [])
+        .filter(n => n && Array.isArray(n.to) && n.reply)
+        .map(n => ({ to: n.to.map(e => String(e).trim().toLowerCase()).filter(e => e.includes('@')), reply: n.reply }));
+      out.push({ module: mod.name, failed: false, notes });
+    }
+    return out;
+  }
+
   return {
     modules: () => [...byName.values()],
     get: name => byName.get(name),
+    runScheduled,
     hasRole: (name, role, user) => (byName.has(name) ? hasRole(byName.get(name), role, user) : false),
     canConverse,
     conversationMode,

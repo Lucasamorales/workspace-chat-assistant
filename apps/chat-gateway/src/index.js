@@ -11,6 +11,7 @@ const { chat: chatApi } = require('@googleapis/chat');
 const core = require('@buddy/core');
 const { createApp } = require('./app');
 const { createEventHandler } = require('./handler');
+const { createTaskRunner } = require('./tasks');
 const { setAssetsUrl } = require('./cards');
 
 const config = core.loadConfig({
@@ -44,6 +45,8 @@ const config = core.loadConfig({
   THREAD_TTL_DAYS: { type: 'number', min: 1, default: 30 },
   // Experiment (docs/decisions/0010-subscription-proxy.md): these people are answered through the
   // subscription proxy instead of the API. Empty means nobody, and the experiment is off.
+  // The service account Cloud Scheduler signs /tasks requests as. Unset: /tasks does not exist.
+  BUDDY_SCHEDULER_EMAIL: { default: '' },
   CLAUDE_PROXY_USERS: { type: 'list', default: [] },
   CLAUDE_PROXY_URL: { type: 'url' },
   CLAUDE_PROXY_SECRET: { type: 'secret', minLength: 32 },
@@ -128,9 +131,26 @@ const handleEvent = createEventHandler({
   defer: promise => promise.catch(error => log.error('background task crashed', { error })),
 });
 
+// Scheduled messages go through the same two gates as a message would: allowed on Buddy at all,
+// and able to use the module that wants to speak.
+const allowed = core.parseRule(config.BUDDY_ALLOWED_USERS.join(','), 'BUDDY_ALLOWED_USERS');
+const runTask = createTaskRunner({
+  registry,
+  chat,
+  makeModuleContext: core.createContextFactory({ store, sealer, log, access }),
+  access,
+  mayTalk: email => allowed({ email }) || Boolean(grants.mayTalk({ email })),
+  log: log.child('tasks'),
+});
+
+const oauthClient = new OAuth2Client();
 const app = createApp({
-  verifyChat: core.createChatVerifier({ audience: config.CHAT_AUDIENCE, oauthClient: new OAuth2Client() }),
+  verifyChat: core.createChatVerifier({ audience: config.CHAT_AUDIENCE, oauthClient }),
   handleEvent,
+  ...(config.BUDDY_SCHEDULER_EMAIL ? {
+    verifyTask: core.createCallerVerifier({ audience: config.CHAT_AUDIENCE, oauthClient, email: config.BUDDY_SCHEDULER_EMAIL }),
+    runTask,
+  } : {}),
   log,
 });
 

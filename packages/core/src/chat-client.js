@@ -32,6 +32,20 @@ function createChatClient({ api }) {
 
     postCard: (space, thread, text, cardsV2) => post(space, thread, { text, cardsV2 }),
 
+    /**
+     * The DM between Buddy and a person, for a message Buddy starts itself (a scheduled one).
+     * Null when they have never opened a chat with Buddy: an app cannot start one on its own.
+     */
+    async findDirectMessage(userEmail) {
+      try {
+        const res = await api.spaces.findDirectMessage({ name: `users/${userEmail}` });
+        return (res.data && res.data.name) || null;
+      } catch (error) {
+        if (error && (error.code === 404 || error.status === 404)) return null;
+        throw error;
+      }
+    },
+
     /** Replace a message's text; overflow goes into follow-up messages in the same thread. */
     async replaceText(messageName, space, thread, text) {
       const [first, ...rest] = splitText(text || '_(empty reply)_');

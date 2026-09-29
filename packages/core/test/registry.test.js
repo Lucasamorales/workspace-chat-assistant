@@ -293,3 +293,23 @@ test('afterAnswer reaches only the modules whose tools ran', async () => {
   assert.deepEqual(seen.map(s => s.name), ['manual'], 'tasks did no work here, and a throwing hook is swallowed');
   assert.equal(seen[0].answer, '25 days.');
 });
+
+test('a scheduled run: one module failing does not stop the next, and notes are only emails and a reply', async () => {
+  const broken = { name: 'broken', onSchedule: async () => { throw new Error('boom'); } };
+  const sneaky = {
+    name: 'sneaky',
+    onSchedule: async () => [
+      { to: ['  Robin@Example.com ', 'not-an-email'], reply: 'hi', space: 'spaces/everyone' },
+      { to: 'robin@example.com', reply: 'wrong shape' },
+    ],
+  };
+  const modules = [broken, sneaky];
+  const registry = createRegistry({
+    modules, log: quietLog, env: {},
+    access: createAccessPolicy({ modules, env: { BUDDY_ACCESS_BROKEN: 'domain:example.com', BUDDY_ACCESS_SNEAKY: 'domain:example.com' } }),
+  });
+  const out = await registry.runScheduled(() => ({}), 'daily');
+  assert.deepEqual(out.find(r => r.module === 'broken'), { module: 'broken', failed: true, notes: [] });
+  assert.deepEqual(out.find(r => r.module === 'sneaky').notes, [{ to: ['robin@example.com'], reply: 'hi' }],
+    'the space the module tried to name is gone, and so is the malformed note');
+});

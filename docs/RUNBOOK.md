@@ -197,6 +197,36 @@ gcloud projects add-iam-policy-binding your-gcp-project --member="serviceAccount
 - [ ] Revoke someone listed in `infra/config.env` → Buddy says it's set in the file; they keep it
 - [ ] A non-admin has no `/access` command and cannot grant anything
 
+## 5h. Invoices: fetcher, module and the daily message
+
+Decision: `docs/decisions/0011-invoices-and-scheduled-tasks.md`. In this order — `invoices` must
+not go into `MODULES` before its folder id is set, or `buddy-bot` refuses to start.
+
+1. **Drive folder.** Make `Buddy invoices` in Drive, share it as **Viewer** with
+   `buddy-bot@your-gcp-project.iam.gserviceaccount.com`, put its id in `INVOICES_FOLDER_ID`
+   (`infra/config.env`).
+2. **Fetcher on the PC.** Follow `tools/invoice-fetcher/README.md` → "Set up": install,
+   `config.local.json`, `npm run login`, `set-password.ps1`, `npm run test-email`,
+   `npm run inspect`, `npm run dry-run`, `npm run run`, `schedule.ps1`.
+3. **Scheduler (once).** From PowerShell:
+   ```powershell
+   & "C:\Program Files\Git\bin\bash.exe" infra/scheduler.sh
+   ```
+   Put the email it prints in `BUDDY_SCHEDULER_EMAIL`.
+4. **Enable and deploy.** Add `invoices` to `MODULES`, commit, deploy.
+
+- [ ] `/invoices check` → "✅ I can read the folder **Buddy invoices**: N invoices", and robin@ as notified
+- [ ] `/invoices` → the PDFs newest first; a link opens the PDF in Drive
+- [ ] Someone without access has no `/invoices` and no button
+- [ ] `gcloud scheduler jobs run buddy-daily --location=europe-west1 --project=your-gcp-project`
+      → a DM "A new Google Cloud invoice" (on the first run: anything saved in the last 7 days);
+      the log line `scheduled task finished` shows `sent` / `skipped`
+- [ ] Run the job again → nothing sent (each invoice is announced once)
+- [ ] An anonymous `curl -X POST <bot url>/tasks/daily` → 403 (Cloud Run); the fetcher's weekly
+      task shows in Task Scheduler with next run Monday 10:00
+- [ ] Break it on purpose once: in the fetcher's Chrome profile, sign out → `npm run run` → email
+      "sign in to Google again" with a screenshot → `npm run login` fixes it
+
 ## 5c. Voice and look check
 
 - [ ] Open `https://buddy-oauth-000000000000.europe-west1.run.app/assets/buddy-avatar.png` → pixel Buddy on orange

@@ -70,6 +70,11 @@ if [ -n "${CLAUDE_PROXY_USERS:-}" ]; then
   echo "== Subscription proxy experiment ON for: $CLAUDE_PROXY_USERS"
 fi
 
+# Scheduled messages (Cloud Scheduler → /tasks): only when infra/scheduler.sh has been run and its
+# account set. Leaving it empty and deploying removes /tasks from the service.
+TASK_VARS=""
+if [ -n "${BUDDY_SCHEDULER_EMAIL:-}" ]; then TASK_VARS="|BUDDY_SCHEDULER_EMAIL=$BUDDY_SCHEDULER_EMAIL"; fi
+
 MODULE_PREFIXES=$(echo "$MODULES" | tr ',' '\n' | tr '[:lower:]' '[:upper:]' | sed 's/$/_/' | paste -sd '|' -)
 MODULE_VARS=""
 for v in $(compgen -A variable | grep -E "^(BUDDY_(ACCESS|ROLE)_|(${MODULE_PREFIXES})[A-Z])"); do
@@ -82,7 +87,7 @@ gcloud run deploy "$BOT_SERVICE" --image="$IMAGE" --region="$REGION" $P \
   --no-allow-unauthenticated \
   --command=node --args=apps/chat-gateway/src/index.js \
   --no-cpu-throttling --min-instances=0 --max-instances=3 --concurrency=20 --memory=1Gi --timeout=60 \
-  --set-env-vars="^|^CHAT_AUDIENCE=$BOT_URL|OAUTH_BASE_URL=$OAUTH_URL|BUDDY_MODULES=$MODULES|BUDDY_ALLOWED_USERS=$ALLOWED_USERS|BUDDY_APP_NAME=$APP_NAME|KMS_KEY_NAME=$KMS_KEY_NAME|MODEL=$MODEL|EFFORT=$EFFORT|MONTHLY_USD_CAP=$MONTHLY_USD_CAP|USD_PER_MTOK_IN=$USD_PER_MTOK_IN|USD_PER_MTOK_OUT=$USD_PER_MTOK_OUT$COST_VARS$PROXY_VARS$MODULE_VARS" \
+  --set-env-vars="^|^CHAT_AUDIENCE=$BOT_URL|OAUTH_BASE_URL=$OAUTH_URL|BUDDY_MODULES=$MODULES|BUDDY_ALLOWED_USERS=$ALLOWED_USERS|BUDDY_APP_NAME=$APP_NAME|KMS_KEY_NAME=$KMS_KEY_NAME|MODEL=$MODEL|EFFORT=$EFFORT|MONTHLY_USD_CAP=$MONTHLY_USD_CAP|USD_PER_MTOK_IN=$USD_PER_MTOK_IN|USD_PER_MTOK_OUT=$USD_PER_MTOK_OUT$COST_VARS$PROXY_VARS$TASK_VARS$MODULE_VARS" \
   --set-secrets="ANTHROPIC_API_KEY=$SECRET_ANTHROPIC:latest,STATE_SECRET=$SECRET_STATE:latest,ASANA_CLIENT_SECRET=$SECRET_ASANA:latest$PROXY_SECRETS"
 
 gcloud run services add-iam-policy-binding "$BOT_SERVICE" --region="$REGION" $P \

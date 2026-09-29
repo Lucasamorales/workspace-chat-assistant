@@ -42,7 +42,7 @@ shorter list: see "Proven in use" at the bottom of this section.
 | # | Item | Notes |
 |---|---|---|
 | U1 | **App Home tab** in the DM: connection status, this month's usage, quick buttons | Enable "Support App Home" in the Chat console; handle `APP_HOME` events |
-| U2 | **Proactive connection check**: a daily job that warns users whose Asana connection stopped working, before they need it | Needs the scheduled jobs hook (R6) |
+| U2 | **Proactive connection check**: a daily job that warns users whose Asana connection stopped working, before they need it | The scheduled jobs hook (R6) now exists: an `onSchedule` in the asana module |
 | U3 | Register `/help` and `/asana` under Commands in the Chat console for autocomplete | Console only |
 
 ## P0: Security (independent of the merge)
@@ -93,7 +93,7 @@ shorter list: see "Proven in use" at the bottom of this section.
 | R3 | ✅ **Direct message handlers**: contract hook `handleMessage(ctx, message)` for exact matches (kudos votes, "who is out") that run before Claude | Ordered, one winner, isolated like other hooks |
 | R4 | ✅ **Mentions in context**: pass Chat user mentions (name, email, id) to modules | Kudos can read tagged teammates without parsing text |
 | R5 | ✅ **Google API access pattern**: Sheets as `buddy-bot`; calendars via delegation with no key, fenced in module code | README "Adding a module"; `0003-ooo.md`, `0004-admin-module.md` |
-| R6 | **Scheduled jobs hook** `onSchedule(ctx)` driven by Cloud Scheduler → authenticated endpoint | Not needed for Kudos/OOO; enables future reminders/digests |
+| R6 | **Scheduled jobs hook** `onSchedule(ctx, task)` driven by Cloud Scheduler → authenticated endpoint | done 2026-09-29 for invoices (Epic 13); daily task only |
 | R7 | **Module template + test helpers** (`@buddy/core/testing`: fake ctx, fake store, fake event) | New module = copy folder, add to config, tests run standalone |
 | R8 | `docs/ADDING_A_MODULE.md` | Covers contract, access, settings, storage, tests, deploy |
 | R9 | Optional: Google Group membership for access rules (Cloud Identity API) | `ACCESS_KUDOS=group:wholeteam@example.com` works |
@@ -228,6 +228,25 @@ Decision: `docs/decisions/0004-admin-module.md`. Config stays the floor; grants 
 | G10 | ✅ Audit: who granted or revoked what, for whom, when | Test |
 | G11 | ✅ RUNBOOK §6b: read access with `/access` | Docs |
 | G12 | Try it live: grant a colleague a module, confirm they can use it and nobody else changed | After deploy |
+
+## Epic 13: `invoices` module + PC fetcher
+
+Decision: `docs/decisions/0011-invoices-and-scheduled-tasks.md`. Built 2026-09-29, **not yet run
+for real**.
+
+| # | Item | Status |
+|---|---|---|
+| I1 | `onSchedule` hook, `/tasks/:task` route, caller-pinned OIDC check, DM delivery with both access checks | done — unverified live |
+| I2 | `invoices` module: `/invoices`, `/invoices check`, daily announcement | done — unverified live |
+| I3 | `tools/invoice-fetcher`: login / inspect / dry-run / run / test-email, alerts, weekly task | done — unverified live |
+| I4 | Drive folder + `INVOICES_FOLDER_ID`, fetcher set up on the PC (RUNBOOK §5h steps 1–2) | todo — Robin |
+| I5 | `infra/scheduler.sh`, `BUDDY_SCHEDULER_EMAIL`, `invoices` in `MODULES`, deploy (§5h steps 3–4) | todo — Robin |
+| I6 | **Tune `SELECTORS`** in `src/billing.js` against the real page (`npm run inspect`) | todo — first run |
+| I7 | Confirm `spaces.findDirectMessage` works with the app's credentials from a scheduled call | todo — first scheduled run |
+| I8 | Confirm the Workspace allows Gmail app passwords; if not, send from another account or through the Gmail API | todo |
+| I9 | After I4–I8 pass: `feat:` commit marking it verified | todo |
+| I10 | `/invoices check` says when the fetcher last ran (a heartbeat file in the folder), so a PC left off for weeks is noticed | later |
+| I11 | Move the costs Sheet rollup onto the daily task instead of riding the first message of the week | later |
 
 ## Epic 12: experiment — Buddy on a Claude subscription (`develop` only)
 
