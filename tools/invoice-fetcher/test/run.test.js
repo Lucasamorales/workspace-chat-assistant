@@ -38,11 +38,14 @@ const REAL_ROWS = ['Issue date Document type Amount Edit', 'August 31, 2026 Stat
 function fakeTickPage(rows = REAL_ROWS, dir) {
   const ticked = new Set();
   let pending = null;
+  // Like Google's: a forced click does nothing (the overlay swallows it); Space toggles it.
+  const toggle = i => { if (ticked.has(i)) ticked.delete(i); else ticked.add(i); };
   const box = i => ({
     isVisible: async () => true,
     isChecked: async () => ticked.has(i),
-    check: async () => { ticked.add(i); },
-    uncheck: async () => { ticked.delete(i); },
+    click: async () => {},
+    focus: async () => {},
+    press: async key => { if (key === 'Space') toggle(i); },
   });
   const page = { rows, downloads: [] };
   const frame = {

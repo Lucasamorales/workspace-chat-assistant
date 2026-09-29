@@ -83,6 +83,19 @@ async function findCandidates(page) {
 
 const norm = s => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 400);
 
+// Google's payments checkboxes are drawn with a decorative layer on top of them, so an ordinary
+// click is refused as "intercepted" and waits forever. Click the checkbox itself regardless, then
+// believe only its own aria-checked; if the click didn't take, Space does the same thing.
+async function setTicked(box, want) {
+  const is = () => box.isChecked().catch(() => null);
+  if (await is() === want) return;
+  await box.click({ force: true, timeout: 10_000 }).catch(() => {});
+  if (await is() === want) return;
+  await box.focus().catch(() => {});
+  await box.press('Space').catch(() => {});
+  if (await is() !== want) throw new FetchError('layout', `Couldn't ${want ? 'tick' : 'untick'} a row's checkbox on the statements page.`);
+}
+
 // Tick exactly one row, press "Download selected", untick it. The row is found again by its text,
 // not its position: if the table redrew in between, a position could point at another month's
 // document and it would be saved under the wrong name.
@@ -102,10 +115,10 @@ async function downloadByTicking(page, candidate, config) {
   // its column and filter panels, which can't be clicked and don't belong to the download.
   for (let i = 0, n = await rows.count(); i < n; i++) {
     const other = rows.nth(i).locator(SELECTORS.checkbox).first();
-    if (await other.isVisible().catch(() => false) && await other.isChecked().catch(() => false)) await other.uncheck({ timeout });
+    if (await other.isVisible().catch(() => false) && await other.isChecked().catch(() => false)) await setTicked(other, false);
   }
   const box = target.locator(SELECTORS.checkbox).first();
-  await box.check({ timeout });
+  await setTicked(box, true);
   try {
     const [dl] = await Promise.all([
       page.waitForEvent('download', { timeout }),
@@ -113,7 +126,7 @@ async function downloadByTicking(page, candidate, config) {
     ]);
     return require('node:fs').readFileSync(await dl.path());
   } finally {
-    await box.uncheck({ timeout }).catch(() => {});
+    await setTicked(box, false).catch(() => {});
   }
 }
 

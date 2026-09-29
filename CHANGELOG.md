@@ -27,6 +27,9 @@ live Chat app, and what is still unverified against reality).
 - **The first real run timed out clearing checkboxes.** Before ticking a row it unticked every
   ticked checkbox in the frame, including hidden ones in the page's column panel, which can't be
   clicked. It now only touches the table's own rows.
+- **Then the tick itself timed out**: Google draws its payments checkboxes with a layer on top,
+  so a normal click is refused. The fetcher clicks the checkbox directly, trusts only its own
+  ticked state, and falls back to Space.
 
 ### Changed
 - **The fetcher's first run takes only the latest document** (Robin): August's today, then
