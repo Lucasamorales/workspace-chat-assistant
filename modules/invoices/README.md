@@ -43,9 +43,11 @@ Buddy understands "Nth working day" and "day N" of the month. Anything else ("th
 something (no link, say) gets a question back instead of a card.
 
 Adding, changing and stopping bills are offered only to invoices admins, and refused again when
-they run. Talking to it costs a small Claude call on the cheapest model (`MODULE_TUNING`
-`invoices:claude-haiku-4-5:low`) for people who only have scoped modules; people with the
-assistant run on the default model.
+they run. Talking to it costs a small Claude call on Sonnet (`MODULE_TUNING`
+`invoices:claude-sonnet-5:low`) for people who only have scoped modules; people with the
+assistant run on the default model. Sonnet rather than Haiku because the people using it phrase
+things loosely ("the Adobe one moved to around the 3rd") and it is used a few times a month, so the
+price difference is cents.
 
 ## Commands
 

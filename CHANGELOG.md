@@ -25,8 +25,8 @@ live Chat app, and what is still unverified against reality).
   **+ Add a bill**. Bills are added, changed and stopped by just saying so ("Add Adobe, it's ready
   on the 1st, here's the page: …"): Buddy shows what it understood, with the next real date and,
   on a change, what it was before, and saves nothing until **Approve**. A request missing something
-  gets a question back instead of a card. Runs on Haiku for people scoped to modules
-  (`MODULE_TUNING`). Nobody new has access yet.
+  gets a question back instead of a card. Runs on Sonnet at low effort for people scoped to
+  modules (`MODULE_TUNING`): loose wording from non-technical people matters more than the cents.
 - **Modules can speak first: the `onSchedule` hook.** Cloud Scheduler calls `POST /tasks/daily` on
   buddy-bot at 09:00 Buenos Aires on weekdays; each module returns what to tell whom, and Buddy
   delivers it by DM.
