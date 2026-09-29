@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# One-time: lets Cloud Scheduler wake buddy-bot once a day, so a module can say something first —
-# today, "a new Google Cloud invoice has arrived". Safe to run again: it updates what exists.
+# One-time: lets Cloud Scheduler wake buddy-bot every weekday morning, so a module can say
+# something first — today, "your Google Cloud bill should be ready". Safe to run again: it
+# updates what exists.
 #
 # The service stays private. Cloud Scheduler signs each call as its own service account, which
 # may invoke buddy-bot and nothing else; buddy-bot checks the token is that account's before
@@ -29,10 +30,10 @@ echo "== It may call buddy-bot, and nothing else"
 gcloud run services add-iam-policy-binding "$BOT_SERVICE" --region="$REGION" $P \
   --member="serviceAccount:$SA_EMAIL" --role=roles/run.invoker >/dev/null
 
-echo "== Daily job at 12:00 Buenos Aires time"
+echo "== Job at 09:00 Buenos Aires time, Monday to Friday"
 if gcloud scheduler jobs describe "$JOB" --location="$REGION" $P >/dev/null 2>&1; then VERB=update; else VERB=create; fi
 gcloud scheduler jobs "$VERB" http "$JOB" --location="$REGION" $P \
-  --schedule="0 12 * * *" --time-zone="America/Argentina/Buenos_Aires" \
+  --schedule="0 9 * * 1-5" --time-zone="America/Argentina/Buenos_Aires" \
   --uri="$BOT_URL/tasks/daily" --http-method=POST \
   --oidc-service-account-email="$SA_EMAIL" --oidc-token-audience="$BOT_URL"
 

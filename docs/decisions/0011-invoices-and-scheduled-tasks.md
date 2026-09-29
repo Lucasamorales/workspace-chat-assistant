@@ -1,89 +1,76 @@
-# 0011 — Invoices, and letting Buddy speak first
+# 0011 — Invoice reminders, and letting Buddy speak first
 
 Date: 2026-09-29 · Status: accepted (Robin) · Unverified live: see "Still to check"
 
 ## Context
 
-Google Cloud's invoice PDFs have to be downloaded by hand from Billing → Invoices every month.
-There is no API for them: the Billing API returns costs, never the invoice documents. Robin wanted
-them fetched automatically, emailed, and visible in Buddy with a command and a message when a new
-one arrives. Robin only for now, with room to add others.
+Google Cloud's billing documents have to be downloaded by hand from Billing → Invoices every
+month. Robin wanted Buddy to take care of it, and to be able to add other bills the same way.
 
-Two things Buddy could not do: reach anything that needs a person's Google login, and say
-anything without being asked — `buddy-bot` only accepted calls from Google Chat.
+Two things Buddy could not do: get the PDFs, and say anything without being asked — `buddy-bot`
+only accepted calls from Google Chat.
+
+## What we tried first, and why it was dropped
+
+**There is no API.** The Cloud Billing API manages accounts, projects and prices; nothing in it
+returns invoices or statements. the company's account is paid automatically, so it gets monthly
+*statements*, which Google doesn't email either (only invoiced accounts can have invoices emailed).
+
+**A script on a PC driving Chrome** (`tools/invoice-fetcher`, built and removed the same day). It
+reused a Google session signed into its own Chrome profile and ticked the row, pressed "Download
+selected", saved to Drive and emailed the PDF. It worked for about 25 minutes. After that, a
+Chrome under remote control — whether Playwright launched it or it only attached to a normal
+Chrome — was sent to the sign-in page, while the same profile opened normally was still signed
+in. That is Google protecting the session against theft, and working around a security control
+on the company account is not something to build on: it would also break with the next change.
+
+**A Chrome extension in the everyday browser** would avoid that, but needs a local helper to save
+files and send email, a site setting to allow pop-ups, and its clicks might still be ignored. Too
+much to keep working for one PDF a month.
 
 ## Decision
 
-### The fetcher lives on a PC, not in Cloud Run
+### Buddy reminds; people download
 
-`tools/invoice-fetcher` runs weekly on a PC (Windows Task Scheduler, Mondays 10:00, catching up if
-the PC was off). It reuses a Google session held in its own Chrome profile, which a person signs
-into by hand. It saves new PDFs into a Drive folder through Drive for desktop, emails them, and
-emails an alert with a screenshot when it can't.
+The `invoices` module knows each bill's download page and when it's usually ready ("5th working
+day", "day 1"). On that day at 09:00 it DMs the bill's list with a button to the page; someone
+downloads it and presses **Downloaded**, which closes the month for everyone. Unanswered, it
+reminds again every two working days, three times at most. Bills are added in chat by an invoices
+admin, so a new one needs no deploy.
 
-Why not in Cloud Run: it would mean storing a person's Google session (or password) in the cloud
-and automating sign-in. Google blocks that, it breaks the "never act as a specific person by
-holding their key" rule, and a stolen session there would open the whole billing account. On the
-PC the session sits where it already sits for that person, and the script never sees a password.
-
-Rules it keeps (`docs/BUILDING-FOR-BUDDY.md`): one CONFIG; deciding (`plan.js`) apart from doing;
-Google calls in one layer (`billing.js`); state written after every step so a run is safe to
-repeat; partial failures reported as "fetched 1 of 2"; dates as `YYYY-MM-DD`; people by work email;
-no password typed, no challenge answered, no link followed off Google, nothing deleted.
-
-### Buddy reads the folder
-
-The `invoices` module lists the folder's PDFs (`/invoices`) with `drive.readonly`, through a
-keyless token for `buddy-bot` — the same way the manual reads its folder. It never touches
-billing. The folder is shared as Viewer with `buddy-bot`, nothing more.
+It holds no login, fetches nothing, reads no files. Its only data is the bills and who marked each
+month done.
 
 ### Scheduled tasks: a second, narrow way in
 
 New module hook **`onSchedule(ctx, task)`** returns `[{ to: [emails], reply }]` and sends nothing
-itself. Cloud Scheduler calls `POST /tasks/daily` on `buddy-bot` once a day, signed with an OIDC
-token as `buddy-scheduler@…`; the gateway runs every module's hook and delivers the notes by DM.
+itself. Cloud Scheduler calls `POST /tasks/daily` on `buddy-bot` at 09:00 Buenos Aires, Monday to
+Friday, signed with an OIDC token as `buddy-scheduler@…`; the gateway runs every module's hook and
+delivers the notes by DM.
 
 - **Still private.** `buddy-scheduler` is given `run.invoker` on `buddy-bot` only. The app checks
   the token's audience *and* that it was issued to that exact account (`createCallerVerifier`) —
   Google Chat's own token is refused on `/tasks`, and the scheduler's is refused everywhere else.
 - **Off unless configured.** With `BUDDY_SCHEDULER_EMAIL` empty, `/tasks` doesn't exist.
 - **Two checks per recipient.** A note reaches someone only if they may talk to Buddy *and* may use
-  the module that wrote it. A module's notify list can never show anything to someone it couldn't
-  show it to in a DM.
+  the module that wrote it.
 - **DMs only, and only existing ones.** A Chat app can't open a DM; people who have never messaged
   Buddy are skipped and counted.
-- **Contained.** Each hook runs with the registry's timeout and try/catch; one failing module
-  doesn't stop the rest.
-- Task names are `[a-z][a-z0-9-]*`; only `daily` is scheduled today.
+- **Contained.** Each hook runs with the registry's timeout and try/catch; one failing module (or
+  one failing bill) doesn't stop the rest.
+- **Safe to run twice.** A reminder is recorded as sent when it's handed over, so a second run the
+  same day sends nothing.
 
 This reverses the reasoning in 0006 for the costs rollup ("opening it to a scheduler would mean a
 new invoker"): the invoker now exists, narrowly. The rollup can move onto it later (BACKLOG).
 
-### Who
-
-`BUDDY_ACCESS_INVOICES=robin@` and `INVOICES_NOTIFY=robin@`. Adding someone is the usual access
-rule (or an admin grant from chat) plus the notify list; emailing them the PDFs is the fetcher's
-`mail.to`.
-
-## Alternatives considered
-
-- **Billing export to BigQuery**: costs, not invoices. Doesn't give the PDF.
-- **Buddy holds a Google session**: rejected, see above.
-- **The fetcher messages Chat itself** (a webhook): a second bot identity, a secret on the PC, and
-  no access check. Reading a folder keeps one way in and one set of rules.
-- **Riding an ordinary message, like the costs rollup**: an invoice announcement can't wait for
-  someone to happen to write.
-
 ## Still to check (live)
 
 - `spaces.findDirectMessage` with the app's own credentials, from a scheduled call.
-- The billing page's real layout against `SELECTORS` (`npm run inspect`).
-- Gmail app passwords allowed on the Workspace; if not, the fetcher needs another sender.
+- The first real reminder, on the 5th working day of the month after it is switched on.
 
 ## Consequences
 
-- One more thing to keep alive on a PC: if it is off for weeks, invoices arrive late — they are
-  still in the billing console, and the next run catches up.
-- The Google session in the Chrome profile is as sensitive as a password; it lives only in that
-  Windows user's `%LOCALAPPDATA%`.
+- Downloading stays a person's job: about ten seconds a month per bill, prompted.
 - `buddy-bot` has a second invoker. It is checked as tightly as Google Chat.
+- The same reminders work for any bill with a download page, not just Google Cloud.

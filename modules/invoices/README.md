@@ -1,73 +1,83 @@
 # invoices
 
-Google Cloud's invoices, where to find them, and a Chat message when a new one lands.
-**Robin only for now** (`BUDDY_ACCESS_INVOICES`); anyone can be added later, and admins can grant it
-from chat (`/access invoices` shows who).
+Reminds people when a bill is ready to download, with a button to the page. Google Cloud first;
+any bill with a download page can be added. **Robin only for now** (`BUDDY_ACCESS_INVOICES`);
+admins can grant it from chat (`/access invoices` shows who).
 
 Decision: `docs/decisions/0011-invoices-and-scheduled-tasks.md`.
 
-## Where the invoices come from
+Buddy never logs into anything, never downloads anything and never touches the files: it knows
+when each bill is usually ready, says so, and stops once someone has it.
 
-Google has no API for invoice PDFs. A script on a PC, [`tools/invoice-fetcher`](../../tools/invoice-fetcher/README.md),
-opens the billing console in its own Chrome profile once a week, saves any new PDF into a Drive
-folder through Drive for desktop, and emails it. **This module only reads that folder**, with
-`drive.readonly`: it never touches Google billing and never holds anyone's Google login.
+## How a month goes
 
-```
-PC (weekly) ── billing console ──► PDFs ──► Drive folder ◄── buddy-bot reads (Viewer)
-                                  └──► email to Robin              │
-                                                                   └── /invoices, daily DM
-```
+1. On the day a bill is due (say the 5th working day), at 09:00, Buddy DMs everyone on that bill's
+   list: *"🧾 Google Cloud: this month's bill should be ready"*, with **Open Google Cloud**,
+   **Invoices folder** (if set), **✓ Downloaded** and **Remind me tomorrow**.
+2. You open the page and download it yourself, then press **✓ Downloaded**. That closes the month
+   for everyone on the list, and records who did it.
+3. If nobody presses anything, Buddy reminds again two working days later, three times at most,
+   then leaves it showing as pending in `/invoices`. **Remind me tomorrow** moves the next one to
+   the next working day without using one up.
+4. Next month starts over.
 
-## Using it
+Working days are Monday to Friday in `INVOICES_TIMEZONE`. Public holidays aren't known, so a
+holiday can make a reminder a day early.
+
+## Commands
 
 | | |
 |---|---|
-| `/invoices` | The latest ten, newest first, each a link to the PDF in Drive |
-| `/invoices check` | Can Buddy read the folder, how many invoices, who is told about new ones |
+| `/invoices` | Every bill: when it's due this month, whether it's done and by whom, a link to each |
+| `/invoices done <bill>` | Mark this month's as downloaded (what the button does); works before the reminder too |
+| `/invoices later <bill>` | Remind again the next working day |
+| `/invoices add Name \| https://link \| 5th working day \| who@…, who@…` | Admins: add a bill, or change one with the same name. "Who" defaults to you |
+| `/invoices remove <bill>` | Admins: stop reminding about a bill |
+| `/invoices preview <bill>` | Admins: see the reminder card, without it counting as sent |
 
-## The daily message
+"When it's ready" can be `5th working day`, `3rd business day`, `day 1` or `15th of each month`.
+A day the month doesn't have means its last day.
 
-Once a day (12:00 Buenos Aires, Cloud Scheduler → `/tasks/daily`), the module looks for PDFs it
-hasn't announced and returns one message — "A new Google Cloud invoice" or "3 new…", with a button
-to see them all — for everyone in `INVOICES_NOTIFY`. The gateway delivers it by DM, and **only to
-people who can use the module and talk to Buddy**: being on the notify list alone shows nobody
-anything. Someone who has never opened a DM with Buddy is skipped (Chat apps can't start one).
+To set up Google Cloud:
 
-- **Switching it on** announces only the last 7 days, not the whole history.
-- **With nobody to notify** it keeps no state at all, so turning the list on later still
-  announces the latest week.
-- **An invoice is announced once**, even if a delivery fails: it stays in `/invoices`, and a
-  repeat every day would be worse.
+```
+/invoices add Google Cloud | https://console.cloud.google.com/billing/XXXXXX-XXXXXX-XXXXXX/invoices?organizationId=000000000000 | 5th working day
+```
+
+## Who
+
+- **Sees bills and presses the buttons:** `BUDDY_ACCESS_INVOICES`.
+- **Adds, changes and removes bills:** `BUDDY_ROLE_INVOICES_ADMIN`.
+- **Is reminded:** each bill's own list. Buddy delivers only to people on it who can use the
+  module *and* talk to Buddy, so a bill's list can never reach past the access rule. Someone who
+  has never opened a DM with Buddy is skipped (Chat apps can't start one).
 
 ## Settings
 
 | | |
 |---|---|
-| `INVOICES_FOLDER_ID` | **Required.** The Drive folder the fetcher saves into, shared as **Viewer** with `buddy-bot@your-gcp-project.iam.gserviceaccount.com` |
-| `INVOICES_NOTIFY` | Who is told about new invoices (work emails, comma-separated). Empty: no messages |
-| `INVOICES_TIMEZONE` | For the dates shown. Default `America/Argentina/Buenos_Aires` |
-| `BUDDY_ACCESS_INVOICES` | Who can use it (config floor; `/access` can widen it) |
+| `BUDDY_ACCESS_INVOICES` | Who can use it (required, like every module) |
+| `BUDDY_ROLE_INVOICES_ADMIN` | Who can add and remove bills (required, like every role) |
+| `INVOICES_FOLDER_ID` | Optional: the Drive folder bills are saved into, shown as a link. Buddy never reads it |
+| `INVOICES_TIMEZONE` | Default `America/Argentina/Buenos_Aires` |
 
-The daily message also needs the scheduler (`infra/scheduler.sh`, then `BUDDY_SCHEDULER_EMAIL`).
+Reminders need the scheduler (`infra/scheduler.sh`, then `BUDDY_SCHEDULER_EMAIL`). Without it,
+`/invoices` still works; nothing is sent.
 
 ## Stores
 
-`m_invoices__invoices/state`: whether it has run, the ids of the last 500 PDFs it has seen, and
-when it last checked. Nothing about the invoices' contents: Buddy never opens the PDFs.
+| | |
+|---|---|
+| `m_invoices__bills` | One per bill: name, link, when it's ready, who is reminded, who added it |
+| `m_invoices__months` | One per bill per month: who pressed Downloaded and when, the days reminders went out |
 
-## Adding someone
-
-1. Add their email to `BUDDY_ACCESS_INVOICES`, or an admin asks Buddy in a DM ("give riley@ access to invoices") and approves the card.
-2. To have them told about new invoices too, add them to `INVOICES_NOTIFY`.
-3. To have them emailed the PDFs, add them to `mail.to` in the fetcher's `config.local.json`.
-4. Deploy (steps 1–2). They must have opened a DM with Buddy once for the daily message to reach them.
+Month records stay when a bill is removed: they're the record of who downloaded what.
 
 ## Code
 
 | | |
 |---|---|
-| `src/module.js` | The command, and deciding what is new (`onSchedule`) |
-| `src/drive.js` | The only Google calls: list the folder's PDFs, read the folder's name |
-| `src/token.js` | A `drive.readonly` token for `buddy-bot`, keyless |
+| `src/schedule.js` | When a bill is due and whether to remind today: plain functions over dates |
+| `src/bills.js` | Storage, and checking what an admin types |
 | `src/present.js` | Everything the module says |
+| `src/module.js` | The commands and the daily check (`onSchedule`) |

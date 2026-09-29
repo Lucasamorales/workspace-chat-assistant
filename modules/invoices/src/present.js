@@ -1,54 +1,91 @@
 /** Everything the invoices module says, as plain functions over plain data. */
 
+const { describeReady, MAX_REMINDERS } = require('./schedule');
+
 const DEFAULT_TZ = 'America/Argentina/Buenos_Aires';
 
-/** "29 Sep 2026", in the reporting time zone rather than the server's. */
-const day = (iso, timeZone = DEFAULT_TZ) => new Intl.DateTimeFormat('en-GB', {
-  timeZone, day: 'numeric', month: 'short', year: 'numeric',
-}).format(new Date(iso));
+/** "7 Oct" from "2026-10-07"; the date is already local, so it is read as UTC to stay put. */
+const short = date => new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', day: 'numeric', month: 'short' }).format(new Date(`${date}T12:00:00Z`));
+const monthName = month => new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', month: 'long' }).format(new Date(`${month}-15T12:00:00Z`));
+const who = email => String(email).split('@')[0];
+const folderButton = folderUrl => (folderUrl ? [{ text: 'Invoices folder', url: folderUrl }] : []);
 
-const sizeOf = bytes => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+function statusLine(s) {
+  if (s.state === 'done') return `✅ ${monthName(s.month)}: downloaded by ${who(s.done.by)} on ${short(s.done.at.slice(0, 10))}`;
+  if (s.state === 'upcoming') return `🗓️ ${monthName(s.month)}: due ${short(s.due)}`;
+  const times = s.reminded.length;
+  return `⏳ ${monthName(s.month)}: due since ${short(s.due)}, not downloaded yet${times ? ` (reminded ${times}×${s.gaveUp ? ', no more reminders this month' : ''})` : ''}`;
+}
 
-const line = (f, timeZone) => `• [${f.name.replace(/[[\]]/g, '')}](${f.link}) — added ${day(f.createdTime, timeZone)} · ${sizeOf(f.size)}`;
-
-function listReply(files, { timeZone, shown = 10 } = {}) {
-  if (!files.length) {
+function listReply(rows, { folderUrl, isAdmin }) {
+  if (!rows.length) {
     return {
-      title: 'Google Cloud invoices',
-      text: 'No invoices in the folder yet. The fetcher on the PC saves them there every Monday.',
+      title: 'Invoices',
+      text: isAdmin
+        ? 'No bills yet. Add one:\n`/invoices add Google Cloud | https://link | 5th working day`'
+        : 'No bills have been set up yet.',
     };
   }
-  const latest = files.slice(0, shown);
+  const blocks = rows.map(({ bill, standing }) => [
+    `**[${bill.name.replace(/[[\]]/g, '')}](${bill.url})** · ready on the ${describeReady(bill.ready)}`,
+    statusLine(standing),
+    ...(isAdmin ? [`Reminds: ${bill.remind.join(', ')}`] : []),
+  ].join('\n'));
+  const pending = rows.filter(r => r.standing.state === 'pending');
   return {
-    title: 'Google Cloud invoices',
+    title: 'Invoices',
     text: [
-      ...latest.map(f => line(f, timeZone)),
-      ...(files.length > shown ? ['', `…and ${files.length - shown} older ones in the folder.`] : []),
+      blocks.join('\n\n'),
+      ...(isAdmin ? ['', 'Add or change one: `/invoices add Name | https://link | 5th working day | who@…` · stop one: `/invoices remove Name`'] : []),
     ].join('\n'),
+    buttons: [
+      ...pending.slice(0, 3).map(r => ({ text: `✓ ${r.bill.name} downloaded`, command: 'invoices', args: `done ${r.bill.id} ${r.standing.month}` })),
+      ...folderButton(folderUrl),
+    ],
   };
 }
 
-function announcement(files, { timeZone } = {}) {
+function reminder(bill, s, { folderUrl }) {
+  const nth = s.reminded.length + 1;
   return {
-    title: files.length === 1 ? 'A new Google Cloud invoice' : `${files.length} new Google Cloud invoices`,
-    text: files.map(f => line(f, timeZone)).join('\n'),
+    title: `🧾 ${bill.name}: this month's bill should be ready`,
+    text: [
+      `It's usually out by the ${describeReady(bill.ready)} (${short(s.due)}). Download it from the billing page${folderUrl ? ' and save it in the invoices folder' : ''}.`,
+      'Press **Downloaded** when you have it and I\'ll stop reminding everyone.',
+      ...(nth > 1 ? [`Reminder ${nth} of ${MAX_REMINDERS}.`] : []),
+    ].join('\n'),
+    buttons: [
+      { text: `Open ${bill.name}`, url: bill.url },
+      ...folderButton(folderUrl),
+      { text: '✓ Downloaded', command: 'invoices', args: `done ${bill.id} ${s.month}`, replace: true },
+      { text: 'Remind me tomorrow', command: 'invoices', args: `later ${bill.id} ${s.month}`, replace: true },
+    ],
+  };
+}
+
+function doneReply(bill, month, done, { already }) {
+  return {
+    title: `✅ ${bill.name}: ${monthName(month)} done`,
+    text: already
+      ? `${who(done.by)} already marked it downloaded on ${short(done.at.slice(0, 10))}. Nothing else to do.`
+      : 'Marked as downloaded. Nobody will be reminded about it again this month.',
     buttons: [{ text: 'All invoices', command: 'invoices' }],
   };
 }
 
-function checkReply({ folder, files, notify, error }) {
-  const lines = [];
-  if (error) {
-    lines.push(`❌ ${error.message}`);
-    if (error.detail) lines.push(`Google said: ${error.detail}`);
-  } else {
-    lines.push(`✅ I can read the folder **${folder.name}**: ${files.length} invoice${files.length === 1 ? '' : 's'}.`);
-    if (files[0]) lines.push(`Newest: ${files[0].name}`);
-  }
-  lines.push(notify.length
-    ? `New invoices are announced to: ${notify.join(', ')} (only those who can use this module).`
-    : '⚠️ Nobody is set to be told about new invoices (INVOICES_NOTIFY).');
-  return { title: 'Invoices setup check', text: lines.join('\n') };
-}
+const laterReply = (bill, nextOn) => ({
+  title: `⏰ ${bill.name}: I'll remind you ${short(nextOn)}`,
+  text: 'Same time, next working day. Press **Downloaded** on that one when you have it.',
+  buttons: [{ text: 'All invoices', command: 'invoices' }],
+});
 
-module.exports = { listReply, announcement, checkReply, day, sizeOf, DEFAULT_TZ };
+const savedReply = (bill, { replaced }) => ({
+  title: `${replaced ? 'Updated' : 'Added'}: ${bill.name}`,
+  text: [
+    `Ready on the ${describeReady(bill.ready)}. I'll remind ${bill.remind.join(', ')} that morning, and again every couple of working days until someone presses **Downloaded** (${MAX_REMINDERS} times at most).`,
+    'Only people who can use Invoices get the reminders.',
+  ].join('\n'),
+  buttons: [{ text: `Open ${bill.name}`, url: bill.url }, { text: 'All invoices', command: 'invoices' }],
+});
+
+module.exports = { listReply, reminder, doneReply, laterReply, savedReply, statusLine, monthName, short, DEFAULT_TZ };

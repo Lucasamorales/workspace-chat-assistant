@@ -229,24 +229,22 @@ Decision: `docs/decisions/0004-admin-module.md`. Config stays the floor; grants 
 | G11 | ✅ RUNBOOK §6b: read access with `/access` | Docs |
 | G12 | Try it live: grant a colleague a module, confirm they can use it and nobody else changed | After deploy |
 
-## Epic 13: `invoices` module + PC fetcher
+## Epic 13: `invoices` module (bill reminders)
 
 Decision: `docs/decisions/0011-invoices-and-scheduled-tasks.md`. Built 2026-09-29, **not yet run
-for real**.
+for real**. A PC fetcher that downloaded the PDFs was built and dropped the same day: Google signs
+remote-controlled browsers out.
 
 | # | Item | Status |
 |---|---|---|
 | I1 | `onSchedule` hook, `/tasks/:task` route, caller-pinned OIDC check, DM delivery with both access checks | done — unverified live |
-| I2 | `invoices` module: `/invoices`, `/invoices check`, daily announcement | done — unverified live |
-| I3 | `tools/invoice-fetcher`: login / inspect / dry-run / run / test-email, alerts, weekly task | done — unverified live |
-| I4 | Drive folder + `INVOICES_FOLDER_ID`, fetcher set up on the PC (RUNBOOK §5h steps 1–2) | todo — Robin |
-| I5 | `infra/scheduler.sh`, `BUDDY_SCHEDULER_EMAIL`, `invoices` in `MODULES`, deploy (§5h steps 3–4) | todo — Robin |
-| I6 | **Tune `SELECTORS`** in `src/billing.js` against the real page (`npm run inspect`) | todo — first run |
-| I7 | Confirm `spaces.findDirectMessage` works with the app's credentials from a scheduled call | todo — first scheduled run |
-| I8 | Confirm the Workspace allows Gmail app passwords; if not, send from another account or through the Gmail API | todo |
-| I9 | After I4–I8 pass: `feat:` commit marking it verified | todo |
-| I10 | `/invoices check` says when the fetcher last ran (a heartbeat file in the folder), so a PC left off for weeks is noticed | later |
-| I11 | Move the costs Sheet rollup onto the daily task instead of riding the first message of the week | later |
+| I2 | `invoices` module: bills added in chat, reminders on the due day, Downloaded / Remind me tomorrow, `/invoices` | done — unverified live |
+| I3 | `infra/scheduler.sh`, `BUDDY_SCHEDULER_EMAIL`, deploy, add Google Cloud (RUNBOOK §5h) | todo — Robin |
+| I4 | Confirm `spaces.findDirectMessage` works with the app's credentials from a scheduled call | todo — first scheduled run |
+| I5 | After I3–I4 pass: `feat:` commit marking it verified | todo |
+| I6 | File names: tell people what to call the file, or rename it in the folder behind an approval card (needs Editor on the folder) | later — on hold (Robin) |
+| I7 | Public holidays for working days (Argentina, UK), if a reminder a day early turns out to matter | later |
+| I8 | Move the costs Sheet rollup onto the daily task instead of riding the first message of the week | later |
 
 ## Epic 12: experiment — Buddy on a Claude subscription (`develop` only)
 

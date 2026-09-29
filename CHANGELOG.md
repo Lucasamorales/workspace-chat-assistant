@@ -11,52 +11,25 @@ live Chat app, and what is still unverified against reality).
 
 ## 2026-09-29
 
-### Fixed
-- **The invoice fetcher opened an empty page.** the company's invoices are listed at
-  `billing/<account>/invoices?organizationId=000000000000`, not `/documents`; without the
-  organisation in the URL the console shows nothing. `organizationId` is now in the fetcher's
-  CONFIG and checked before a run.
-- **It found no documents on that page either.** They sit in a payments.google.com frame as
-  monthly *statements*, with a checkbox per row and one "Download selected" button, not a button
-  per row. The fetcher now ticks one row at a time (found again by its text, so a redraw can't
-  pair one month's PDF with another's name), and files are named for what they are:
-  `Google Cloud statement 2026-08-31.pdf`. Header and pager rows are ignored.
-- **Google signed the fetcher's profile out when a run used headless Chrome**: it treats a
-  headless browser on a signed-in profile as a stolen session. Runs now use a real Chrome window
-  placed off-screen, never headless.
-- **The first real run timed out clearing checkboxes.** Before ticking a row it unticked every
-  ticked checkbox in the frame, including hidden ones in the page's column panel, which can't be
-  clicked. It now only touches the table's own rows.
-- **Then the tick itself timed out**: Google draws its payments checkboxes with a layer on top,
-  so a normal click is refused. The fetcher clicks the checkbox directly, trusts only its own
-  ticked state, and falls back to Space.
-- **"Download selected" was pressed but nothing arrived.** The fetcher now tries a click, then
-  Enter, then Space, a few seconds each, and takes the PDF from wherever it lands: a download on
-  the page, a download in a tab it opens, or a PDF that tab shows. Tabs it opened are closed.
-- **The download arrived, then vanished**: "Download selected" opens a blank tab that starts the
-  download and closes itself, taking the file with it. The fetcher now keeps the download's address
-  and, if the file is gone, fetches it again from there with the same session (Google hosts only).
+### Added
+- **`invoices` module: reminders when a bill is ready.** An invoices admin adds a bill in chat
+  (`/invoices add Name | link | 5th working day | who`). On the due day at 09:00 Buddy DMs that
+  bill's list with **Open <bill>**, **Invoices folder**, **✓ Downloaded** and **Remind me
+  tomorrow**. Downloaded closes the month for everyone and records who did it; unanswered, it
+  reminds every two working days, three times at most. `/invoices` shows every bill, this month's
+  status and the links; `preview` shows an admin the card. Google Cloud is the first bill; any bill
+  with a download page works. Robin only (`BUDDY_ACCESS_INVOICES`, `BUDDY_ROLE_INVOICES_ADMIN`).
+  `docs/decisions/0011-invoices-and-scheduled-tasks.md`.
+- **Modules can speak first: the `onSchedule` hook.** Cloud Scheduler calls `POST /tasks/daily` on
+  buddy-bot at 09:00 Buenos Aires on weekdays; each module returns what to tell whom, and Buddy
+  delivers it by DM.
 
 ### Changed
-- **The fetcher's first run takes only the latest document** (Robin): August's today, then
-  September's when it appears. Older ones are remembered as "before we started" and never fetched.
-  If that first download fails, the next run still starts from the latest.
-
-### Added
-- **`invoices` module: Google Cloud's invoices in Buddy.** `/invoices` lists the invoice PDFs in a
-  Drive folder, newest first, each linked; `/invoices check` says whether Buddy can read the folder
-  and who is told about new ones. Once a day Buddy DMs `INVOICES_NOTIFY` when new invoices arrive —
-  one message, with a button to see them all; switching it on announces only the last week. Robin
-  only (`BUDDY_ACCESS_INVOICES`). Not in `MODULES` yet: it needs the folder id first, or buddy-bot
-  won't start. `docs/decisions/0011-invoices-and-scheduled-tasks.md`.
-- **`tools/invoice-fetcher`, on a PC.** Google has no API for invoice PDFs, so a script opens the
-  billing console weekly (Mondays 10:00, catching up if the PC was off) in its own Chrome profile —
-  signed into by hand, once — saves new PDFs into that Drive folder through Drive for desktop, and
-  emails them. It emails an alert with a screenshot when the session expires or the page changes.
-  `inspect` mode shows what the page offers, to fix the selectors; `dry-run` changes nothing. Own
-  package and tests, never deployed.
-- **Modules can speak first: the `onSchedule` hook.** Cloud Scheduler calls `POST /tasks/daily` on
-  buddy-bot; each module returns what to tell whom, and Buddy delivers it by DM.
+- **Buddy doesn't fetch the invoices, it reminds.** A PC script that drove Chrome to download them
+  (`tools/invoice-fetcher`) was built and removed the same day. There is no API for the PDFs, and
+  after about 25 minutes Google sent any remote-controlled Chrome to the sign-in page while the same
+  profile opened normally stayed signed in: it protects the session against theft, and that isn't
+  something to work around. Nothing of it was deployed.
 
 ### Security
 - **`/tasks` is a second way into buddy-bot, and as narrow as the first.** Only the
@@ -64,18 +37,17 @@ live Chat app, and what is still unverified against reality).
   to that exact account: Google Chat's token is refused on `/tasks`, the scheduler's everywhere
   else. The route doesn't exist unless `BUDDY_SCHEDULER_EMAIL` is set. A scheduled message reaches
   someone only if they may talk to Buddy **and** use the module that wrote it.
-- The fetcher never types a password or answers a sign-in challenge, only downloads from Google
-  hosts, checks every file is a real PDF, never replaces or deletes a file, and reads its Gmail app
-  password from Windows Credential Manager. Buddy reads the folder with `drive.readonly` and never
-  holds a Google login.
+- The invoices module holds no login, downloads nothing and reads no files. Only invoices admins
+  add bills, and links must be https.
 
 ### Infrastructure
 - `infra/scheduler.sh` (once): the `buddy-scheduler` account, `run.invoker` on buddy-bot only, and
-  the `buddy-daily` job at 12:00 Buenos Aires. `deploy.sh` passes `BUDDY_SCHEDULER_EMAIL` when set.
+  the `buddy-daily` job at 09:00 Buenos Aires, Monday to Friday. `deploy.sh` passes
+  `BUDDY_SCHEDULER_EMAIL` when set. `invoices` is in `MODULES`; it needs no setting to start.
 
 ### Deployed
-- Nothing yet. Unverified against reality: the billing page's layout (`SELECTORS`), DM lookup from a
-  scheduled call, Gmail app passwords on the Workspace (BACKLOG Epic 13).
+- Nothing yet. Unverified against reality: DM lookup from a scheduled call, and the first real
+  reminder (BACKLOG Epic 13).
 
 ---
 

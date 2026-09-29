@@ -1,123 +1,195 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { validateModule, createMemoryStore } = require('@buddy/core');
-const { createInvoicesModule, FIRST_RUN_DAYS } = require('../src/module');
-const { createDrive } = require('../src/drive');
-const { day } = require('../src/present');
+const { createInvoicesModule } = require('../src/module');
+const { dueDate, parseReady, standing, afterReminder, addWorkdays, MAX_REMINDERS } = require('../src/schedule');
+const { parseBill } = require('../src/bills');
 
-const NOW = Date.parse('2026-09-29T15:00:00Z');
-const daysAgo = n => new Date(NOW - n * 24 * 3600 * 1000).toISOString();
-const pdf = (id, name, created) => ({ id, name, createdTime: created, size: 120_000, link: `https://drive.google.com/file/d/${id}/view` });
+const TZ = 'America/Argentina/Buenos_Aires';
+const GCP = 'https://console.cloud.google.com/billing/XXXXXX-XXXXXX-XXXXXX/invoices?organizationId=000000000000';
+// 09:00 in Buenos Aires (UTC-3) on a given day.
+const at = date => Date.parse(`${date}T12:00:00Z`);
 
-function setup({ files = [], notify = 'robin@example.com', failing = null } = {}) {
-  const state = { files };
-  const drive = {
-    folder: async () => { if (failing) throw failing; return { id: 'folder1', name: 'Buddy invoices' }; },
-    invoices: async () => { if (failing) throw failing; return state.files; },
-  };
+function setup({ admin = true, email = 'robin@example.com', folder = '1UaRlFoSIiRoanmiq_FDHnBMPqCycf6t9' } = {}) {
+  const clock = { now: at('2026-09-29') };
   const store = createMemoryStore();
-  const mod = createInvoicesModule({ drive, now: () => NOW });
-  const ctx = {
-    settings: { INVOICES_FOLDER_ID: 'folder1folder1', INVOICES_NOTIFY: notify, INVOICES_TIMEZONE: 'America/Argentina/Buenos_Aires' },
+  const mod = createInvoicesModule({ now: () => clock.now });
+  const ctxFor = (who = email, isAdmin = admin) => ({
+    userEmail: who,
+    settings: { INVOICES_TIMEZONE: TZ, INVOICES_FOLDER_ID: folder },
     store: { collection: name => store.collection(`m_invoices__${name}`) },
+    hasRole: role => role === 'admin' && isAdmin,
     log: { info() {}, warn() {}, error() {} },
-  };
-  return { mod, ctx, state };
+  });
+  const run = (args, ctx = ctxFor()) => mod.commands.invoices.run(ctx, args);
+  const system = ctxFor('', false);
+  return { mod, clock, ctxFor, run, daily: () => mod.onSchedule(system, 'daily'), store };
 }
+const addGcp = run => run(`add Google Cloud | ${GCP} | 5th working day`);
 
-test('module satisfies the contract', () => validateModule(createInvoicesModule({ drive: {} })));
+test('module satisfies the contract', () => validateModule(createInvoicesModule()));
 
-test('/invoices lists the newest first, with links', async () => {
-  const { mod, ctx } = setup({ files: [pdf('b', '2026-09 Google Cloud invoice.pdf', daysAgo(1)), pdf('a', '2026-08 Google Cloud invoice.pdf', daysAgo(30))] });
-  const reply = await mod.commands.invoices.run(ctx, '');
-  assert.equal(reply.title, 'Google Cloud invoices');
-  assert.match(reply.text, /\[2026-09 Google Cloud invoice\.pdf\]\(https:\/\/drive\.google\.com\/file\/d\/b\/view\)/);
-  assert.ok(reply.text.indexOf('2026-09') < reply.text.indexOf('2026-08'));
+/* ---------- when a bill is due ---------- */
+
+test('the 5th working day of October 2026 is Wednesday the 7th (the 1st is a Thursday)', () => {
+  assert.equal(dueDate({ kind: 'workday', n: 5 }, '2026-10'), '2026-10-07');
+  assert.equal(dueDate({ kind: 'workday', n: 1 }, '2026-08'), '2026-08-03', 'August 2026 starts on a Saturday');
+  assert.equal(dueDate({ kind: 'day', n: 31 }, '2026-02'), '2026-02-28', 'a day the month lacks means its last day');
+  assert.equal(dueDate({ kind: 'workday', n: 23 }, '2026-02'), '2026-02-27', 'more working days than the month has: the last one');
 });
 
-test('/invoices with an empty folder says where they come from', async () => {
-  const { mod, ctx } = setup();
-  assert.match((await mod.commands.invoices.run(ctx, '')).text, /fetcher on the PC/);
+test('"when it\'s ready" in the words people use', () => {
+  assert.deepEqual(parseReady('5th working day'), { kind: 'workday', n: 5 });
+  assert.deepEqual(parseReady('the 3rd business day of the month'), { kind: 'workday', n: 3 });
+  assert.deepEqual(parseReady('workday 2'), { kind: 'workday', n: 2 });
+  assert.deepEqual(parseReady('day 1'), { kind: 'day', n: 1 });
+  assert.deepEqual(parseReady('15th of each month'), { kind: 'day', n: 15 });
+  assert.equal(parseReady('soon'), null);
+  assert.equal(parseReady('day 32'), null);
 });
 
-// Switching it on should not announce years of old invoices.
-test('the first daily run announces only the last week, and remembers the rest', async () => {
-  const { mod, ctx, state } = setup({ files: [pdf('new', 'new.pdf', daysAgo(2)), pdf('old', 'old.pdf', daysAgo(FIRST_RUN_DAYS + 20))] });
-  const notes = await mod.onSchedule(ctx, 'daily');
-  assert.equal(notes.length, 1);
-  assert.deepEqual(notes[0].to, ['robin@example.com']);
-  assert.match(notes[0].reply.text, /new\.pdf/);
-  assert.doesNotMatch(notes[0].reply.text, /old\.pdf/);
-
-  assert.deepEqual(await mod.onSchedule(ctx, 'daily'), [], 'nothing new the next day: nothing said');
-  state.files = [pdf('newer', 'newer.pdf', daysAgo(0)), ...state.files];
-  const later = await mod.onSchedule(ctx, 'daily');
-  assert.match(later[0].reply.text, /newer\.pdf/);
-  assert.doesNotMatch(later[0].reply.text, /\bnew\.pdf/, 'each invoice is announced once');
+test('reminders: on the due day, then every 2 working days, 3 times at most, never at weekends', () => {
+  const bill = { ready: { kind: 'workday', n: 5 } };
+  assert.equal(standing(bill, null, '2026-10-06').state, 'upcoming');
+  let s = standing(bill, null, '2026-10-07');
+  assert.equal(s.remindNow, true);
+  let month = afterReminder(null, '2026-10-07');
+  assert.equal(month.nextOn, '2026-10-09');
+  assert.equal(standing(bill, month, '2026-10-07').remindNow, false, 'not twice on the same day');
+  assert.equal(standing(bill, month, '2026-10-08').remindNow, false);
+  month = afterReminder(month, '2026-10-09'); // Friday → next is Tuesday
+  assert.equal(month.nextOn, '2026-10-13');
+  assert.equal(standing(bill, { ...month, nextOn: '2026-10-10' }, '2026-10-10').remindNow, false, 'Saturday: no');
+  month = afterReminder(month, '2026-10-13');
+  s = standing(bill, month, '2026-10-15');
+  assert.equal(s.remindNow, undefined);
+  assert.equal(s.gaveUp, true);
+  assert.equal(month.reminded.length, MAX_REMINDERS);
+  assert.equal(addWorkdays('2026-10-09', 1), '2026-10-12');
 });
 
-test('several new invoices arrive as one message, with a button to see them all', async () => {
-  const { mod, ctx } = setup({ files: [pdf('x', 'x.pdf', daysAgo(1)), pdf('y', 'y.pdf', daysAgo(1))] });
-  const [note] = await mod.onSchedule(ctx, 'daily');
-  assert.equal(note.reply.title, '2 new Google Cloud invoices');
-  assert.deepEqual(note.reply.buttons, [{ text: 'All invoices', command: 'invoices' }]);
-});
+/* ---------- adding bills ---------- */
 
-test('with nobody to tell, nothing is sent and nothing is marked as told', async () => {
-  const { mod, ctx } = setup({ files: [pdf('x', 'x.pdf', daysAgo(1))], notify: '' });
-  assert.deepEqual(await mod.onSchedule(ctx, 'daily'), []);
-  ctx.settings.INVOICES_NOTIFY = 'robin@example.com';
-  assert.equal((await mod.onSchedule(ctx, 'daily')).length, 1, 'switching the list on later still announces it');
-});
-
-test('other scheduled tasks are ignored', async () => {
-  const { mod, ctx } = setup({ files: [pdf('x', 'x.pdf', daysAgo(1))] });
-  assert.deepEqual(await mod.onSchedule(ctx, 'weekly'), []);
-});
-
-test('/invoices check shows the folder, the newest file and who will be told', async () => {
-  const { mod, ctx } = setup({ files: [pdf('x', '2026-09 invoice.pdf', daysAgo(1))] });
-  const reply = await mod.commands.invoices.run(ctx, 'check');
-  assert.match(reply.text, /✅ I can read the folder \*\*Buddy invoices\*\*: 1 invoice\./);
+test('an admin adds a bill; it defaults to reminding them', async () => {
+  const { run } = setup();
+  const reply = await addGcp(run);
+  assert.equal(reply.title, 'Added: Google Cloud');
+  assert.match(reply.text, /5th working day/);
   assert.match(reply.text, /robin@example\.com/);
+  assert.equal((await addGcp(run)).title, 'Updated: Google Cloud', 'adding it again replaces it');
 });
 
-test('/invoices check quotes Google when the folder cannot be read', async () => {
-  const failing = Object.assign(new Error('Buddy can\'t see the invoices folder. Share it as Viewer with buddy-bot@x.'), { expose: true, detail: 'File not found: folder1.' });
-  const { mod, ctx } = setup({ failing });
-  const reply = await mod.commands.invoices.run(ctx, 'check');
-  assert.match(reply.text, /❌ Buddy can't see the invoices folder/);
-  assert.match(reply.text, /Google said: File not found/);
+test('what an admin types is checked, with a sentence saying what to fix', () => {
+  const by = { addedBy: 'robin@example.com' };
+  assert.throws(() => parseBill('Google Cloud', by), /Use: `\/invoices add/);
+  assert.throws(() => parseBill(`X | http://example.com | day 1`, by), /isn't an https link/);
+  assert.throws(() => parseBill(`X | javascript:alert(1) | day 1`, by), /isn't an https link/);
+  assert.throws(() => parseBill(`X | ${GCP} | whenever`, by), /don't understand "whenever"/);
+  assert.throws(() => parseBill(`X | ${GCP} | day 1 | riley`, by), /this isn't one: riley/);
+  const bill = parseBill(`Figma | https://www.figma.com/billing | day 1 | Riley@example.com, robin@example.com`, by);
+  assert.equal(bill.id, 'figma');
+  assert.deepEqual(bill.remind, ['riley@example.com', 'robin@example.com']);
 });
 
-/* ---------- the Drive layer ---------- */
-
-test('a folder id that could break the query is refused before any call', () => {
-  assert.throws(() => createDrive({ tokenFor: async () => 't', folderId: "x' or trashed = true or '" }), /doesn't look like a Drive folder id/);
+test('only invoices admins add, remove or preview; everyone with access lists and marks done', async () => {
+  const s = setup();
+  await addGcp(s.run);
+  const riley = s.ctxFor('riley@example.com', false);
+  assert.match(await s.run(`add Figma | https://www.figma.com | day 1`, riley), /Only invoices admins/);
+  assert.match(await s.run('remove Google Cloud', riley), /Only invoices admins/);
+  const list = await s.run('', riley);
+  assert.match(list.text, /Google Cloud/);
+  assert.doesNotMatch(list.text, /Reminds:/, 'who is reminded is for admins');
 });
 
-test('only PDFs in the folder are asked for, newest first, and a 404 explains the share', async () => {
-  const urls = [];
-  const drive = createDrive({
-    tokenFor: async () => 'token',
-    folderId: 'folder1folder1',
-    fetch: async url => {
-      urls.push(String(url));
-      return { ok: false, status: 404, json: async () => ({ error: { message: 'File not found.' } }) };
-    },
-  });
-  await assert.rejects(drive.invoices(), err => {
-    assert.match(err.message, /Share it as Viewer with buddy-bot@/);
-    assert.equal(err.detail, 'File not found.');
-    return true;
-  });
-  const q = new URL(urls[0]).searchParams.get('q');
-  assert.equal(q, "'folder1folder1' in parents and trashed = false and mimeType = 'application/pdf'");
-  assert.equal(new URL(urls[0]).searchParams.get('orderBy'), 'createdTime desc');
+/* ---------- the month ---------- */
+
+test('the daily check reminds on the due day, with the link, the folder and the buttons', async () => {
+  const s = setup();
+  await addGcp(s.run);
+  s.clock.now = at('2026-10-06');
+  assert.deepEqual(await s.daily(), [], 'the day before: nothing');
+  s.clock.now = at('2026-10-07');
+  const [note] = await s.daily();
+  assert.deepEqual(note.to, ['robin@example.com']);
+  assert.equal(note.reply.title, '🧾 Google Cloud: this month\'s bill should be ready');
+  assert.deepEqual(note.reply.buttons.map(b => b.text), ['Open Google Cloud', 'Invoices folder', '✓ Downloaded', 'Remind me tomorrow']);
+  assert.equal(note.reply.buttons[0].url, GCP);
+  assert.equal(note.reply.buttons[1].url, 'https://drive.google.com/drive/folders/1UaRlFoSIiRoanmiq_FDHnBMPqCycf6t9');
+  assert.deepEqual(note.reply.buttons[2], { text: '✓ Downloaded', command: 'invoices', args: 'done google-cloud 2026-10', replace: true });
+  assert.deepEqual(await s.daily(), [], 'the task running twice in a day sends nothing new');
 });
 
-test('dates are shown in the reporting time zone, not the server\'s', () => {
-  // 01:30 UTC on the 1st is still the 30th in Buenos Aires.
-  assert.match(day('2026-10-01T01:30:00Z', 'America/Argentina/Buenos_Aires'), /^30 Sep/);
-  assert.match(day('2026-10-01T01:30:00Z', 'UTC'), /^1 Oct/);
+test('"Downloaded" stops the reminders for everyone, and says who did it', async () => {
+  const s = setup();
+  await addGcp(s.run);
+  s.clock.now = at('2026-10-07');
+  await s.daily();
+  const done = await s.run('done google-cloud 2026-10');
+  assert.equal(done.title, '✅ Google Cloud: October done');
+  s.clock.now = at('2026-10-09');
+  assert.deepEqual(await s.daily(), [], 'no reminder after it is done');
+  const again = await s.run('done google-cloud 2026-10', s.ctxFor('riley@example.com', false));
+  assert.match(again.text, /robin already marked it downloaded on 7 Oct/);
+  assert.match((await s.run('')).text, /✅ October: downloaded by robin on 7 Oct/);
+  s.clock.now = at('2026-11-06'); // November's 5th working day
+  assert.equal((await s.daily()).length, 1, 'next month starts over');
+});
+
+test('"Remind me tomorrow" moves it to the next working day without using up a reminder', async () => {
+  const s = setup();
+  await addGcp(s.run);
+  s.clock.now = at('2026-10-09'); // Friday
+  await s.daily();
+  const later = await s.run('later google-cloud 2026-10');
+  assert.match(later.title, /I'll remind you 12 Oct/);
+  s.clock.now = at('2026-10-12');
+  const [note] = await s.daily();
+  assert.match(note.reply.text, /Reminder 2 of 3/);
+});
+
+test('a bill can be marked done early, typed by name, before any reminder', async () => {
+  const s = setup();
+  await addGcp(s.run);
+  s.clock.now = at('2026-10-02');
+  assert.equal((await s.run('done Google Cloud')).title, '✅ Google Cloud: October done');
+  s.clock.now = at('2026-10-07');
+  assert.deepEqual(await s.daily(), []);
+});
+
+test('unknown bills and removed bills', async () => {
+  const s = setup();
+  assert.match(await s.run('done nope'), /I don't know that bill/);
+  await addGcp(s.run);
+  assert.match(await s.run('remove Google Cloud'), /Removed \*\*Google Cloud\*\*/);
+  s.clock.now = at('2026-10-07');
+  assert.deepEqual(await s.daily(), [], 'a removed bill is never reminded about');
+});
+
+test('/invoices lists what is due, pending and done, with a Downloaded button for what is pending', async () => {
+  const s = setup();
+  assert.match((await s.run('')).text, /No bills yet/);
+  await addGcp(s.run);
+  await s.run(`add Figma | https://www.figma.com/billing | day 1`);
+  s.clock.now = at('2026-10-07');
+  const list = await s.run('');
+  assert.match(list.text, /\*\*\[Figma\]\(https:\/\/www\.figma\.com\/billing\)\*\* · ready on the 1st of the month/);
+  assert.match(list.text, /⏳ October: due since 1 Oct, not downloaded yet/);
+  assert.deepEqual(list.buttons.map(b => b.text), ['✓ Figma downloaded', '✓ Google Cloud downloaded', 'Invoices folder']);
+});
+
+test('preview shows an admin the reminder without counting it', async () => {
+  const s = setup();
+  await addGcp(s.run);
+  s.clock.now = at('2026-10-07');
+  const card = await s.run('preview Google Cloud');
+  assert.match(card.title, /should be ready/);
+  assert.equal((await s.daily()).length, 1, 'the real reminder still goes');
+});
+
+test('dates follow the people\'s time zone: 01:00 UTC on the 7th is still the 6th in Buenos Aires', async () => {
+  const s = setup();
+  await addGcp(s.run);
+  s.clock.now = Date.parse('2026-10-07T01:00:00Z');
+  assert.deepEqual(await s.daily(), []);
 });

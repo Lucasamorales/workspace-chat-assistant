@@ -91,7 +91,7 @@ Reads (searching tasks, "what's due today") run without asking. Deletes are mark
 | `/access [module]` | Admins: who has been given access from chat |
 | `/manual [reindex|check]` | What Buddy has read from the team member manual (admins re-read it) |
 | `/costs [week|waste|tools|sheet|check]` | Admins: what Buddy costs, by person, module and tool |
-| `/invoices [check]` | The Google Cloud invoices the PC fetcher has saved to Drive, newest first |
+| `/invoices [done\|later <bill>]` | Bills due this month, with links; reminds you when one is ready (admins: `add`, `remove`, `preview`) |
 
 ---
 
@@ -172,10 +172,7 @@ modules/
   admin/               grants module access from chat (config stays the floor)
   manual/              team member manual: Drive → embeddings → grounded answers
   costs/               what Buddy spends, by person, module and tool (admins)
-  invoices/            Google Cloud invoice PDFs from a Drive folder; tells people when new ones arrive
-tools/
-  invoice-fetcher/     runs on a PC, not in Cloud Run: saves new invoice PDFs from the billing
-                       console to that Drive folder and emails them (own package, own tests)
+  invoices/            reminds people when a bill is ready to download, with a link to it
 infra/                 setup, deploy and decommission scripts; config.env; Cloud Build
 docs/                  runbook, security model, backlog, decisions,
                        BUILDING-FOR-BUDDY.md (rules for tools built outside this repo)
@@ -198,7 +195,7 @@ legacy/bot-rev23/     the original bot, kept read-only for reference
 | **admin** | DMs only | `BUDDY_ACCESS_ADMIN` — robin@, remy@ | — | grants in `core__grants` |
 | **manual** | DMs + spaces | everyone @example.com (needs assistant); `manual.admin` to reindex | `MANUAL_FOLDER_ID`, Vertex AI, Drive folder shared with `buddy-bot` | index in `m_manual__index` |
 | **costs** | DMs only | `BUDDY_ACCESS_COSTS` — robin@, remy@ | `COSTS_SHEET_ID` (optional) | usage events in `core__usage_events` (90 days) |
-| **invoices** | DMs only | `BUDDY_ACCESS_INVOICES` — robin@ | `INVOICES_FOLDER_ID`, Drive folder shared with `buddy-bot`; `INVOICES_NOTIFY` and the scheduler for the daily message | which invoices it has announced, in `m_invoices__invoices` |
+| **invoices** | DMs only | `BUDDY_ACCESS_INVOICES` — robin@; `invoices.admin` adds bills | the scheduler, for reminders | bills in `m_invoices__bills`, who downloaded each month in `m_invoices__months` |
 
 ### Permissions per module
 Two layers, both checked on every event:
@@ -352,7 +349,7 @@ in Secret Manager and are mounted at deploy time.
 
 Optional module settings: `ASANA_READONLY_TOOLS` (tools that may skip approval),
 `ASANA_REQUIRE_EMAIL_MATCH` (default `true`), `FILES_MAX_BYTES`, `FILES_MAX_TEXT_CHARS`,
-`INVOICES_NOTIFY` (who is told about new invoices), `INVOICES_TIMEZONE`.
+`INVOICES_FOLDER_ID` (a Drive folder offered as a link on reminders), `INVOICES_TIMEZONE`.
 
 Services validate settings at startup and refuse to run with a missing or malformed value.
 
@@ -410,5 +407,5 @@ Details: [CLAUDE.md](CLAUDE.md).
 | [docs/SECURITY.md](docs/SECURITY.md) | Threats, controls, data flows, known limits |
 | [docs/BACKLOG.md](docs/BACKLOG.md) | What's next: Kudos results, OOO, merge into one Buddy, operations |
 | [docs/decisions/](docs/decisions/) | Recorded decisions (scope, security, naming) |
-| [modules/invoices/README.md](modules/invoices/README.md), [tools/invoice-fetcher/README.md](tools/invoice-fetcher/README.md) | The invoices module and the PC script that feeds it |
+| [modules/invoices/README.md](modules/invoices/README.md) | Invoice reminders: how a month goes, commands, who gets what |
 | [legacy/bot-rev23/](legacy/bot-rev23/) | The original bot and its docs, for reference |
