@@ -30,6 +30,9 @@ live Chat app, and what is still unverified against reality).
 - **Then the tick itself timed out**: Google draws its payments checkboxes with a layer on top,
   so a normal click is refused. The fetcher clicks the checkbox directly, trusts only its own
   ticked state, and falls back to Space.
+- **"Download selected" was pressed but nothing arrived.** The fetcher now tries a click, then
+  Enter, then Space, a few seconds each, and takes the PDF from wherever it lands: a download on
+  the page, a download in a tab it opens, or a PDF that tab shows. Tabs it opened are closed.
 
 ### Changed
 - **The fetcher's first run takes only the latest document** (Robin): August's today, then

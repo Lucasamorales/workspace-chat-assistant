@@ -40,6 +40,8 @@ const DEFAULTS = {
   // How long to wait for Google's console, which is slow to draw its tables.
   pageTimeoutMs: 60_000,
   settleMs: 8_000,
+  // How long each way of pressing "Download selected" gets before the next is tried.
+  pressWaitMs: 8_000,
   // A sanity limit: a page that suddenly offers more than this is not the page we know.
   maxPerRun: 24,
 };

@@ -37,7 +37,7 @@ function fakePage({ rows = [], url = 'https://console.cloud.google.com/billing/x
 const REAL_ROWS = ['Issue date Document type Amount Edit', 'August 31, 2026 Statement £1.74', 'July 31, 2026 Statement £0.34', 'June 30, 2026 Statement £0.07'];
 function fakeTickPage(rows = REAL_ROWS, dir) {
   const ticked = new Set();
-  let pending = null;
+  const listeners = { download: new Set() };
   // Like Google's: a forced click does nothing (the overlay swallows it); Space toggles it.
   const toggle = i => { if (ticked.has(i)) ticked.delete(i); else ticked.add(i); };
   const box = i => ({
@@ -60,13 +60,19 @@ function fakeTickPage(rows = REAL_ROWS, dir) {
       // The column/filter panels' checkboxes: hidden, ticked, and never to be touched.
       return { count: async () => 1, nth: () => ({ isVisible: async () => false, isChecked: async () => true, uncheck: async () => { throw new Error('touched a hidden panel checkbox'); } }) };
     },
-    getByRole: () => ({ first: () => ({ click: async () => {
-      const picked = [...ticked].map(i => page.rows[i]);
-      page.downloads.push(picked);
-      const file = path.join(dir, `dl-${page.downloads.length}`);
-      fs.writeFileSync(file, picked.length === 1 ? Buffer.from(`%PDF-1.7 ${picked[0]}`) : Buffer.from('PK zip'));
-      pending({ path: async () => file });
-    } }) }),
+    // Like Google's button, as far as we know: a click does nothing, Enter starts the download.
+    getByRole: () => ({ first: () => ({
+      click: async () => {},
+      focus: async () => {},
+      press: async key => {
+        if (key !== 'Enter') return;
+        const picked = [...ticked].map(i => page.rows[i]);
+        page.downloads.push(picked);
+        const file = path.join(dir, `dl-${page.downloads.length}`);
+        fs.writeFileSync(file, picked.length === 1 ? Buffer.from(`%PDF-1.7 ${picked[0]}`) : Buffer.from('PK zip'));
+        for (const cb of listeners.download) cb({ path: async () => file });
+      },
+    }) }),
   };
   return Object.assign(page, {
     goto: async () => {},
@@ -75,7 +81,9 @@ function fakeTickPage(rows = REAL_ROWS, dir) {
     url: () => 'https://console.cloud.google.com/billing/x/invoices?organizationId=1',
     locator: () => ({ count: async () => 0 }),
     frames: () => [frame],
-    waitForEvent: () => new Promise(resolve => { pending = resolve; }),
+    on: (event, cb) => { if (listeners[event]) listeners[event].add(cb); },
+    off: (event, cb) => { if (listeners[event]) listeners[event].delete(cb); },
+    context: () => ({ pages: () => [page], on() {}, off() {} }),
   });
 }
 
@@ -83,7 +91,7 @@ function setup(rows, opts = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fetcher-'));
   const outputDir = path.join(dir, 'drive');
   fs.mkdirSync(outputDir);
-  const config = { ...loadConfig(__dirname), outputDir, stateFile: path.join(dir, 'state.json'), settleMs: 0 };
+  const config = { ...loadConfig(__dirname), outputDir, stateFile: path.join(dir, 'state.json'), settleMs: 0, pressWaitMs: 20 };
   const sent = [];
   const mailer = { send: async m => { if (opts.mailFails) throw new Error('smtp down'); sent.push(m); } };
   const page = opts.tick ? fakeTickPage(rows, dir) : fakePage({ rows, ...opts });

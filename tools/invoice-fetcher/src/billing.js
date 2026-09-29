@@ -119,19 +119,67 @@ async function downloadByTicking(page, candidate, config) {
   }
   const box = target.locator(SELECTORS.checkbox).first();
   await setTicked(box, true);
+  const arrival = nextDocument(page, timeout);
   try {
-    const [dl] = await Promise.all([
-      page.waitForEvent('download', { timeout }),
-      // Same overlay trouble as the checkboxes, possibly: a normal click first, then a forced one.
-      (async () => {
-        const button = frame.getByRole('button', { name: new RegExp(SELECTORS.downloadSelected, 'i') }).first();
-        await button.click({ timeout: 10_000 }).catch(() => button.click({ force: true, timeout }));
-      })(),
-    ]);
-    return require('node:fs').readFileSync(await dl.path());
+    // Google's payments buttons can ignore an automated click and answer only the keyboard, as the
+    // checkboxes do. Each way of pressing it gets a few seconds before the next is tried, and all of
+    // them feed the same wait, so whichever works first wins.
+    const button = frame.getByRole('button', { name: new RegExp(SELECTORS.downloadSelected, 'i') }).first();
+    const presses = [
+      () => button.click({ timeout: 10_000 }),
+      () => button.focus().then(() => button.press('Enter')),
+      () => button.focus().then(() => button.press('Space')),
+    ];
+    for (const press of presses) {
+      await press().catch(() => {});
+      if (await Promise.race([arrival.then(() => true, () => true), sleep(config.pressWaitMs ?? 8_000).then(() => false)])) break;
+    }
+    return await arrival;
   } finally {
+    arrival.cancel();
     await setTicked(box, false).catch(() => {});
   }
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// The PDF may arrive as a download on this page, a download in a tab it opens, or a PDF the tab
+// simply shows. Watch every tab for any of the three, from Google hosts only.
+function nextDocument(page, timeout) {
+  const context = page.context();
+  const watched = new Set();
+  let finish;
+  const promise = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => done(reject, new FetchError('download', 'Pressed "Download selected" but no download or PDF arrived.')), timeout);
+    const onDownload = d => d.path().then(path => done(resolve, require('node:fs').readFileSync(path)), err => done(reject, err));
+    const onResponse = r => {
+      let host = '';
+      try { host = new URL(r.url()).hostname; } catch { return; }
+      if (GOOGLE_HOSTS.test(host) && /application\/pdf/i.test(r.headers()['content-type'] || '')) {
+        r.body().then(bytes => done(resolve, bytes), () => {});
+      }
+    };
+    const watch = p => {
+      if (watched.has(p)) return;
+      watched.add(p);
+      p.on('download', onDownload);
+      p.on('response', onResponse);
+    };
+    const onPage = p => watch(p);
+    context.pages().forEach(watch);
+    context.on('page', onPage);
+    function done(settle, value) {
+      clearTimeout(timer);
+      context.off('page', onPage);
+      for (const p of watched) { p.off('download', onDownload); p.off('response', onResponse); }
+      // Close only the tabs this download opened, never the billing page itself.
+      for (const p of watched) if (p !== page) p.close().catch(() => {});
+      settle(value);
+    }
+    finish = () => done(() => {}, null);
+  });
+  promise.cancel = () => finish();
+  return promise;
 }
 
 const looksLikePdf = buf => Buffer.isBuffer(buf) && buf.subarray(0, 5).toString('latin1') === '%PDF-';
