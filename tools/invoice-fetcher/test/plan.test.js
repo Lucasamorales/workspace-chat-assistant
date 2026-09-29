@@ -52,22 +52,27 @@ test('plan: an empty page, or a flood of "new" ones, is a changed page, not news
   assert.throws(() => p.plan([{ rowText: '', label: 'Download' }], state, { now: NOW, timeZone: TZ, maxPerRun: 24 }), /none in a row I could recognise/);
   const flood = Array.from({ length: 30 }, (_, i) => row(String(5000000100 + i), 'Sep 1, 2026'));
   assert.throws(() => p.plan(flood, state, { now: NOW, timeZone: TZ, maxPerRun: 24 }), /more than the 24/);
-  assert.equal(p.plan(flood, p.emptyState(), { now: NOW, timeZone: TZ, maxPerRun: 24 }).toFetch.length, 30, 'the first run may bring the whole history');
+  assert.equal(p.plan(flood, p.emptyState(), { now: NOW, timeZone: TZ, maxPerRun: 24 }).toFetch.length, 1, 'the first run takes only the latest, however long the history');
 });
 
-test('the first run emails only recent invoices; later runs email every new one', () => {
-  assert.equal(p.shouldMail({ date: '2026-09-01' }, { firstRun: true, now: NOW }), true);
-  assert.equal(p.shouldMail({ date: '2025-01-01' }, { firstRun: true, now: NOW }), false);
-  assert.equal(p.shouldMail({ date: '2025-01-01' }, { firstRun: false, now: NOW }), true);
-  assert.equal(p.shouldMail({ date: null }, { firstRun: true, now: NOW }), true, 'undated: better emailed than lost');
+test('plan: the first run picks the latest only; header and pager rows are not documents', () => {
+  const rows = ['Issue date Document type Amount Edit', 'July 31, 2026 Statement £0.34', 'August 31, 2026 Statement £1.74', 'Rows per page: 20 1 to 7 of 7']
+    .map(rowText => ({ rowText, label: 'Download selected', href: '', mode: 'select' }));
+  const out = p.plan(rows, p.emptyState(), { now: NOW, timeZone: TZ, maxPerRun: 24 });
+  assert.equal(out.seen, 2);
+  assert.deepEqual(out.toFetch.map(d => d.fileName), ['Google Cloud statement 2026-08-31.pdf']);
+  assert.deepEqual(out.skip.map(d => d.fileName), ['Google Cloud statement 2026-07-31.pdf']);
+  assert.equal(p.documentKind('August 31, 2026 Statement £1.74'), 'statement');
+  assert.equal(p.documentKind('Invoice 5000000001'), 'invoice');
 });
 
 test('state records saved-then-mailed, never mailed twice', () => {
   let s = p.emptyState();
-  s = p.recordSaved(s, { id: 'doc:1', fileName: 'a.pdf', date: '2026-09-01' }, { now: NOW, mail: true });
-  s = p.recordSaved(s, { id: 'doc:2', fileName: 'b.pdf', date: '2024-01-01' }, { now: NOW, mail: false });
+  s = p.recordSaved(s, { id: 'doc:1', fileName: 'a.pdf', date: '2026-09-01' }, { now: NOW });
+  s = p.recordSkipped(s, [{ id: 'doc:2', fileName: 'b.pdf', date: '2024-01-01' }], { now: NOW });
   assert.equal(s.documents['doc:1'].mailed, false);
-  assert.equal(s.documents['doc:2'].mailed, 'first-run');
+  assert.equal(s.documents['doc:2'].mailed, 'before-start');
+  assert.equal(s.documents['doc:2'].file, null);
   s = p.recordMailed(s, ['doc:1', 'doc:unknown']);
   assert.equal(s.documents['doc:1'].mailed, true);
   assert.equal(s.documents['doc:unknown'], undefined);

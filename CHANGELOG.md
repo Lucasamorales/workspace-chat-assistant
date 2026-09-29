@@ -16,6 +16,19 @@ live Chat app, and what is still unverified against reality).
   `billing/<account>/invoices?organizationId=000000000000`, not `/documents`; without the
   organisation in the URL the console shows nothing. `organizationId` is now in the fetcher's
   CONFIG and checked before a run.
+- **It found no documents on that page either.** They sit in a payments.google.com frame as
+  monthly *statements*, with a checkbox per row and one "Download selected" button, not a button
+  per row. The fetcher now ticks one row at a time (found again by its text, so a redraw can't
+  pair one month's PDF with another's name), and files are named for what they are:
+  `Google Cloud statement 2026-08-31.pdf`. Header and pager rows are ignored.
+- **Google signed the fetcher's profile out when a run used headless Chrome**: it treats a
+  headless browser on a signed-in profile as a stolen session. Runs now use a real Chrome window
+  placed off-screen, never headless.
+
+### Changed
+- **The fetcher's first run takes only the latest document** (Robin): August's today, then
+  September's when it appears. Older ones are remembered as "before we started" and never fetched.
+  If that first download fails, the next run still starts from the latest.
 
 ### Added
 - **`invoices` module: Google Cloud's invoices in Buddy.** `/invoices` lists the invoice PDFs in a
@@ -28,9 +41,8 @@ live Chat app, and what is still unverified against reality).
   billing console weekly (Mondays 10:00, catching up if the PC was off) in its own Chrome profile —
   signed into by hand, once — saves new PDFs into that Drive folder through Drive for desktop, and
   emails them. It emails an alert with a screenshot when the session expires or the page changes.
-  `inspect` mode shows what the page offers, to fix the selectors; `dry-run` changes nothing. The
-  first run saves the whole history but emails only the last 35 days. Own package and tests, never
-  deployed.
+  `inspect` mode shows what the page offers, to fix the selectors; `dry-run` changes nothing. Own
+  package and tests, never deployed.
 - **Modules can speak first: the `onSchedule` hook.** Cloud Scheduler calls `POST /tasks/daily` on
   buddy-bot; each module returns what to tell whom, and Buddy delivers it by DM.
 

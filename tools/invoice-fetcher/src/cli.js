@@ -17,11 +17,15 @@ const CHROME = [
   path.join(process.env.LOCALAPPDATA || '', 'Google\\Chrome\\Application\\chrome.exe'),
 ];
 
-async function launch(config, { headless }) {
+// Never headless. Google treats a headless Chrome using a signed-in profile as a stolen session:
+// it sent that run to the sign-in page and signed the profile out (2026-09-29). A real window
+// placed off-screen looks like what it is, the same person's Chrome, and stays out of the way.
+async function launch(config, { visible }) {
   const { chromium } = require('playwright-core');
   fs.mkdirSync(config.profileDir, { recursive: true });
   try {
-    const context = await chromium.launchPersistentContext(config.profileDir, { channel: 'chrome', headless, acceptDownloads: true, viewport: { width: 1400, height: 1000 } });
+    const args = visible ? [] : ['--window-position=-32000,-32000', '--window-size=1400,1000'];
+    const context = await chromium.launchPersistentContext(config.profileDir, { channel: 'chrome', headless: false, args, acceptDownloads: true, viewport: { width: 1400, height: 1000 } });
     return { context, page: context.pages()[0] || await context.newPage() };
   } catch (err) {
     if (/ProcessSingleton|profile.*in use|user data directory is already in use/i.test(err.message)) {
@@ -43,7 +47,7 @@ function login(config, log) {
 }
 
 async function inspect(config, log) {
-  const { context, page } = await launch(config, { headless: false });
+  const { context, page } = await launch(config, { visible: true });
   try {
     await billing.open(page, config);
     const frames = await billing.describe(page);
@@ -94,7 +98,7 @@ async function main(mode) {
 
   let browser = null;
   try {
-    browser = await launch(config, { headless: true });
+    browser = await launch(config, { visible: false });
     const result = await run({ config, page: browser.page, mailer, log, dryRun: mode === 'dry-run' });
     log.info(`done: ${JSON.stringify(result)}`);
     return 0;

@@ -6,28 +6,72 @@ const os = require('node:os');
 const path = require('node:path');
 const { run } = require('../src/run');
 const { loadConfig } = require('../config');
-const { isSignInPage, looksLikePdf } = require('../src/billing');
+const { isSignInPage, looksLikePdf, SELECTORS } = require('../src/billing');
 
 const PDF = Buffer.from('%PDF-1.7 fake');
 const NOW = Date.parse('2026-09-29T13:00:00Z');
 const quiet = { info() {}, warn() {}, error() {} };
 
+// The layout with a download link per row.
 function fakePage({ rows = [], url = 'https://console.cloud.google.com/billing/x/invoices?organizationId=1', body = PDF, signInFields = 0 } = {}) {
+  const page = { rows, fetched: [] };
   const frame = {
     url: () => url,
-    evaluate: async () => rows.map((r, index) => ({ index, label: 'Download PDF', href: `https://payments.google.com/doc/${index}.pdf`, rowText: r })),
+    evaluate: async fn => (fn.name === 'collectInFrame'
+      ? page.rows.map((r, index) => ({ index, label: 'Download PDF', href: `https://payments.google.com/doc/${index}.pdf`, rowText: r }))
+      : []),
   };
-  const fetched = [];
-  return {
-    fetched,
+  return Object.assign(page, {
     goto: async () => {},
     waitForLoadState: async () => {},
     waitForTimeout: async () => {},
     url: () => url,
     locator: () => ({ count: async () => signInFields }),
     frames: () => [frame],
-    context: () => ({ request: { get: async href => { fetched.push(href); return { ok: () => true, status: () => 200, body: async () => (typeof body === 'function' ? body(href) : body) }; } } }),
+    context: () => ({ request: { get: async href => { page.fetched.push(href); return { ok: () => true, status: () => 200, body: async () => (typeof body === 'function' ? body(href) : body) }; } } }),
+  });
+}
+
+// the company's real layout: payments.google.com in a frame, a checkbox per row, "Download selected".
+// The download holds whichever rows are ticked, so ticking the wrong one shows up as a wrong file.
+const REAL_ROWS = ['Issue date Document type Amount Edit', 'August 31, 2026 Statement £1.74', 'July 31, 2026 Statement £0.34', 'June 30, 2026 Statement £0.07'];
+function fakeTickPage(rows = REAL_ROWS, dir) {
+  const ticked = new Set();
+  let pending = null;
+  const box = i => ({
+    isChecked: async () => ticked.has(i),
+    check: async () => { ticked.add(i); },
+    uncheck: async () => { ticked.delete(i); },
+  });
+  const page = { rows, downloads: [] };
+  const frame = {
+    url: () => 'https://payments.google.com/payments/u/0/documentcenter',
+    evaluate: async fn => (fn.name === 'collectSelectableInFrame'
+      ? page.rows.map((rowText, index) => ({ index, mode: 'select', label: 'Download selected', href: '', rowText }))
+      : []),
+    locator: sel => {
+      if (sel === SELECTORS.selectableRow) {
+        return { count: async () => page.rows.length, nth: i => ({ innerText: async () => page.rows[i], locator: () => ({ first: () => box(i) }) }) };
+      }
+      return { count: async () => page.rows.length, nth: box };
+    },
+    getByRole: () => ({ first: () => ({ click: async () => {
+      const picked = [...ticked].map(i => page.rows[i]);
+      page.downloads.push(picked);
+      const file = path.join(dir, `dl-${page.downloads.length}`);
+      fs.writeFileSync(file, picked.length === 1 ? Buffer.from(`%PDF-1.7 ${picked[0]}`) : Buffer.from('PK zip'));
+      pending({ path: async () => file });
+    } }) }),
   };
+  return Object.assign(page, {
+    goto: async () => {},
+    waitForLoadState: async () => {},
+    waitForTimeout: async () => {},
+    url: () => 'https://console.cloud.google.com/billing/x/invoices?organizationId=1',
+    locator: () => ({ count: async () => 0 }),
+    frames: () => [frame],
+    waitForEvent: () => new Promise(resolve => { pending = resolve; }),
+  });
 }
 
 function setup(rows, opts = {}) {
@@ -37,28 +81,50 @@ function setup(rows, opts = {}) {
   const config = { ...loadConfig(__dirname), outputDir, stateFile: path.join(dir, 'state.json'), settleMs: 0 };
   const sent = [];
   const mailer = { send: async m => { if (opts.mailFails) throw new Error('smtp down'); sent.push(m); } };
-  return { config, outputDir, sent, mailer, page: fakePage({ rows, ...opts }) };
+  const page = opts.tick ? fakeTickPage(rows, dir) : fakePage({ rows, ...opts });
+  return { config, outputDir, sent, mailer, page };
 }
 
-test('new invoices are saved to Drive, emailed once, and remembered', async () => {
-  const { config, outputDir, sent, mailer, page } = setup(['Invoice 5000000001 Sep 1, 2026', 'Invoice 5000000000 Sep 15, 2026']);
-  const result = await run({ config, page, mailer, log: quiet, now: () => NOW });
-  assert.deepEqual(fs.readdirSync(outputDir).sort(), ['Google Cloud invoice 2026-09-01 5000000001.pdf', 'Google Cloud invoice 2026-09-15 5000000000.pdf']);
-  assert.equal(result.mailed, 2);
-  assert.equal(sent[0].attachments.length, 2);
-  assert.match(sent[0].subject, /2 Google Cloud invoices/);
+test('the first run takes only the latest; after that, each new one as it appears', async () => {
+  const { config, outputDir, sent, mailer, page } = setup(['Invoice 5000000001 Aug 31, 2026', 'Invoice 5000000000 Jul 31, 2026', 'Invoice 4999999999 Jun 30, 2026']);
+  const first = await run({ config, page, mailer, log: quiet, now: () => NOW });
+  assert.deepEqual(first.saved, ['Google Cloud invoice 2026-08-31 5000000001.pdf']);
+  assert.deepEqual(fs.readdirSync(outputDir), ['Google Cloud invoice 2026-08-31 5000000001.pdf']);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].attachments.length, 1);
 
   const again = await run({ config, page, mailer, log: quiet, now: () => NOW });
-  assert.deepEqual(again.saved, []);
+  assert.deepEqual(again.saved, [], 'July and June are never fetched later either');
   assert.equal(sent.length, 1, 'nothing new: no second email');
+
+  page.rows = ['Invoice 5000000002 Sep 30, 2026', ...page.rows];
+  const next = await run({ config, page, mailer, log: quiet, now: () => NOW });
+  assert.deepEqual(next.saved, ['Google Cloud invoice 2026-09-30 5000000002.pdf']);
+  assert.equal(sent.length, 2);
 });
 
-test('the first run fills Drive with the history but emails only the recent ones', async () => {
-  const { config, outputDir, sent, mailer, page } = setup(['Invoice 5000000001 Sep 1, 2026', 'Invoice 4000000000 Jan 1, 2025']);
-  await run({ config, page, mailer, log: quiet, now: () => NOW });
-  assert.equal(fs.readdirSync(outputDir).length, 2);
-  assert.equal(sent[0].attachments.length, 1);
-  assert.match(sent[0].attachments[0].filename, /2026-09-01/);
+test('if the first download fails, the next run still starts from the latest, not the whole history', async () => {
+  const body = href => (href.endsWith('/0.pdf') ? Buffer.from('<html>') : PDF);
+  const s = setup(['Invoice 5000000001 Aug 31, 2026', 'Invoice 5000000000 Jul 31, 2026'], { body });
+  await assert.rejects(run({ config: s.config, page: s.page, mailer: s.mailer, log: quiet, now: () => NOW }), err => err.kind === 'download');
+  const s2 = { ...s, page: fakePage({ rows: s.page.rows }) };
+  const result = await run({ config: s.config, page: s2.page, mailer: s.mailer, log: quiet, now: () => NOW });
+  assert.deepEqual(result.saved, ['Google Cloud invoice 2026-08-31 5000000001.pdf']);
+});
+
+test('Your Company\'s page: ticks one row at a time, header ignored, saved as a statement', async () => {
+  const { config, outputDir, sent, mailer, page } = setup(REAL_ROWS, { tick: true });
+  const result = await run({ config, page, mailer, log: quiet, now: () => NOW });
+  assert.deepEqual(result.saved, ['Google Cloud statement 2026-08-31.pdf']);
+  assert.deepEqual(page.downloads, [['August 31, 2026 Statement £1.74']], 'exactly one row ticked, the right one');
+  const saved = fs.readFileSync(path.join(outputDir, 'Google Cloud statement 2026-08-31.pdf'), 'latin1');
+  assert.match(saved, /August 31, 2026/);
+  assert.equal(sent.length, 1);
+
+  page.rows = [REAL_ROWS[0], 'September 30, 2026 Statement £2.10', ...REAL_ROWS.slice(1)];
+  const next = await run({ config, page, mailer, log: quiet, now: () => NOW });
+  assert.deepEqual(next.saved, ['Google Cloud statement 2026-09-30.pdf']);
+  assert.deepEqual(page.downloads[1], ['September 30, 2026 Statement £2.10'], 'the table moved down a row; the right one is still ticked');
 });
 
 test('if the email fails, the invoice stays saved and is emailed next time, not fetched again', async () => {
@@ -73,10 +139,12 @@ test('if the email fails, the invoice stays saved and is emailed next time, not 
 
 test('something that isn\'t a PDF is refused, the rest still arrive, and the run says "1 of 2"', async () => {
   const body = href => (href.endsWith('/1.pdf') ? Buffer.from('<html>sign in</html>') : PDF);
-  const { config, outputDir, sent, mailer, page } = setup(['Invoice 5000000001 Sep 1, 2026', 'Invoice 5000000002 Sep 2, 2026'], { body });
-  await assert.rejects(run({ config, page, mailer, log: quiet, now: () => NOW }), err => err.kind === 'download' && /Fetched 1 of 2/.test(err.message));
-  assert.equal(fs.readdirSync(outputDir).length, 1);
-  assert.equal(sent.length, 1, 'the good one is still emailed');
+  const s = setup(['Invoice 5000000001 Aug 31, 2026'], {});
+  await run({ config: s.config, page: s.page, mailer: s.mailer, log: quiet, now: () => NOW });
+  const page = fakePage({ rows: ['Invoice 5000000003 Oct 31, 2026', 'Invoice 5000000002 Sep 30, 2026', 'Invoice 5000000001 Aug 31, 2026'], body });
+  await assert.rejects(run({ config: s.config, page, mailer: s.mailer, log: quiet, now: () => NOW }), err => err.kind === 'download' && /Fetched 1 of 2/.test(err.message));
+  assert.equal(fs.readdirSync(s.outputDir).length, 2);
+  assert.equal(s.sent.length, 2, 'the good one is still emailed');
 });
 
 test('a sign-in page stops the run before anything is saved', async () => {
@@ -90,10 +158,11 @@ test('no Drive folder: stops before opening the page', async () => {
   await assert.rejects(run({ config: { ...config, outputDir: path.join(config.outputDir, 'gone') }, page, mailer, log: quiet, now: () => NOW }), err => err.kind === 'save' && /Drive for desktop/.test(err.message));
 });
 
-test('a dry run changes nothing', async () => {
-  const { config, outputDir, sent, mailer, page } = setup(['Invoice 5000000001 Sep 1, 2026']);
+test('a dry run changes nothing, and says what it would leave alone', async () => {
+  const { config, outputDir, sent, mailer, page } = setup(REAL_ROWS, { tick: true });
   const result = await run({ config, page, mailer, log: quiet, now: () => NOW, dryRun: true });
-  assert.deepEqual(result.wouldFetch, ['Google Cloud invoice 2026-09-01 5000000001.pdf']);
+  assert.deepEqual(result.wouldFetch, ['Google Cloud statement 2026-08-31.pdf']);
+  assert.deepEqual(result.wouldSkip, ['Google Cloud statement 2026-07-31.pdf', 'Google Cloud statement 2026-06-30.pdf']);
   assert.equal(fs.readdirSync(outputDir).length, 0);
   assert.equal(sent.length, 0);
   assert.equal(fs.existsSync(config.stateFile), false);

@@ -18,6 +18,9 @@ Not part of the Buddy image: its own `package.json`, its own tests, never deploy
   PDFs.
 - **Never deletes or replaces anything.** A file already in the folder is left as it is.
 - **Keeps no secret in a file.** The Gmail app password is in Windows Credential Manager.
+- **Never runs headless.** Google took a headless Chrome on the signed-in profile for a stolen
+  session and signed it out. Runs use a real Chrome window placed off-screen; you may see Chrome
+  in the taskbar for a minute on Monday mornings. Leave it, it closes itself.
 
 ## Set up (once, on the PC)
 
@@ -46,11 +49,16 @@ invoices folder.
    powershell -ExecutionPolicy Bypass -File .\set-password.ps1
    npm run test-email
    ```
-6. **Check the page.** `npm run inspect` opens the page, lists every download button it matched,
-   and saves a screenshot and a dump of the page to the log folder. If it matched none, adjust
+6. **Check the page.** `npm run inspect` opens the page, lists every document it can download,
+   and saves a screenshot and a dump of the page to the log folder. If it found none, adjust
    `SELECTORS` in `src/billing.js` from the dump.
+
+   the company's account gets monthly **statements**, listed in a payments.google.com frame with a
+   checkbox per row and one "Download selected" button: the fetcher ticks one row, downloads,
+   unticks, and finds each row again by its text so it can't save one month under another's name.
 7. **Try it.** `npm run dry-run` says what it *would* fetch and changes nothing. Then `npm run run`
-   for real: the first run saves the whole history to Drive but emails only the last 35 days.
+   for real. The first run takes **only the latest** document; older ones are remembered as
+   "before we started" and never fetched. After that, each new month's arrives on its own.
 8. **Schedule it.** Mondays at 10:00, or as soon as the PC is back if it was off:
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\schedule.ps1
@@ -97,7 +105,7 @@ is fetched and emailed again) and `logs\`.
 | **Whose permissions** | The Google account signed into its Chrome profile; the sending account's app password |
 | **What it writes** | New PDF files in the folder, `state.json`, logs. Nothing is ever changed or deleted |
 | **How it is triggered** | Windows Task Scheduler, Mondays 10:00 |
-| **What must not change** | File names (`Google Cloud invoice YYYY-MM-DD <number>.pdf`): state and people rely on them |
+| **What must not change** | File names (`Google Cloud <statement|invoice> YYYY-MM-DD [number].pdf`): people rely on them |
 
 ## Code
 

@@ -2,10 +2,6 @@
 // No browser, no disk, no mail here, so all of it is tested with plain values.
 const crypto = require('node:crypto');
 
-const DAY = 24 * 3600 * 1000;
-// On the first run the whole history is saved to Drive, but only the recent ones are emailed:
-// nobody wants three years of PDFs in their inbox on day one.
-const FIRST_RUN_MAIL_DAYS = 35;
 
 class FetchError extends Error {
   constructor(kind, message, extra = {}) { super(message); this.kind = kind; Object.assign(this, extra); }
@@ -45,10 +41,17 @@ function documentId(rowText) {
   return { id: `row:${crypto.createHash('sha256').update(stable).digest('hex').slice(0, 16)}`, number: null };
 }
 
+// What the row says the document is. the company's account gets monthly statements, not invoices,
+// and a file should be called what it is.
+function documentKind(rowText) {
+  const m = String(rowText || '').match(/\b(invoice|statement|credit note|credit memo|debit note|factura|resumen)\b/i);
+  return m ? m[1].toLowerCase() : 'invoice';
+}
+
 // Names that sort by date in Drive and survive Windows: no slashes, colons or other oddities.
-function fileName({ date, number }) {
+function fileName({ date, number, kind = 'invoice' }) {
   const safe = s => String(s).replace(/[^A-Za-z0-9 ._-]/g, '').trim();
-  return `Google Cloud invoice ${safe(date)}${number ? ` ${safe(number)}` : ''}.pdf`;
+  return `Google Cloud ${safe(kind)} ${safe(date)}${number ? ` ${safe(number)}` : ''}.pdf`;
 }
 
 function today(now, timeZone) {
@@ -66,13 +69,14 @@ function plan(candidates, state, { now, timeZone, maxPerRun }) {
   const byId = new Map();
   for (const c of candidates) {
     const { id, number } = documentId(c.rowText);
-    if (!id) continue;
+    // A row with neither a number nor a date is a header, a pager or a filter, not a document.
+    if (!id || (!number && !invoiceDate(c.rowText))) continue;
     const pdfish = /pdf/i.test(`${c.href || ''} ${c.label || ''}`);
     const existing = byId.get(id);
     // One row can offer several links (PDF and CSV); the PDF one wins.
     if (!existing || (pdfish && !existing.pdfish)) {
       const date = invoiceDate(c.rowText);
-      byId.set(id, { ...c, id, number, date, pdfish, fileName: fileName({ date: date || today(now, timeZone), number }) });
+      byId.set(id, { ...c, id, number, date, pdfish, fileName: fileName({ date: date || today(now, timeZone), number, kind: documentKind(c.rowText) }) });
     }
   }
   if (!byId.size) {
@@ -81,28 +85,34 @@ function plan(candidates, state, { now, timeZone, maxPerRun }) {
       : 'Found no invoices at all on the billing invoices page.');
   }
   const firstRun = !state.initialisedAt;
-  const toFetch = [...byId.values()].filter(d => !state.documents[d.id]);
+  let toFetch = [...byId.values()].filter(d => !state.documents[d.id]);
+  // The first run starts from the latest document only (Robin, 2026-09-29): the older ones are
+  // remembered as "before we started", so they are never fetched later either.
+  let skip = [];
+  if (firstRun && toFetch.length) {
+    const newestFirst = [...toFetch].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    toFetch = newestFirst.slice(0, 1);
+    skip = newestFirst.slice(1);
+  }
   if (!firstRun && toFetch.length > maxPerRun) {
     throw new FetchError('layout', `The page offers ${toFetch.length} invoices I haven't seen, more than the ${maxPerRun} a run allows. That usually means the page changed and old invoices look new.`);
   }
   const unmailed = Object.entries(state.documents).filter(([, d]) => d.mailed === false).map(([id, d]) => ({ id, ...d }));
-  return { toFetch, unmailed, firstRun, seen: byId.size };
-}
-
-// Whether a newly saved invoice is emailed. Only the first run holds back, and only old ones.
-function shouldMail(doc, { firstRun, now }) {
-  if (!firstRun) return true;
-  if (!doc.date) return true;
-  return Date.parse(`${doc.date}T12:00:00Z`) >= now - FIRST_RUN_MAIL_DAYS * DAY;
+  return { toFetch, skip, unmailed, firstRun, seen: byId.size };
 }
 
 // State updates return a new state; the caller writes it after each step, so a crash
 // half-way never forgets a file already saved nor emails one twice.
-function recordSaved(state, doc, { now, mail }) {
+function recordSaved(state, doc, { now }) {
   return {
     ...state,
-    documents: { ...state.documents, [doc.id]: { file: doc.fileName, date: doc.date, savedAt: new Date(now).toISOString(), mailed: mail ? false : 'first-run' } },
+    documents: { ...state.documents, [doc.id]: { file: doc.fileName, date: doc.date, savedAt: new Date(now).toISOString(), mailed: false } },
   };
+}
+function recordSkipped(state, docs, { now }) {
+  const documents = { ...state.documents };
+  for (const d of docs) documents[d.id] = { file: null, date: d.date, skippedAt: new Date(now).toISOString(), mailed: 'before-start' };
+  return { ...state, documents };
 }
 function recordMailed(state, ids) {
   const documents = { ...state.documents };
@@ -168,7 +178,7 @@ function alertMail(err, { billingAccountId, when }) {
 }
 
 module.exports = {
-  FetchError, FIRST_RUN_MAIL_DAYS,
-  invoiceDate, documentId, fileName, today, emptyState, plan, shouldMail,
-  recordSaved, recordMailed, recordRun, invoicesMail, alertMail,
+  FetchError,
+  invoiceDate, documentId, documentKind, fileName, today, emptyState, plan,
+  recordSaved, recordSkipped, recordMailed, recordRun, invoicesMail, alertMail,
 };
