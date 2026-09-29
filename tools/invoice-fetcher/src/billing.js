@@ -122,7 +122,11 @@ async function downloadByTicking(page, candidate, config) {
   try {
     const [dl] = await Promise.all([
       page.waitForEvent('download', { timeout }),
-      frame.getByRole('button', { name: new RegExp(SELECTORS.downloadSelected, 'i') }).first().click({ timeout }),
+      // Same overlay trouble as the checkboxes, possibly: a normal click first, then a forced one.
+      (async () => {
+        const button = frame.getByRole('button', { name: new RegExp(SELECTORS.downloadSelected, 'i') }).first();
+        await button.click({ timeout: 10_000 }).catch(() => button.click({ force: true, timeout }));
+      })(),
     ]);
     return require('node:fs').readFileSync(await dl.path());
   } finally {
