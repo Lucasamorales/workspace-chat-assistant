@@ -214,6 +214,12 @@ needs no setting to start; reminders need the scheduler.
 
 - [ ] `/invoices` → Google Cloud, "ready on the 5th working day", this month's status, and the link opens the invoices page
 - [ ] `/invoices preview Google Cloud` → the reminder card: Open Google Cloud · Invoices folder · ✓ Downloaded · Remind me tomorrow
+- [ ] Type just `invoices` → the same card as `/invoices`, with Open / ✓ Downloaded per bill and **+ Add a bill**
+- [ ] "Add Adobe, it's ready on the 1st, here's the page: https://account.adobe.com/billing" → approval card
+      "Add a bill: Adobe", Ready "1st of the month · next: 1 <month>" → **Approve** → Adobe is in `invoices`
+- [ ] "Adobe is ready on the 3rd working day now" → "Change a bill: Adobe", Ready shows "(was 1st of the month…)"
+- [ ] "Add Canva, ready on the 2nd" (no link) → Buddy asks for the link; no card
+- [ ] "stop reminding me about Adobe" → "Stop reminders: Adobe" → **Approve** → gone from `invoices`
 - [ ] Press **✓ Downloaded** on the preview → "October done"; `/invoices` shows "downloaded by robin"
 - [ ] Someone without `invoices.admin` gets "Only invoices admins…" for `add`; someone without access has no `/invoices`
 - [ ] `gcloud scheduler jobs run buddy-daily --location=europe-west1 --project=your-gcp-project`

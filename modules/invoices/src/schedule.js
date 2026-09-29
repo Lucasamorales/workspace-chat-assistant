@@ -88,6 +88,14 @@ function standing(bill, period, date) {
   return { state: 'pending', due, month, reminded, remindNow };
 }
 
+/** The next due date from today: this month's if it hasn't passed, otherwise next month's. */
+function nextDue(ready, date) {
+  const due = dueDate(ready, date.slice(0, 7));
+  if (due >= date) return due;
+  const [y, m] = parts(date);
+  return dueDate(ready, m === 12 ? `${y + 1}-01` : `${y}-${pad(m + 1)}`);
+}
+
 /** What this month's record becomes once a reminder is handed over. */
 const afterReminder = (period, date) => ({
   ...(period || {}),
@@ -101,5 +109,5 @@ const afterLater = (period, date) => ({ ...(period || {}), nextOn: addWorkdays(d
 
 module.exports = {
   MAX_REMINDERS, GAP_WORKDAYS,
-  today, dueDate, parseReady, describeReady, isWorkday, addWorkdays, standing, afterReminder, afterLater,
+  today, dueDate, nextDue, parseReady, describeReady, isWorkday, addWorkdays, standing, afterReminder, afterLater,
 };

@@ -24,7 +24,32 @@ when each bill is usually ready, says so, and stops once someone has it.
 Working days are Monday to Friday in `INVOICES_TIMEZONE`. Public holidays aren't known, so a
 holiday can make a reminder a day early.
 
+## Without commands
+
+Made for someone in accounts, who shouldn't need to learn any syntax:
+
+- **To see the bills,** type **invoices** (or **bills**) in a DM, or press **Invoices** on Buddy's
+  welcome card. That's free: no Claude. The card has each bill's **Open** button, **✓ Downloaded**
+  for anything due, and, for admins, **+ Add a bill**.
+- **To add, change or stop a bill, just say so:** *"Add Adobe, it's ready on the 1st, here's the
+  page: https://account.adobe.com/billing"*, *"Figma is ready on the 3rd working day now"*, *"stop
+  reminding me about Figma"*. Buddy shows an approval card with what it understood — the link, the
+  rule and the next real date (*"1st of the month · next: 1 Oct"*), and on a change what it was
+  before — and saves nothing until **Approve**. **+ Add a bill** explains what to say.
+- **Questions** like *"what's still to download this month?"* are answered from the list.
+
+Buddy understands "Nth working day" and "day N" of the month. Anything else ("the first Monday",
+"around the 5th") it turns into the closest of those and says so on the card. A request missing
+something (no link, say) gets a question back instead of a card.
+
+Adding, changing and stopping bills are offered only to invoices admins, and refused again when
+they run. Talking to it costs a small Claude call on the cheapest model (`MODULE_TUNING`
+`invoices:claude-haiku-4-5:low`) for people who only have scoped modules; people with the
+assistant run on the default model.
+
 ## Commands
+
+Everything above can also be typed:
 
 | | |
 |---|---|
@@ -80,4 +105,5 @@ Month records stay when a bill is removed: they're the record of who downloaded 
 | `src/schedule.js` | When a bill is due and whether to remind today: plain functions over dates |
 | `src/bills.js` | Storage, and checking what an admin types |
 | `src/present.js` | Everything the module says |
-| `src/module.js` | The commands and the daily check (`onSchedule`) |
+| `src/tools.js` | What Claude can do when asked in words, and what each approval card shows |
+| `src/module.js` | The commands, the "invoices" shortcut and the daily check (`onSchedule`) |

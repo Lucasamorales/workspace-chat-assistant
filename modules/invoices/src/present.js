@@ -17,31 +17,36 @@ function statusLine(s) {
   return `⏳ ${monthName(s.month)}: due since ${short(s.due)}, not downloaded yet${times ? ` (reminded ${times}×${s.gaveUp ? ', no more reminders this month' : ''})` : ''}`;
 }
 
-function listReply(rows, { folderUrl, isAdmin }) {
+const addButton = isAdmin => (isAdmin ? [{ text: '+ Add a bill', command: 'invoices', args: 'new' }] : []);
+// Each bill brings up to two buttons; past this many the card becomes a wall of them.
+const BUTTON_BILLS = 8;
+
+function listReply(rows, { month, folderUrl, isAdmin }) {
+  const title = `🧾 Invoices — ${monthName(month)}`;
   if (!rows.length) {
     return {
-      title: 'Invoices',
-      text: isAdmin
-        ? 'No bills yet. Add one:\n`/invoices add Google Cloud | https://link | 5th working day`'
-        : 'No bills have been set up yet.',
+      title,
+      text: isAdmin ? 'No bills yet. Press **+ Add a bill**, or just tell me about one.' : 'No bills have been set up yet.',
+      buttons: addButton(isAdmin),
     };
   }
   const blocks = rows.map(({ bill, standing }) => [
-    `**[${bill.name.replace(/[[\]]/g, '')}](${bill.url})** · ready on the ${describeReady(bill.ready)}`,
+    `**${bill.name}** · ready on the ${describeReady(bill.ready)}`,
     statusLine(standing),
     ...(isAdmin ? [`Reminds: ${bill.remind.join(', ')}`] : []),
   ].join('\n'));
-  const pending = rows.filter(r => r.standing.state === 'pending');
+  // The buttons follow the card's order, one bill at a time: its page, then Downloaded if due.
+  const perBill = rows.slice(0, BUTTON_BILLS).flatMap(({ bill, standing }) => [
+    { text: `Open ${bill.name}`, url: bill.url },
+    ...(standing.state === 'pending' ? [{ text: `✓ ${bill.name} downloaded`, command: 'invoices', args: `done ${bill.id} ${standing.month}`, replace: true }] : []),
+  ]);
   return {
-    title: 'Invoices',
+    title,
     text: [
       blocks.join('\n\n'),
-      ...(isAdmin ? ['', 'Add or change one: `/invoices add Name | https://link | 5th working day | who@…` · stop one: `/invoices remove Name`'] : []),
+      ...(isAdmin ? ['', 'To add, change or stop a bill, press **+ Add a bill** or just tell me, e.g. "Figma is ready on the 3rd working day now".'] : []),
     ].join('\n'),
-    buttons: [
-      ...pending.slice(0, 3).map(r => ({ text: `✓ ${r.bill.name} downloaded`, command: 'invoices', args: `done ${r.bill.id} ${r.standing.month}` })),
-      ...folderButton(folderUrl),
-    ],
+    buttons: [...perBill, ...addButton(isAdmin), ...folderButton(folderUrl)],
   };
 }
 

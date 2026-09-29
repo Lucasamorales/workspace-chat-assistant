@@ -166,16 +166,39 @@ test('unknown bills and removed bills', async () => {
   assert.deepEqual(await s.daily(), [], 'a removed bill is never reminded about');
 });
 
-test('/invoices lists what is due, pending and done, with a Downloaded button for what is pending', async () => {
+test('/invoices: each bill with its own buttons, and "+ Add a bill" for admins', async () => {
   const s = setup();
-  assert.match((await s.run('')).text, /No bills yet/);
+  const empty = await s.run('');
+  assert.match(empty.text, /No bills yet. Press \*\*\+ Add a bill\*\*/);
+  assert.deepEqual(empty.buttons, [{ text: '+ Add a bill', command: 'invoices', args: 'new' }]);
   await addGcp(s.run);
   await s.run(`add Figma | https://www.figma.com/billing | day 1`);
   s.clock.now = at('2026-10-07');
+  await s.run('done figma 2026-10');
   const list = await s.run('');
-  assert.match(list.text, /\*\*\[Figma\]\(https:\/\/www\.figma\.com\/billing\)\*\* · ready on the 1st of the month/);
-  assert.match(list.text, /⏳ October: due since 1 Oct, not downloaded yet/);
-  assert.deepEqual(list.buttons.map(b => b.text), ['✓ Figma downloaded', '✓ Google Cloud downloaded', 'Invoices folder']);
+  assert.equal(list.title, '🧾 Invoices — October');
+  assert.match(list.text, /\*\*Figma\*\* · ready on the 1st of the month\n✅ October: downloaded by robin on 7 Oct/);
+  assert.match(list.text, /\*\*Google Cloud\*\* · ready on the 5th working day\n⏳ October: due since 7 Oct, not downloaded yet/);
+  assert.deepEqual(list.buttons.map(b => b.text), ['Open Figma', 'Open Google Cloud', '✓ Google Cloud downloaded', '+ Add a bill', 'Invoices folder']);
+  assert.equal(list.buttons[0].url, 'https://www.figma.com/billing');
+
+  const riley = await s.run('', s.ctxFor('riley@example.com', false));
+  assert.ok(!riley.buttons.some(b => b.text === '+ Add a bill'), 'only admins get "+ Add a bill"');
+});
+
+test('"+ Add a bill" says what to tell Buddy; typing "invoices" alone shows the card for free', async () => {
+  const s = setup();
+  const start = await s.run('new');
+  assert.equal(start.title, 'Add a bill');
+  assert.match(start.text, /the \*\*link\*\* to the page where the bill is downloaded/);
+  assert.match(await s.run('new', s.ctxFor('riley@example.com', false)), /Only invoices admins/);
+
+  const dm = text => ({ text, argumentText: text, space: { kind: 'DM' } });
+  const ctx = s.ctxFor();
+  assert.match((await s.mod.handleMessage(ctx, dm('Invoices'))).title, /🧾 Invoices/);
+  assert.ok(await s.mod.handleMessage(ctx, dm('bills?')));
+  assert.equal(await s.mod.handleMessage(ctx, dm('what bills are due this week?')), null, 'a question goes to Claude');
+  assert.equal(await s.mod.handleMessage(ctx, { ...dm('invoices'), space: { kind: 'SPACE' } }), null, 'DMs only');
 });
 
 test('preview shows an admin the reminder without counting it', async () => {

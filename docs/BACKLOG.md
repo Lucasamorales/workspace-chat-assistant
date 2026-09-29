@@ -243,6 +243,10 @@ remote-controlled browsers out.
 | I4 | Confirm `spaces.findDirectMessage` works with the app's credentials from a scheduled call | todo — first scheduled run |
 | I5 | After I3–I4 pass: `feat:` commit marking it verified | todo |
 | I6 | File names: tell people what to call the file, or rename it in the folder behind an approval card (needs Editor on the folder) | later — on hold (Robin) |
+| I9 | No commands needed: "invoices" shortcut, per-bill buttons, "+ Add a bill", add/change/stop bills by asking (scoped, behind approval cards) | done — unverified live |
+| I10 | Run `docs/EVAL.md` for invoices on Haiku (`MODULE_TUNING`): adding, changing and refusing bills in words | todo — before the accounts person uses it |
+| I11 | Give the accounts person `BUDDY_ACCESS_INVOICES` and `BUDDY_ROLE_INVOICES_ADMIN` (and the Chat app), and put their email on the bills | todo — Robin, when ready |
+| I12 | A proper form (Chat dialog: Name / Link / When) for adding bills, if talking to it isn't enough. Needs dialog support in core | later |
 | I7 | Public holidays for working days (Argentina, UK), if a reminder a day early turns out to matter | later |
 | I8 | Move the costs Sheet rollup onto the daily task instead of riding the first message of the week | later |
 

@@ -91,7 +91,7 @@ Reads (searching tasks, "what's due today") run without asking. Deletes are mark
 | `/access [module]` | Admins: who has been given access from chat |
 | `/manual [reindex|check]` | What Buddy has read from the team member manual (admins re-read it) |
 | `/costs [week|waste|tools|sheet|check]` | Admins: what Buddy costs, by person, module and tool |
-| `/invoices [done\|later <bill>]` | Bills due this month, with links; reminds you when one is ready (admins: `add`, `remove`, `preview`) |
+| `/invoices [done\|later <bill>]` | Bills due this month, with links; reminds you when one is ready. Typing **invoices** works too, and admins add or change bills by just saying so |
 
 ---
 
@@ -195,7 +195,7 @@ legacy/bot-rev23/     the original bot, kept read-only for reference
 | **admin** | DMs only | `BUDDY_ACCESS_ADMIN` — robin@, remy@ | — | grants in `core__grants` |
 | **manual** | DMs + spaces | everyone @example.com (needs assistant); `manual.admin` to reindex | `MANUAL_FOLDER_ID`, Vertex AI, Drive folder shared with `buddy-bot` | index in `m_manual__index` |
 | **costs** | DMs only | `BUDDY_ACCESS_COSTS` — robin@, remy@ | `COSTS_SHEET_ID` (optional) | usage events in `core__usage_events` (90 days) |
-| **invoices** | DMs only | `BUDDY_ACCESS_INVOICES` — robin@; `invoices.admin` adds bills | the scheduler, for reminders | bills in `m_invoices__bills`, who downloaded each month in `m_invoices__months` |
+| **invoices** | DMs only | `BUDDY_ACCESS_INVOICES` — robin@ (can be asked in words, scoped); `invoices.admin` adds bills | the scheduler, for reminders | bills in `m_invoices__bills`, who downloaded each month in `m_invoices__months` |
 
 ### Permissions per module
 Two layers, both checked on every event:

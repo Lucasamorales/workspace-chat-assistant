@@ -17,25 +17,44 @@ const slug = name => String(name).toLowerCase().normalize('NFKD').replace(/[^a-z
 class InputError extends Error {}
 
 /**
- * "/invoices add Name | https://link | 5th working day | a@x, b@y" → a bill, or an InputError
- * saying what to fix. Who is reminded defaults to whoever adds it.
+ * A bill from its parts, checked, with a sentence saying what to fix if something's wrong. Used
+ * by both the typed command and Claude's save_bill tool, so the same rules apply however it
+ * arrives. With `existing`, missing parts keep their current value (a change, not a new bill).
+ */
+function makeBill({ name, url, ready, remind }, { addedBy, existing = null }) {
+  // A change keeps the bill's name as it was first written: "adobe" in a sentence finds Adobe,
+  // it doesn't rename it.
+  const cleanName = String((existing && existing.name) || name || '').trim();
+  if (!cleanName || cleanName.length > 40 || !slug(cleanName)) throw new InputError('The name should be 1–40 characters, e.g. `Google Cloud`.');
+  const link = url === undefined || url === null || url === '' ? existing && existing.url : url;
+  let parsed;
+  try { parsed = new URL(String(link || '')); } catch { parsed = null; }
+  if (!parsed || parsed.protocol !== 'https:') throw new InputError(`\`${link || '(no link)'}\` isn't an https link. Paste the page where the bill is downloaded.`);
+  const when = ready || (existing && existing.ready);
+  if (!when || !['workday', 'day'].includes(when.kind) || !Number.isInteger(when.n) || when.n < 1 || when.n > (when.kind === 'workday' ? 23 : 31)) {
+    throw new InputError('When is it ready? Either a working day of the month (e.g. the 5th working day) or a day of the month (e.g. day 1).');
+  }
+  const list = remind === undefined || remind === null ? (existing ? existing.remind : [addedBy]) : remind;
+  const emails = [...new Set((Array.isArray(list) ? list : String(list).split(',')).map(e => String(e).trim().toLowerCase()).filter(Boolean))];
+  const bad = emails.filter(e => !EMAIL.test(e));
+  if (!emails.length || bad.length) throw new InputError(`Who to remind should be work emails${bad.length ? `; this isn't one: ${bad.join(', ')}` : ''}.`);
+  return { id: slug(cleanName), name: cleanName, url: parsed.toString(), ready: { kind: when.kind, n: when.n }, remind: emails };
+}
+
+/**
+ * "/invoices add Name | https://link | 5th working day | a@x, b@y" → a bill, or an InputError.
+ * Who is reminded defaults to whoever adds it.
  */
 function parseBill(args, { addedBy }) {
   const fields = String(args || '').split('|').map(s => s.trim());
   if (fields.length < 3 || fields.length > 4) {
-    throw new InputError('Use: `/invoices add Name | https://link | 5th working day | who@example.com`\nThe last part is optional (it defaults to you); "day 1" works too.');
+    throw new InputError('Use: `/invoices add Name | https://link | 5th working day | who@example.com`\n'
+      + 'The last part is optional (it defaults to you); "day 1" works too. Or just tell me in words.');
   }
-  const [name, link, when, who = addedBy] = fields;
-  if (!name || name.length > 40 || !slug(name)) throw new InputError('The name should be 1–40 characters, e.g. `Google Cloud`.');
-  let url;
-  try { url = new URL(link); } catch { url = null; }
-  if (!url || url.protocol !== 'https:') throw new InputError(`\`${link}\` isn't an https link. Paste the page where the bill is downloaded.`);
+  const [name, url, when, who] = fields;
   const ready = parseReady(when);
   if (!ready) throw new InputError(`I don't understand "${when}". Try \`5th working day\` or \`day 1\`.`);
-  const remind = [...new Set(String(who).split(',').map(e => e.trim().toLowerCase()).filter(Boolean))];
-  const bad = remind.filter(e => !EMAIL.test(e));
-  if (!remind.length || bad.length) throw new InputError(`Who to remind should be work emails${bad.length ? `; this isn't one: ${bad.join(', ')}` : ''}.`);
-  return { id: slug(name), name, url: url.toString(), ready, remind };
+  return makeBill({ name, url, ready, remind: who }, { addedBy });
 }
 
 function createBills(store) {
@@ -69,4 +88,4 @@ function createBills(store) {
   };
 }
 
-module.exports = { createBills, parseBill, slug, InputError, MAX_BILLS };
+module.exports = { createBills, makeBill, parseBill, slug, InputError, MAX_BILLS };

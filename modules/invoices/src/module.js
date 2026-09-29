@@ -12,11 +12,14 @@
  */
 
 const { createBills, parseBill, slug, InputError } = require('./bills');
+const { createInvoiceTools, INSTRUCTIONS } = require('./tools');
 const { today, standing, afterReminder, afterLater } = require('./schedule');
 const present = require('./present');
 
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 const FOLDER_ID = /^[A-Za-z0-9_-]{10,}$/;
+// Typing just this in a DM shows the bills, free: no Claude, no cost.
+const SHORTCUT = /^(invoices?|bills?|facturas?)[.!?]*$/i;
 
 function createInvoicesModule({ now = () => Date.now() } = {}) {
   const zone = ctx => ctx.settings.INVOICES_TIMEZONE || present.DEFAULT_TZ;
@@ -43,7 +46,7 @@ function createInvoicesModule({ now = () => Date.now() } = {}) {
     const rows = await Promise.all((await bills.list()).map(async bill => ({
       bill, standing: standing(bill, await bills.month(bill.id, date.slice(0, 7)), date),
     })));
-    return present.listReply(rows, { folderUrl: folderUrl(ctx), isAdmin: ctx.hasRole('admin') });
+    return present.listReply(rows, { month: date.slice(0, 7), folderUrl: folderUrl(ctx), isAdmin: ctx.hasRole('admin') });
   }
 
   async function done(ctx, rest) {
@@ -126,7 +129,22 @@ function createInvoicesModule({ now = () => Date.now() } = {}) {
     return notes;
   }
 
-  const ADMIN = { add, remove, preview };
+  // The "+ Add a bill" button: what to say next, in words. The answer goes to Claude.
+  const start = () => ({
+    title: 'Add a bill',
+    text: [
+      'Tell me, in your own words:',
+      '• the **name** (e.g. Adobe)',
+      '• the **link** to the page where the bill is downloaded',
+      '• **when** it\'s usually ready: a working day of the month ("the 5th working day") or a day ("the 1st")',
+      '• and who to remind, if not just you.',
+      '',
+      'For example: "Add Adobe, it\'s ready on the 1st, here\'s the page: https://account.adobe.com/billing"',
+      'I\'ll show you what I understood before saving anything.',
+    ].join('\n'),
+  });
+
+  const ADMIN = { add, remove, preview, new: start };
   const ANYONE = { done, later };
 
   return {
@@ -134,7 +152,14 @@ function createInvoicesModule({ now = () => Date.now() } = {}) {
     description: 'Reminders when bills are ready to download',
     allowedIn: ['DM'],
     roles: ['admin'],
-    examples: ['/invoices'],
+    // Someone in accounts can add and check bills by asking, without being given free-form Claude
+    // (docs/decisions/0007-scoped-conversation.md). Every change still waits for an approval click.
+    scopedConversation: true,
+    // Required alongside scopedConversation. It hides nothing here: anyone with this module can
+    // talk to it, so the commands and reminders stay visible to everyone with access.
+    needsConversation: true,
+    instructions: INSTRUCTIONS,
+    examples: ['What bills are due?', 'Add Adobe: ready on the 1st, https://account.adobe.com/billing'],
 
     commands: {
       invoices: {
@@ -161,6 +186,15 @@ function createInvoicesModule({ now = () => Date.now() } = {}) {
     },
 
     quickActions: async () => [{ text: 'Invoices', command: 'invoices' }],
+
+    async handleMessage(ctx, message) {
+      if (message.space.kind !== 'DM' || !SHORTCUT.test(String(message.argumentText || message.text || '').trim())) return null;
+      return list(ctx);
+    },
+
+    async tools(ctx) {
+      return createInvoiceTools(ctx, { date: () => dateFor(ctx), now });
+    },
 
     async onSchedule(ctx, task) {
       if (task !== 'daily') return [];

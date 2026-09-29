@@ -20,6 +20,13 @@ live Chat app, and what is still unverified against reality).
   status and the links; `preview` shows an admin the card. Google Cloud is the first bill; any bill
   with a download page works. Robin only (`BUDDY_ACCESS_INVOICES`, `BUDDY_ROLE_INVOICES_ADMIN`).
   `docs/decisions/0011-invoices-and-scheduled-tasks.md`.
+- **Invoices without commands**, for the accounts team. Typing **invoices** (or **bills**) shows the
+  card for free; each bill has its own **Open** and **✓ Downloaded** buttons, and admins get
+  **+ Add a bill**. Bills are added, changed and stopped by just saying so ("Add Adobe, it's ready
+  on the 1st, here's the page: …"): Buddy shows what it understood, with the next real date and,
+  on a change, what it was before, and saves nothing until **Approve**. A request missing something
+  gets a question back instead of a card. Runs on Haiku for people scoped to modules
+  (`MODULE_TUNING`). Nobody new has access yet.
 - **Modules can speak first: the `onSchedule` hook.** Cloud Scheduler calls `POST /tasks/daily` on
   buddy-bot at 09:00 Buenos Aires on weekdays; each module returns what to tell whom, and Buddy
   delivers it by DM.
