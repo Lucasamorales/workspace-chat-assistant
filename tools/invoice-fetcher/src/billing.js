@@ -143,19 +143,42 @@ async function downloadByTicking(page, candidate, config) {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// The PDF may arrive as a download on this page, a download in a tab it opens, or a PDF the tab
+const isGoogle = url => {
+  try { const u = new URL(url); return u.protocol === 'https:' && GOOGLE_HOSTS.test(u.hostname); } catch { return false; }
+};
+
+// The PDF may arrive as a download on this page, a download in a tab it opens, or a PDF a tab
 // simply shows. Watch every tab for any of the three, from Google hosts only.
+//
+// the company's "Download selected" opens a blank tab that starts the download and closes itself at
+// once, which takes the download's file down with it ("target closed"). Its address is known the
+// moment it starts, though, so if the file can't be read it is fetched again from there with the
+// same signed-in session.
 function nextDocument(page, timeout) {
   const context = page.context();
   const watched = new Set();
   let finish;
   const promise = new Promise((resolve, reject) => {
     const timer = setTimeout(() => done(reject, new FetchError('download', 'Pressed "Download selected" but no download or PDF arrived.')), timeout);
-    const onDownload = d => d.path().then(path => done(resolve, require('node:fs').readFileSync(path)), err => done(reject, err));
+    const onDownload = async d => {
+      const url = d.url();
+      try {
+        return done(resolve, require('node:fs').readFileSync(await d.path()));
+      } catch (err) {
+        if (isGoogle(url)) {
+          try {
+            const res = await context.request.get(url, { timeout });
+            if (res.ok()) return done(resolve, await res.body());
+            return done(reject, new FetchError('download', `The download's tab closed, and fetching it again got ${res.status()} from ${new URL(url).hostname}.`));
+          } catch (again) {
+            return done(reject, new FetchError('download', `The download's tab closed, and fetching it again failed (${String(again.message).split('\n')[0]}).`));
+          }
+        }
+        done(reject, new FetchError('download', `The download started but couldn't be read (${String(err.message).split('\n')[0]}; from ${url.split(':')[0]}:).`));
+      }
+    };
     const onResponse = r => {
-      let host = '';
-      try { host = new URL(r.url()).hostname; } catch { return; }
-      if (GOOGLE_HOSTS.test(host) && /application\/pdf/i.test(r.headers()['content-type'] || '')) {
+      if (isGoogle(r.url()) && /application\/pdf/i.test(r.headers()['content-type'] || '')) {
         r.body().then(bytes => done(resolve, bytes), () => {});
       }
     };
@@ -163,15 +186,20 @@ function nextDocument(page, timeout) {
       if (watched.has(p)) return;
       watched.add(p);
       p.on('download', onDownload);
-      p.on('response', onResponse);
     };
     const onPage = p => watch(p);
     context.pages().forEach(watch);
     context.on('page', onPage);
+    // Context-wide, so a new tab's very first response is seen too, before it could be watched.
+    context.on('response', onResponse);
+    let settled = false;
     function done(settle, value) {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       context.off('page', onPage);
-      for (const p of watched) { p.off('download', onDownload); p.off('response', onResponse); }
+      context.off('response', onResponse);
+      for (const p of watched) p.off('download', onDownload);
       // Close only the tabs this download opened, never the billing page itself.
       for (const p of watched) if (p !== page) p.close().catch(() => {});
       settle(value);

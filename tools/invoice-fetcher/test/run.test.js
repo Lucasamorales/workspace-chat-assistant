@@ -47,7 +47,7 @@ function fakeTickPage(rows = REAL_ROWS, dir) {
     focus: async () => {},
     press: async key => { if (key === 'Space') toggle(i); },
   });
-  const page = { rows, downloads: [] };
+  const page = { rows, downloads: [], served: {} };
   const frame = {
     url: () => 'https://payments.google.com/payments/u/0/documentcenter',
     evaluate: async fn => (fn.name === 'collectSelectableInFrame'
@@ -70,7 +70,10 @@ function fakeTickPage(rows = REAL_ROWS, dir) {
         page.downloads.push(picked);
         const file = path.join(dir, `dl-${page.downloads.length}`);
         fs.writeFileSync(file, picked.length === 1 ? Buffer.from(`%PDF-1.7 ${picked[0]}`) : Buffer.from('PK zip'));
-        for (const cb of listeners.download) cb({ path: async () => file });
+        const url = `https://payments.google.com/payments/apis-secure/doc/${page.downloads.length}`;
+        page.served[url] = fs.readFileSync(file);
+        // Like the real thing: the blank tab closes itself, taking the download's file with it.
+        for (const cb of listeners.download) cb({ url: () => url, path: async () => { throw new Error('download.path: Target page, context or browser has been closed'); } });
       },
     }) }),
   };
@@ -83,7 +86,10 @@ function fakeTickPage(rows = REAL_ROWS, dir) {
     frames: () => [frame],
     on: (event, cb) => { if (listeners[event]) listeners[event].add(cb); },
     off: (event, cb) => { if (listeners[event]) listeners[event].delete(cb); },
-    context: () => ({ pages: () => [page], on() {}, off() {} }),
+    context: () => ({
+      pages: () => [page], on() {}, off() {},
+      request: { get: async url => ({ ok: () => url in page.served, status: () => (url in page.served ? 200 : 404), body: async () => page.served[url] }) },
+    }),
   });
 }
 

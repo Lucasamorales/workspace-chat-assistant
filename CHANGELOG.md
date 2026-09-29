@@ -33,6 +33,9 @@ live Chat app, and what is still unverified against reality).
 - **"Download selected" was pressed but nothing arrived.** The fetcher now tries a click, then
   Enter, then Space, a few seconds each, and takes the PDF from wherever it lands: a download on
   the page, a download in a tab it opens, or a PDF that tab shows. Tabs it opened are closed.
+- **The download arrived, then vanished**: "Download selected" opens a blank tab that starts the
+  download and closes itself, taking the file with it. The fetcher now keeps the download's address
+  and, if the file is gone, fetches it again from there with the same session (Google hosts only).
 
 ### Changed
 - **The fetcher's first run takes only the latest document** (Robin): August's today, then
