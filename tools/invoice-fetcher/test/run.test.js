@@ -39,6 +39,7 @@ function fakeTickPage(rows = REAL_ROWS, dir) {
   const ticked = new Set();
   let pending = null;
   const box = i => ({
+    isVisible: async () => true,
     isChecked: async () => ticked.has(i),
     check: async () => { ticked.add(i); },
     uncheck: async () => { ticked.delete(i); },
@@ -53,7 +54,8 @@ function fakeTickPage(rows = REAL_ROWS, dir) {
       if (sel === SELECTORS.selectableRow) {
         return { count: async () => page.rows.length, nth: i => ({ innerText: async () => page.rows[i], locator: () => ({ first: () => box(i) }) }) };
       }
-      return { count: async () => page.rows.length, nth: box };
+      // The column/filter panels' checkboxes: hidden, ticked, and never to be touched.
+      return { count: async () => 1, nth: () => ({ isVisible: async () => false, isChecked: async () => true, uncheck: async () => { throw new Error('touched a hidden panel checkbox'); } }) };
     },
     getByRole: () => ({ first: () => ({ click: async () => {
       const picked = [...ticked].map(i => page.rows[i]);
@@ -115,7 +117,7 @@ test('if the first download fails, the next run still starts from the latest, no
 test('Your Company\'s page: ticks one row at a time, header ignored, saved as a statement', async () => {
   const { config, outputDir, sent, mailer, page } = setup(REAL_ROWS, { tick: true });
   const result = await run({ config, page, mailer, log: quiet, now: () => NOW });
-  assert.deepEqual(result.saved, ['Google Cloud statement 2026-08-31.pdf']);
+  assert.deepEqual(result.saved, ['Google Cloud statement 2026-08-31.pdf'], 'hidden ticked checkboxes elsewhere in the frame are left alone');
   assert.deepEqual(page.downloads, [['August 31, 2026 Statement £1.74']], 'exactly one row ticked, the right one');
   const saved = fs.readFileSync(path.join(outputDir, 'Google Cloud statement 2026-08-31.pdf'), 'latin1');
   assert.match(saved, /August 31, 2026/);

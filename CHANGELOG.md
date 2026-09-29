@@ -24,6 +24,9 @@ live Chat app, and what is still unverified against reality).
 - **Google signed the fetcher's profile out when a run used headless Chrome**: it treats a
   headless browser on a signed-in profile as a stolen session. Runs now use a real Chrome window
   placed off-screen, never headless.
+- **The first real run timed out clearing checkboxes.** Before ticking a row it unticked every
+  ticked checkbox in the frame, including hidden ones in the page's column panel, which can't be
+  clicked. It now only touches the table's own rows.
 
 ### Changed
 - **The fetcher's first run takes only the latest document** (Robin): August's today, then

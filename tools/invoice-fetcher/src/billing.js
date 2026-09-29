@@ -97,10 +97,12 @@ async function downloadByTicking(page, candidate, config) {
   }
   if (!target) throw new FetchError('layout', `${candidate.fileName}: its row is no longer on the page.`);
 
-  // Anything already ticked (a previous attempt, "select all") would come along in the download.
-  const boxes = frame.locator(SELECTORS.checkbox);
-  for (let i = 0, n = await boxes.count(); i < n; i++) {
-    if (await boxes.nth(i).isChecked().catch(() => false)) await boxes.nth(i).uncheck({ timeout });
+  // Any row already ticked (a previous attempt, "select all" in the header row) would come along
+  // in the download. Only the table's own rows: the frame also has hidden, ticked checkboxes in
+  // its column and filter panels, which can't be clicked and don't belong to the download.
+  for (let i = 0, n = await rows.count(); i < n; i++) {
+    const other = rows.nth(i).locator(SELECTORS.checkbox).first();
+    if (await other.isVisible().catch(() => false) && await other.isChecked().catch(() => false)) await other.uncheck({ timeout });
   }
   const box = target.locator(SELECTORS.checkbox).first();
   await box.check({ timeout });
