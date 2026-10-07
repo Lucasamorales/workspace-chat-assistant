@@ -9,6 +9,30 @@ live Chat app, and what is still unverified against reality).
 
 ---
 
+## 2026-10-07
+
+### Fixed
+- **No scheduled reminder could be delivered.** The first real run (Docusign, 5th working day)
+  failed for everyone: Buddy asked Google for each person's DM by email address, and Google refuses
+  that for an app ("Service account authentication doesn't support access to user information
+  using email aliases"). Buddy now remembers, from every DM a person sends it, their Chat id and
+  that DM (`core__people`), and delivers reminders there. If that DM stops working it asks Chat
+  for the current one by id, which an app may do. Nobody is looked up by email any more, and no new
+  permission was needed.
+- A reminder that can't be delivered is now a counted skip with a reason someone can act on
+  ("has not messaged Buddy yet (one message in a DM is enough)") instead of an error.
+
+### Changed
+- **To get reminders, a person must have written to Buddy once in a DM after this deploy.**
+  Earlier messages were not recorded, so everyone on a receipt's list needs to say hello again.
+- Today's reminders count as sent (a reminder is recorded when it is handed over), so the next ones
+  go out on Friday 9 October as "Reminder 2 of 3". `/receipts` shows what is pending meanwhile.
+
+### Deployed
+- Nothing yet. Unverified against reality: a reminder actually arriving (BACKLOG I4b).
+
+---
+
 ## 2026-09-29
 
 ### Changed

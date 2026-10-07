@@ -57,7 +57,7 @@ function tasksModule(executed, state) {
   };
 }
 
-function setup(claudeScript, { connected = true, reason, now, grants } = {}) {
+function setup(claudeScript, { connected = true, reason, now, grants, people } = {}) {
   const store = core.createMemoryStore();
   const chat = fakeChat();
   const executed = [];
@@ -83,6 +83,7 @@ function setup(claudeScript, { connected = true, reason, now, grants } = {}) {
     makeModuleContext: core.createContextFactory({ store, sealer: core.createLocalSealer(), env: {}, log: quietLog }),
     defer: p => background.push(p),
     ...(grants ? { grants } : {}),
+    ...(people ? { people } : {}),
     ...(now ? { now } : {}),
   });
   const settle = async () => { while (background.length) await background.shift(); };
@@ -473,4 +474,21 @@ test('a long "approve all" shows progress instead of sitting still until the end
   });
   assert.ok(midBatch.length >= 1, 'the card showed the batch part-way through, not only once finished');
   assert.equal(chat.log.filter(l => l.op === 'post').at(-1).text, 'All six done.');
+});
+
+// Scheduled reminders are delivered to the DM Buddy remembers, because an app can't look a person
+// up by email. This is where it learns it: from the person's own messages.
+test('a DM teaches Buddy where to find that person later; a space message does not', async () => {
+  const store = core.createMemoryStore();
+  const people = core.createPeople({ store });
+  const { handle, settle } = setup([], { people });
+  await handle(message(REMY, SPACE, '/help'));
+  await settle();
+  assert.equal(await people.find('remy@example.com'), null, 'a team space is not their DM');
+
+  await handle(message({ ...ROBIN, email: 'Robin@Example.com' }, DM, '/help'));
+  await settle();
+  const robin = await people.find('robin@example.com');
+  assert.equal(robin.userId, '111');
+  assert.equal(robin.space, 'spaces/dm1');
 });

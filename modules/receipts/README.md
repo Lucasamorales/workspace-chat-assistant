@@ -80,8 +80,11 @@ To set up Google Cloud:
 - **Sees receipts and presses the buttons:** `BUDDY_ACCESS_RECEIPTS`.
 - **Adds, changes and removes receipts:** `BUDDY_ROLE_RECEIPTS_ADMIN`.
 - **Is reminded:** each receipt's own list. Buddy delivers only to people on it who can use the
-  module *and* talk to Buddy, so a receipt's list can never reach past the access rule. Someone who
-  has never opened a DM with Buddy is skipped (Chat apps can't start one).
+  module *and* talk to Buddy, so a receipt's list can never reach past the access rule.
+- **Must have written to Buddy once, in a DM.** Buddy delivers a reminder to the DM it remembers
+  from the person's own messages: an app can't start a chat, and Google won't let it find one from
+  an email address. Someone it has not heard from is skipped, and the log says why
+  (`scheduled message not sent … has not messaged Buddy yet`). Any one message fixes it for good.
 
 ## Settings
 

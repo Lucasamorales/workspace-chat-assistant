@@ -60,8 +60,14 @@ delivers the notes by DM.
 - **Off unless configured.** With `BUDDY_SCHEDULER_EMAIL` empty, `/tasks` doesn't exist.
 - **Two checks per recipient.** A note reaches someone only if they may talk to Buddy *and* may use
   the module that wrote it.
-- **DMs only, and only existing ones.** A Chat app can't open a DM; people who have never messaged
-  Buddy are skipped and counted.
+- **DMs only, and only ones Buddy remembers.** A Chat app can't open a DM, and Google won't let an
+  app find one from an email address: `spaces.findDirectMessage` takes `users/<email>` only for a
+  user sign-in. The first real run (2026-10-07) failed on exactly that: "Service account
+  authentication doesn't support access to user information using email aliases". So Buddy keeps,
+  from each DM a person sends it, their Chat id and that DM's space (`core__people`), and delivers
+  there; if that space stops working it asks Chat for the current one by id, which an app may do.
+  Someone Buddy has not heard from is skipped and counted, with the reason. No directory lookup
+  and no new permission: resolving emails would need one, for a case "say hello once" already covers.
 - **Contained.** Each hook runs with the registry's timeout and try/catch; one failing module (or
   one failing receipt) doesn't stop the rest.
 - **Safe to run twice.** A reminder is recorded as sent when it's handed over, so a second run the
@@ -72,8 +78,10 @@ new invoker"): the invoker now exists, narrowly. The rollup can move onto it lat
 
 ## Still to check (live)
 
-- `spaces.findDirectMessage` with the app's own credentials, from a scheduled call.
-- The first real reminder, on the 5th working day of the month after it is switched on.
+- ~~`spaces.findDirectMessage` with the app's own credentials~~: checked 2026-10-07, and it does
+  not work by email (above). Fixed by remembering people; that fix is itself unverified live.
+- The first reminder that actually arrives: Friday 9 October at the earliest, for people who have
+  written to Buddy after the fix is deployed.
 
 ## Consequences
 

@@ -35,10 +35,13 @@ function createChatClient({ api }) {
     /**
      * The DM between Buddy and a person, for a message Buddy starts itself (a scheduled one).
      * Null when they have never opened a chat with Buddy: an app cannot start one on its own.
+     *
+     * By Chat user id, never by email: an app may not look anyone up by email address (that
+     * form is for user sign-ins only, and is refused outright for a service account).
      */
-    async findDirectMessage(userEmail) {
+    async findDirectMessage(userId) {
       try {
-        const res = await api.spaces.findDirectMessage({ name: `users/${userEmail}` });
+        const res = await api.spaces.findDirectMessage({ name: `users/${String(userId).split('/').pop()}` });
         return (res.data && res.data.name) || null;
       } catch (error) {
         if (error && (error.code === 404 || error.status === 404)) return null;

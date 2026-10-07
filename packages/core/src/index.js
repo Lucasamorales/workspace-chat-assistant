@@ -13,6 +13,7 @@ module.exports = {
   ...require('./agent-loop'),
   ...require('./usage'),
   ...require('./threads'),
+  ...require('./people'),
   ...require('./oauth-flows'),
   ...require('./context'),
   ...require('./claude'),

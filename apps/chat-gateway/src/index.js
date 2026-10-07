@@ -95,7 +95,9 @@ const chat = core.createChatClient({
 // Buddy's pixel-art images are served publicly by buddy-oauth.
 setAssetsUrl(`${config.OAUTH_BASE_URL}/assets`);
 
+const people = core.createPeople({ store });
 const handleEvent = createEventHandler({
+  people,
   registry,
   chat,
   store,
@@ -137,6 +139,7 @@ const allowed = core.parseRule(config.BUDDY_ALLOWED_USERS.join(','), 'BUDDY_ALLO
 const runTask = createTaskRunner({
   registry,
   chat,
+  people,
   makeModuleContext: core.createContextFactory({ store, sealer, log, access }),
   access,
   mayTalk: email => allowed({ email }) || Boolean(grants.mayTalk({ email })),

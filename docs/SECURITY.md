@@ -40,7 +40,9 @@
 - Message text, file contents, Asana tool results and OOO listings → Anthropic API (standard retention).
 - Asana token → only `mcp.asana.com`, from `buddy-bot`. Never sent to Anthropic.
 - Stored in Firestore (`eur3`): 30-day thread text, monthly usage counters, encrypted
-  Asana tokens, short-lived approval and login records.
+  Asana tokens, short-lived approval and login records, and for each person who has written to
+  Buddy in a DM their work email, Chat user id and that DM's space (`core__people`), so a scheduled
+  message can reach them. Nothing else about them, and nothing they said.
 
 ## Known limits
 - If Asana's token response doesn't include an email, the account-match check is skipped

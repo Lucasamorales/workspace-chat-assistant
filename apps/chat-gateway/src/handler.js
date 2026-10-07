@@ -67,7 +67,7 @@ function createEventHandler(deps) {
     registry, chat, store, threads, usage, oauthFlows, claude,
     makeModuleContext, allowedUsers, log, defer, appName = 'Buddy', now = () => Date.now(),
     grants = null, scopedCapUsd = null, moduleTuning = {}, subscriptionUsers = [],
-    defaultModel = null, defaultEffort = null,
+    defaultModel = null, defaultEffort = null, people = null,
   } = deps;
   const events = store.collection('core__events');
   const pendingCol = store.collection('core__pending');
@@ -813,6 +813,12 @@ function createEventHandler(deps) {
     if (!isAllowed(event.user)) {
       log.warn('user not on the allowlist', { user: event.user.name, type: event.type });
       return ['MESSAGE', 'ADDED_TO_SPACE'].includes(event.type) ? { text: `Sorry, ${appName} isn't switched on for you just yet.` } : {};
+    }
+
+    // Where this person's DM with Buddy is, for the day Buddy has something to tell them first
+    // (a scheduled reminder). In the background: it must never slow down or break a reply.
+    if (people && spaceKindOf(event.space) === 'DM') {
+      defer(people.remember({ email: event.user.email, userId: String(event.user.name || '').split('/').pop(), space: event.space.name }));
     }
 
     switch (event.type) {

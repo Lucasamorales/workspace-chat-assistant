@@ -213,7 +213,11 @@ needs no setting to start; reminders need the scheduler.
    & "C:\Program Files\Git\bin\bash.exe" infra/migrate-invoices-to-receipts.sh
    ```
    Then `/receipts` should list Docusign.
-3. **Add Google Cloud** in a DM with Buddy:
+3. **Everyone who should get reminders sends Buddy one message in a DM** ("hello" is enough), after
+   the deploy of 2026-10-07 or later. That is how Buddy learns where their DM is; it can't look
+   anyone up by email. Messages sent before that deploy don't count. If a reminder doesn't arrive,
+   the log line `scheduled message not sent` gives the reason per person.
+4. **Add Google Cloud** in a DM with Buddy:
    ```
    /receipts add Google Cloud | https://console.cloud.google.com/billing/XXXXXX-XXXXXX-XXXXXX/invoices?organizationId=000000000000 | 5th working day
    ```
