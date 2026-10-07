@@ -17,9 +17,12 @@ function splitText(text) {
 
 function createChatClient({ api }) {
   async function post(space, thread, body) {
+    // A reply names its thread. A message Buddy starts itself (a scheduled reminder) has none, and
+    // Chat refuses a reply option without one: "The request does not specify which message to
+    // reply to" (2026-10-07). So the option goes only with a thread.
     const res = await api.spaces.messages.create({
       parent: space,
-      messageReplyOption: 'REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD',
+      ...(thread ? { messageReplyOption: 'REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD' } : {}),
       requestBody: { ...body, ...(thread ? { thread: { name: thread } } : {}) },
     });
     return res.data.name;

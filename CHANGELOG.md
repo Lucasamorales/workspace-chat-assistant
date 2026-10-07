@@ -19,6 +19,9 @@ live Chat app, and what is still unverified against reality).
   that DM (`core__people`), and delivers reminders there. If that DM stops working it asks Chat
   for the current one by id, which an app may do. Nobody is looked up by email any more, and no new
   permission was needed.
+- **Then Chat refused the message itself**: "The request does not specify which message to reply
+  to". Every post asked to be a reply in a thread, and a message Buddy starts has no thread. The
+  reply option is now sent only with a thread. Found by the first live test after the fix above.
 - A reminder that can't be delivered is now a counted skip with a reason someone can act on
   ("has not messaged Buddy yet (one message in a DM is enough)") instead of an error.
 
