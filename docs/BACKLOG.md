@@ -241,7 +241,8 @@ remote-controlled browsers out.
 | I2 | `receipts` module: receipts added in chat, reminders on the due day, Downloaded / Remind me tomorrow, `/receipts` | live: a receipt was added in chat and came due on its 5th working day. The reminder card and its buttons arriving by themselves: I4b |
 | I3 | `infra/scheduler.sh`, `BUDDY_SCHEDULER_EMAIL`, deploy, add Google Cloud (RUNBOOK §5h) | scheduler and deploy done (it ran 2026-10-07); Google Cloud still to be added if wanted |
 | I4 | Confirm `spaces.findDirectMessage` works with the app's credentials from a scheduled call | done 2026-10-07: it does **not** work by email for an app, and the first real reminder failed. Fixed by remembering each person's Chat id and DM from their own messages (`core__people`) |
-| I4b | See a reminder actually arrive after that fix: each person messages Buddy once after the deploy, then the next due reminder (Fri 9 Oct at the earliest) | todo |
+| I4b | See a reminder actually arrive after that fix | done 2026-10-07: a test receipt due that day, the job run by hand, the reminder arrived in the DM (`sent: 1`). It took a second fix: a message Buddy starts must not be sent as a reply |
+| I4c | accounts@ messages Buddy once after the 2026-10-07 deploy, so Friday 9 Oct's Docusign reminder can reach them; then check the log shows `sent: 1` for it | todo |
 | I5 | After I3–I4 pass: `feat:` commit marking it verified | todo |
 | I6 | File names: tell people what to call the file, or rename it in the folder behind an approval card (needs Editor on the folder) | later — on hold (Robin) |
 | I9 | No commands needed: "receipts" shortcut, per-receipt buttons, "+ Add a receipt", add/change/stop receipts by asking (scoped, behind approval cards) | done — unverified live |

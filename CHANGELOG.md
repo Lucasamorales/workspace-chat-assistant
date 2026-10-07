@@ -32,7 +32,9 @@ live Chat app, and what is still unverified against reality).
   go out on Friday 9 October as "Reminder 2 of 3". `/receipts` shows what is pending meanwhile.
 
 ### Deployed
-- This fix: not yet. Unverified against reality: a reminder actually arriving (BACKLOG I4b).
+- Both fixes, the same day (`0653e95`). Verified live: a test receipt due that day, the job run by
+  hand, and the reminder arrived in the DM (`sent: 1, skipped: 0`). Still to see: the first
+  reminder on its own schedule to someone else, Friday 9 October (BACKLOG I4c).
 - What the failed run did prove, live: Cloud Scheduler fired at 09:00 Buenos Aires, buddy-bot
   accepted its signed call on `/tasks/daily`, and the `receipts` module (the 2026-09-29 rename is
   deployed) worked out that Docusign was due and handed the reminder over. Only the last step,

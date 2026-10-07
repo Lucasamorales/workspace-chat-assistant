@@ -80,8 +80,11 @@ new invoker"): the invoker now exists, narrowly. The rollup can move onto it lat
 
 - ~~`spaces.findDirectMessage` with the app's own credentials~~: checked 2026-10-07, and it does
   not work by email (above). Fixed by remembering people; that fix is itself unverified live.
-- The first reminder that actually arrives: Friday 9 October at the earliest, for people who have
-  written to Buddy after the fix is deployed.
+- ~~A reminder that actually arrives~~: seen 2026-10-07, with a test receipt due that day and the
+  job run by hand. It needed one more fix first: Chat refuses a reply option on a message with
+  no thread, so a message Buddy starts is sent as a plain new one.
+- The first reminder on its own schedule to someone other than the person testing: Friday
+  9 October (Docusign), once they have written to Buddy after the 2026-10-07 deploy.
 
 ## Consequences
 
