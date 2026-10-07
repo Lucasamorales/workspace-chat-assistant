@@ -231,15 +231,15 @@ Decision: `docs/decisions/0004-admin-module.md`. Config stays the floor; grants 
 
 ## Epic 13: `receipts` module (receipt reminders)
 
-Decision: `docs/decisions/0011-receipts-and-scheduled-tasks.md`. Built 2026-09-29, **not yet run
-for real**. A PC fetcher that downloaded the PDFs was built and dropped the same day: Google signs
+Decision: `docs/decisions/0011-receipts-and-scheduled-tasks.md`. Built 2026-09-29; live since, and the
+scheduled run fired for real on 2026-10-07 (delivery failed, see I4). A PC fetcher that downloaded the PDFs was built and dropped the same day: Google signs
 remote-controlled browsers out.
 
 | # | Item | Status |
 |---|---|---|
-| I1 | `onSchedule` hook, `/tasks/:task` route, caller-pinned OIDC check, DM delivery with both access checks | done — unverified live |
-| I2 | `receipts` module: receipts added in chat, reminders on the due day, Downloaded / Remind me tomorrow, `/receipts` | done — unverified live |
-| I3 | `infra/scheduler.sh`, `BUDDY_SCHEDULER_EMAIL`, deploy, add Google Cloud (RUNBOOK §5h) | todo — Robin |
+| I1 | `onSchedule` hook, `/tasks/:task` route, caller-pinned OIDC check, DM delivery with both access checks | live 2026-10-07: the scheduler fired at 09:00, its token was accepted and the task ran. Delivery is I4 |
+| I2 | `receipts` module: receipts added in chat, reminders on the due day, Downloaded / Remind me tomorrow, `/receipts` | live: a receipt was added in chat and came due on its 5th working day. The reminder card and its buttons arriving by themselves: I4b |
+| I3 | `infra/scheduler.sh`, `BUDDY_SCHEDULER_EMAIL`, deploy, add Google Cloud (RUNBOOK §5h) | scheduler and deploy done (it ran 2026-10-07); Google Cloud still to be added if wanted |
 | I4 | Confirm `spaces.findDirectMessage` works with the app's credentials from a scheduled call | done 2026-10-07: it does **not** work by email for an app, and the first real reminder failed. Fixed by remembering each person's Chat id and DM from their own messages (`core__people`) |
 | I4b | See a reminder actually arrive after that fix: each person messages Buddy once after the deploy, then the next due reminder (Fri 9 Oct at the earliest) | todo |
 | I5 | After I3–I4 pass: `feat:` commit marking it verified | todo |

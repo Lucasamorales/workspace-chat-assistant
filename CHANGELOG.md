@@ -29,7 +29,11 @@ live Chat app, and what is still unverified against reality).
   go out on Friday 9 October as "Reminder 2 of 3". `/receipts` shows what is pending meanwhile.
 
 ### Deployed
-- Nothing yet. Unverified against reality: a reminder actually arriving (BACKLOG I4b).
+- This fix: not yet. Unverified against reality: a reminder actually arriving (BACKLOG I4b).
+- What the failed run did prove, live: Cloud Scheduler fired at 09:00 Buenos Aires, buddy-bot
+  accepted its signed call on `/tasks/daily`, and the `receipts` module (the 2026-09-29 rename is
+  deployed) worked out that Docusign was due and handed the reminder over. Only the last step,
+  finding the DM, failed.
 
 ---
 
@@ -93,8 +97,7 @@ live Chat app, and what is still unverified against reality).
   `BUDDY_SCHEDULER_EMAIL` when set. `invoices` is in `MODULES`; it needs no setting to start.
 
 ### Deployed
-- Nothing yet. Unverified against reality: DM lookup from a scheduled call, and the first real
-  reminder (BACKLOG Epic 13).
+- Deployed after this entry was written; see 2026-10-07 for what the first scheduled run showed.
 
 ---
 
