@@ -11,6 +11,12 @@
 
 const ENTRY = /^(domain:[a-z0-9.-]+\.[a-z]{2,}|users\/\d+|[^\s@,]+@[a-z0-9.-]+\.[a-z]{2,})$/;
 
+/**
+ * Compile one access rule into a predicate over `{email, id}`.
+ *
+ * Throws on an empty rule or a malformed entry, naming `label` (the setting it came
+ * from), so a typo in configuration stops startup instead of locking someone out.
+ */
 function parseRule(raw, label) {
   const entries = String(raw || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
   if (!entries.length) throw new Error(`${label} is empty`);

@@ -13,6 +13,7 @@ const { validateModule } = require('./module-contract');
 const TOOL_NAME = /^[a-zA-Z0-9_-]{1,64}$/;
 const DEFAULT_TIMEOUTS = { hook: 20_000, tool: 60_000 };
 
+/** Run `promiseFn` but reject after `ms`, naming `label` in the error. */
 function withTimeout(promiseFn, ms, label) {
   let timer;
   return Promise.race([

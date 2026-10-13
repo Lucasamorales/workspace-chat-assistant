@@ -13,6 +13,7 @@ const MAX_RESULT_CHARS = 30_000;
 const MAX_APPROVAL_ITEMS = 20;
 const DECLINED = 'The user declined this action. It was not performed. Do not retry it unless they ask again.';
 
+/** The plain text of a Claude reply, joined across its text blocks. */
 function textOf(content) {
   return content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
 }
@@ -121,6 +122,10 @@ function withDefaults(opts) {
   return { maxSteps: 12, log: { info() {}, warn() {}, error() {} }, ...opts };
 }
 
+/**
+ * Start a conversation turn. Resolves with either a final answer or
+ * `status: 'needs_approval'` and the state to hand to `resumeLoop` later.
+ */
 function runLoop(opts) {
   return drive(withDefaults(opts), [...opts.messages], 0);
 }

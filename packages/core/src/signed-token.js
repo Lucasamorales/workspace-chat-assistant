@@ -11,11 +11,16 @@ function hmac(body, secret) {
   return crypto.createHmac('sha256', secret).update(body).digest('base64url');
 }
 
+/** Sign `payload` so it can be handed to a browser and trusted on return, for `ttlMs`. */
 function signToken(payload, secret, ttlMs, now = Date.now()) {
   const body = Buffer.from(JSON.stringify({ ...payload, exp: now + ttlMs })).toString('base64url');
   return `${body}.${hmac(body, secret)}`;
 }
 
+/**
+ * Return the payload of a token made by `signToken`, or throw if it is malformed,
+ * tampered with or expired. The signature is compared in constant time.
+ */
 function verifyToken(token, secret, now = Date.now()) {
   if (typeof token !== 'string' || token.length > 2048) throw new Error('malformed token');
   const parts = token.split('.');

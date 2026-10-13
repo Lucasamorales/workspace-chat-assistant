@@ -129,6 +129,10 @@ const FIELDS = [
 ];
 const SPACE_KINDS = ['DM', 'SPACE'];
 
+/**
+ * Check a module against the contract and throw, naming `source`, on the first
+ * thing wrong. Run for every module at startup, so a malformed module never loads.
+ */
 function validateModule(mod, source = 'module') {
   const fail = msg => { throw new Error(`${source}: ${msg}`); };
   if (!mod || typeof mod !== 'object') fail('must export an object');

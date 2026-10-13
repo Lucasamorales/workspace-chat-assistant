@@ -7,6 +7,13 @@ const crypto = require('crypto');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Conversation history per Chat thread.
+ *
+ * @param maxMessages  how many recent messages to keep
+ * @param maxChars     cap on the total size sent back to the model
+ * @param ttlDays      how long a thread is kept before Firestore deletes it
+ */
 function createThreads({ store, maxMessages, maxChars = 8000, ttlDays, now = () => Date.now() }) {
   const col = store.collection('core__threads');
   const id = threadKey => crypto.createHash('sha256').update(threadKey).digest('hex');

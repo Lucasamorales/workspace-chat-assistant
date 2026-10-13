@@ -26,6 +26,10 @@ function fromFirestore(value) {
   return out;
 }
 
+/**
+ * The storage interface over Firestore. Timestamps are converted back to Dates on
+ * the way out, so callers never see a Firestore type.
+ */
 function createFirestoreStore(db) {
   return {
     collection(name) {
@@ -80,6 +84,10 @@ function createFirestoreStore(db) {
   };
 }
 
+/**
+ * The same interface held in memory, for tests and local runs. Values are copied in
+ * and out, so a caller cannot change stored data by mutating what it read.
+ */
 function createMemoryStore() {
   const collections = new Map();
   const clone = v => (v === undefined ? v : structuredClone(v));

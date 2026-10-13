@@ -2,6 +2,10 @@
 
 const MAX_TEXT = 4000; // Chat's limit is 4096 characters; keep headroom
 
+/**
+ * Split a long reply into chunks Chat will accept, breaking on a line boundary where
+ * one falls in the second half of the chunk.
+ */
 function splitText(text) {
   const chunks = [];
   let rest = String(text);
@@ -15,6 +19,12 @@ function splitText(text) {
   return chunks;
 }
 
+/**
+ * The Chat calls Buddy makes as itself: posting text and cards, replacing a message,
+ * finding a person's DM and downloading an attachment.
+ *
+ * @param api  an authenticated `googleapis` Chat client
+ */
 function createChatClient({ api }) {
   async function post(space, thread, body) {
     // A reply names its thread. A message Buddy starts itself (a scheduled reminder) has none, and
