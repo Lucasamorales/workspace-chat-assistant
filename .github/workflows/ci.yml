@@ -1,0 +1,38 @@
+# Runs every workspace's tests on each pull request and on pushes to main and develop.
+#
+# The suite needs no services and no credentials: Google, Asana, Anthropic and Firestore are
+# all replaced by local stand-ins inside the tests, so a red build means the code changed.
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # package.json pins the engine to 22.x; Cloud Run runs the same major.
+          node-version: "22"
+          cache: npm
+
+      - name: Install
+        # npm ci installs exactly what package-lock.json pins, and fails if the two disagree.
+        run: npm ci
+
+      - name: Tests
+        run: npm test
