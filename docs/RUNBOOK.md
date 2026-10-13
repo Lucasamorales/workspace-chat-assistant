@@ -36,6 +36,16 @@ admin must approve it.
 
 ## 3. Deploy
 
+**Windows: run it with Git Bash, not WSL.** `bash` in PowerShell resolves to
+`C:\WINDOWS\system32\bash.exe`, which is WSL — it has its own `HOME`, so gcloud there has no
+credentials and reports "no active account selected" however many times you log in on the Windows
+side. The script now refuses to run under WSL and says this. Use:
+
+```
+& "C:\Program Files\Gitbinbash.exe" infra/deploy.sh
+```
+
+
 ```bash
 git commit -am "…"      # deploy refuses uncommitted changes
 bash infra/deploy.sh
@@ -65,6 +75,18 @@ Saving this switches traffic from the old bot to Buddy. To roll back, put the ol
 (`https://legacy-chat-bot-000000000000.europe-west1.run.app`) until the legacy bot is removed.
 
 ## 5. Acceptance checklist
+
+**Do this one first.** Asana's rarely-used tools are deferred and looked up with the API's
+tool-search tool, which has never run against a live call. If the API rejects it, **every** Asana
+request fails, not just the deferred ones:
+
+- [ ] "What's due for me this week?" → a normal answer. An error here is the tool-search tool, not
+      Asana: the fix is to stop deferring (`ASANA_TOOLS` naming every tool, or one commit in
+      `packages/core/src/claude.js`). Check the logs for `invalid_request_error`
+- [ ] `/asana tools` → "keeps to hand (13)" and "Another 18 Asana actions exist". A much bigger
+      first number means the patterns don't fit this workspace's tool names — set `ASANA_TOOLS`
+      from this output
+- [ ] Ask for something unusual ("show me my portfolios") → still works, via a lookup
 
 In a DM with Buddy:
 - [ ] `hello` → a reply replaces "_Hmm, give me a sec…_"
@@ -158,6 +180,10 @@ gcloud projects add-iam-policy-binding your-gcp-project --member="serviceAccount
 - [ ] Change a line in a policy doc → `/manual reindex` → "1 updated", and the new answer is used
 - [ ] A non-admin gets "only admins" for reindex, but can still ask questions
 - [ ] Compare three answers against the old Internal-RAG widget before retiring it
+- [ ] Ask the same question twice, worded differently the second time → the second answer comes
+      back instantly and identically (the answer cache), and the logs say `manual answered from cache`
+- [ ] `/manual reindex` → ask it a third time → it goes to Claude again, because a new index
+      retires the cached answers
 
 ## 5f. Admin module check
 
@@ -170,6 +196,46 @@ gcloud projects add-iam-policy-binding your-gcp-project --member="serviceAccount
 - [ ] "remove <colleague>'s kudos access" → card → **Approve** → they lose it
 - [ ] Revoke someone listed in `infra/config.env` → Buddy says it's set in the file; they keep it
 - [ ] A non-admin has no `/access` command and cannot grant anything
+
+## 5h. Receipt reminders
+
+Decision: `docs/decisions/0011-receipts-and-scheduled-tasks.md`. `receipts` is in `MODULES` and
+needs no setting to start; reminders need the scheduler.
+
+1. **Scheduler (once).** From PowerShell:
+   ```powershell
+   & "C:\Program Files\Git\bin\bash.exe" infra/scheduler.sh
+   ```
+   Put the email it prints in `BUDDY_SCHEDULER_EMAIL` (`infra/config.env`), commit, deploy.
+2. **Once, after the deploy that renamed `invoices` to `receipts`:** copy what was saved under the
+   old name (the Docusign receipt, so far). It only copies, and is safe to run twice:
+   ```powershell
+   & "C:\Program Files\Git\bin\bash.exe" infra/migrate-invoices-to-receipts.sh
+   ```
+   Then `/receipts` should list Docusign.
+3. **Everyone who should get reminders sends Buddy one message in a DM** ("hello" is enough), after
+   the deploy of 2026-10-07 or later. That is how Buddy learns where their DM is; it can't look
+   anyone up by email. Messages sent before that deploy don't count. If a reminder doesn't arrive,
+   the log line `scheduled message not sent` gives the reason per person.
+4. **Add Google Cloud** in a DM with Buddy:
+   ```
+   /receipts add Google Cloud | https://console.cloud.google.com/billing/XXXXXX-XXXXXX-XXXXXX/invoices?organizationId=000000000000 | 5th working day
+   ```
+
+- [ ] `/receipts` → Google Cloud, "ready on the 5th working day", this month's status, and the link opens Google's Billing → Invoices page
+- [ ] `/receipts preview Google Cloud` → the reminder card: Open Google Cloud · Receipts folder · ✓ Downloaded · Remind me tomorrow
+- [ ] Type just `receipts` → the same card as `/receipts`, with Open / ✓ Downloaded per receipt and **+ Add a receipt**
+- [ ] "Add Adobe, it's ready on the 1st, here's the page: https://account.adobe.com/billing" → approval card
+      "Add a receipt: Adobe", Ready "1st of the month · next: 1 <month>" → **Approve** → Adobe is in `receipts`
+- [ ] "Adobe is ready on the 3rd working day now" → "Change a receipt: Adobe", Ready shows "(was 1st of the month…)"
+- [ ] "Add Canva, ready on the 2nd" (no link) → Buddy asks for the link; no card
+- [ ] "stop reminding me about Adobe" → "Stop reminders: Adobe" → **Approve** → gone from `receipts`
+- [ ] Press **✓ Downloaded** on the preview → "October done"; `/receipts` shows "downloaded by robin"
+- [ ] Someone without `receipts.admin` gets "Only receipts admins…" for `add`; someone without access has no `/receipts`
+- [ ] `gcloud scheduler jobs run buddy-daily --location=europe-west1 --project=your-gcp-project`
+      → the log line `scheduled task finished` (`sent`, `skipped`); a reminder only if a receipt is due and not done
+- [ ] An anonymous `curl -X POST <bot url>/tasks/daily` → 403
+- [ ] On the 5th working day of next month, at 09:00: the reminder arrives by itself
 
 ## 5c. Voice and look check
 
@@ -202,6 +268,22 @@ Deletes `legacy-chat-bot`, the ClickUp/old Asana/old state secrets, and removes 
 A cache hit rate below 50% means conversations are re-sending history at full price — worth
 looking at before anything else on the bill.
 
+Once more than one model has run, `/costs` also shows a **By model** block.
+
+### 6a-i. After a deploy that changes cost settings
+
+The settings only do something if they reach the service — they were not on `deploy.sh`'s list
+until 2026-09-24, so this is worth checking once:
+
+```bash
+gcloud run services describe buddy-bot --region=europe-west1 --project=your-gcp-project --format='value(spec.template.spec.containers[0].env)' | tr ',' '
+' | grep -E 'CACHE_TTL|MAX_OUTPUT|MAX_HISTORY|MODULE_TUNING|MODEL_PRICES|CLEAR_TOOL'
+```
+
+- [ ] Every setting you edited in `infra/config.env` appears
+- [ ] Run the eval (`docs/EVAL.md`) before and after any change to `MODULE_TUNING` or
+      `CLEAR_TOOL_USES` — a cheaper wrong answer is not cheaper
+
 ## 6b. Who can use what
 
 `/access` in a DM with Buddy is the answer, not `infra/config.env` alone: access is the union of
@@ -213,6 +295,78 @@ every role, and anyone listed there.
 - Take it away: "remove riley's kudos access". If she still has it afterwards, it is in the file.
 - New starters also need the Chat app shared with them in the console (until visibility goes
   company-wide at the merge).
+
+## 6c. Experiment: Buddy on a Claude subscription (`develop` only)
+
+One person's Buddy answered by the Claude CLI on their own subscription, through
+`apps/claude-proxy` on their PC. Why and what it guarantees: `docs/decisions/0010-subscription-proxy.md`.
+Everyone else stays on the API throughout. PowerShell, from the repo root.
+
+This section is the quick way, for a first try. For a **new PC**, or to make it **permanent** — a
+task that survives reboots, and a named tunnel whose address never changes — follow
+`docs/SUBSCRIPTION-PROXY-SETUP.md` instead.
+
+**1. The shared secret — once.** Written by node, not PowerShell, which would add a line ending:
+
+```powershell
+New-Item -ItemType Directory -Force "$HOME\.buddy" | Out-Null
+node -e "require('fs').writeFileSync(require('os').homedir()+'/.buddy/proxy-secret.txt', require('crypto').randomBytes(32).toString('hex'))"
+gcloud secrets create claude-proxy-secret --replication-policy=automatic --data-file="$HOME\.buddy\proxy-secret.txt" --project=your-gcp-project
+gcloud secrets add-iam-policy-binding claude-proxy-secret --member=serviceAccount:buddy-bot@your-gcp-project.iam.gserviceaccount.com --role=roles/secretmanager.secretAccessor --project=your-gcp-project
+```
+
+**2. Check the account can't bill per use.** In Claude's settings, extra usage must be **off**. The
+proxy refuses to run while it is on; that is the rule that makes "no pay-per-use" hold.
+
+**3. Start the proxy** and leave the window open:
+
+```powershell
+$env:CLAUDE_PROXY_SECRET_FILE = "$HOME\.buddy\proxy-secret.txt"
+node apps/claude-proxy/src/index.js
+```
+
+- [ ] It prints `proxy listening` with the path and version of `claude.exe`
+
+**4. A tunnel to it**, so Cloud Run can reach `127.0.0.1:8787`. Quickest, no account needed — the
+URL changes on every restart, and each change needs a redeploy:
+
+```powershell
+cloudflared tunnel --url http://127.0.0.1:8787
+```
+
+A named Cloudflare tunnel (needs a domain on Cloudflare) or Tailscale Funnel gives a URL that
+stays the same. Whichever: only the proxy's port goes through it, and nothing answers without the
+secret.
+
+**5. Point buddy-bot at it** in `infra/config.env`, commit, deploy from `develop`:
+
+```
+CLAUDE_PROXY_USERS=robin@example.com
+CLAUDE_PROXY_URL=https://<the tunnel's address>
+```
+
+Deploying from `develop` replaces `main`'s build for everyone, so keep `develop` up to date with
+`main` first. Everyone not listed is answered by the API as before.
+
+More than one account (comma-separated) works, each with its own permissions exactly as set by
+`BUDDY_ACCESS_*` and `BUDDY_ROLE_*`; the proxy keeps their conversations in separate processes.
+They all draw on the **one** subscription the CLI is logged in with — its window is shared.
+
+**6. Check it:**
+
+- [ ] In the proxy window: `request`, `starting a session`, `cli ready` with `authSource: "none"`, `request answered`
+- [ ] "what's due for me this week?" → an answer, and `/costs` shows **On the subscription**
+- [ ] Create a task → approval card → Approve → the proxy logs `resuming a held session`, not `replaying`
+- [ ] Stop the proxy, send a message → *"The subscription proxy couldn't answer: the proxy is not
+      reachable"*. Nothing is answered through the API instead.
+- [ ] Someone not listed still gets answers as usual
+
+**Turning it off:** empty `CLAUDE_PROXY_USERS`, deploy. The proxy settings and secret leave the
+service with it.
+
+**Reading the logs:** `apps/claude-proxy/logs/proxy-<date>.jsonl`, one line per step — see
+`apps/claude-proxy/README.md`. `replaying: no live session holds these tool calls` and
+`guard refused the session` are the two lines worth searching for first.
 
 ## 7. Everyday operations
 

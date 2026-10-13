@@ -8,8 +8,26 @@
 
 const { createCostsSheet } = require('./sheet');
 const {
-  groupBy, byTool, waste, weeklyRows, weekOf, totals, money, round, spending, conversations,
+  groupBy, byTool, waste, weeklyRows, weekOf, totals, money, round, spending, conversations, subscription, isSubscription,
 } = require('./report');
+
+const percent = share => (share === null || share === undefined ? '?' : `${Math.round(share * 100)}%`);
+
+/** The experiment's block: window used, not dollars, and what the API would have charged. */
+function subscriptionLines(s) {
+  if (!s) return [];
+  const resets = s.resetsAt ? ` · resets ${new Date(s.resetsAt * 1000).toISOString().slice(11, 16)} UTC` : '';
+  return [
+    '',
+    '**On the subscription** (experiment)',
+    `${s.requests} requests · ${percent(s.fiveHour)} of the 5-hour window · ${percent(s.sevenDay)} of the week${resets}`,
+    `${count(s.inputTokens)} in / ${count(s.outputTokens)} out · ${(s.ms / s.requests / 1000).toFixed(1)}s each`
+      + `${s.cacheHitRate === null ? '' : ` · cache ${percent(s.cacheHitRate)}`}`,
+    `Would have cost **${money(s.apiEquivalentUsd)}** on the API · ${money(s.apiEquivalentUsd / s.requests)} each`
+      + `${s.failed ? ` · ${s.failed} failed` : ''}`,
+    ...(s.usingOverage ? ['⚠️ The last reply reported overage billing — the proxy should have refused it.'] : []),
+  ];
+}
 
 const DEFAULT_TZ = 'America/Argentina/Buenos_Aires';
 const STATE = 'state';
@@ -26,6 +44,8 @@ const pad = (s, n) => String(s).padEnd(n).slice(0, n);
 // cost report that reads "500.000 characters" in one place and "500,000" in another is a bug.
 const count = n => Number(n || 0).toLocaleString('en-GB');
 const shortName = email => String(email || '').split('@')[0];
+// "claude-haiku-4-5" → "haiku-4-5"; a column of identical "claude-" prefixes reads as noise.
+const shortModel = model => String(model || 'default').replace(/^claude-/, '');
 
 function createCostsModule({ usage, sheetsApi, now = () => new Date() } = {}) {
   let api = sheetsApi;
@@ -52,13 +72,20 @@ function createCostsModule({ usage, sheetsApi, now = () => new Date() } = {}) {
     if (!recorded.length) return { title: `Costs ${label}`, text: 'Nothing recorded yet.' };
 
     // Conversations and other spend are counted apart, so "cost per request" stays a figure
-    // about conversations rather than an average of two different things.
-    const events = conversations(recorded);
+    // about conversations rather than an average of two different things. Subscription requests
+    // (experiment 0010) are apart too: they cost no dollars, and would flatter the API's average.
+    const talks = conversations(recorded);
+    const events = talks.filter(e => !isSubscription(e));
+    const onSubscription = subscriptionLines(subscription(talks));
     const spent = spending(recorded);
     if (!events.length) {
       return {
         title: `Costs ${label}`,
-        text: ['No conversations yet.', ...spent.map(s => `${s.module} ${s.kind}: ${money(s.usd)}`)].join('\n'),
+        text: [
+          onSubscription.length ? 'No API conversations yet.' : 'No conversations yet.',
+          ...spent.map(s => `${s.module} ${s.kind}: ${money(s.usd)}`),
+          ...onSubscription,
+        ].join('\n'),
       };
     }
 
@@ -78,6 +105,12 @@ function createCostsModule({ usage, sheetsApi, now = () => new Date() } = {}) {
       ...modules.map(m => `\`${pad(m.name, 12)} ${pad(money(m.usd), 8)}\` ${m.requests} requests`),
     ];
 
+    // Only worth a block when more than one model ran: otherwise it repeats the configured model.
+    const models = groupBy(events, 'model');
+    if (models.length > 1) {
+      lines.push('', '**By model**', ...models.map(m => `\`${pad(shortModel(m.name), 14)} ${pad(money(m.usd), 8)}\` ${m.requests} requests`));
+    }
+
     if (w.requests) {
       lines.push('', `**Wasted** ${money(w.usd)} on ${w.requests} requests that produced nothing`
         + ` (${w.byOutcome.map(o => `${o.requests} ${o.name}`).join(', ')})`);
@@ -90,6 +123,7 @@ function createCostsModule({ usage, sheetsApi, now = () => new Date() } = {}) {
       lines.push('', '**Outside Claude**', ...spent.map(s => `\`${pad(`${s.module} ${s.kind}`, 20)} ${pad(money(s.usd), 8)}\``
         + ` ${count(s.units)} characters`));
     }
+    lines.push(...onSubscription);
     return { title: `Costs ${label}`, text: lines.join('\n') };
   }
 

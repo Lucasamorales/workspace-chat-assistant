@@ -12,9 +12,12 @@ Buddy is a small core plus independent **modules**: `assistant`, `basics`, `file
 and tests, so a change to one can't break another, and any of them can be switched off without
 touching the rest. What is deployed and what is still unproven: [backlog](docs/BACKLOG.md).
 
-> **Status:** pilot, live as the Chat app **Buddy-Asana** for robin@ and remy@. Kudos is being
-> tested against a copy of the Kudos Sheet. The app will be renamed **Buddy** for the whole team
-> once Kudos and OOO are ready. What changed and when: [CHANGELOG.md](CHANGELOG.md).
+> **Nothing is preconfigured.** The repository holds no credentials and points at no live
+> service. "Buddy", the robot avatar, `example.com`, the people named in examples and tests, and
+> every project, sheet and space ID in [`infra/config.env`](infra/config.env) are placeholders.
+> To run it you bring your own Google Cloud project, Google Workspace, Anthropic key and (for
+> the Asana module) Asana app: [docs/RUNBOOK.md](docs/RUNBOOK.md) is the step-by-step.
+> What changed and when: [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -94,6 +97,7 @@ Reads (searching tasks, "what's due today") run without asking. Deletes are mark
 | `/access [module]` | Admins: who has been given access from chat |
 | `/manual [reindex|check]` | What Buddy has read from the team member manual (admins re-read it) |
 | `/costs [week|waste|tools|sheet|check]` | Admins: what Buddy costs, by person, module and tool |
+| `/receipts [done\|later <receipt>]` | Receipts due this month, with links; reminds you when one is ready. Typing **receipts** works too, and admins add or change receipts by just saying so |
 
 ---
 
@@ -109,7 +113,7 @@ Google Chat allows. Changing any of this changes personality only, never behavio
 | **Pixel-art images** | `apps/oauth-gateway/public/`, served at `https://buddy-oauth-…/assets/<file>` | Avatar (512 px on orange), neutral/happy/thinking faces (256 px), animated idle/talking/thinking GIFs |
 | **Card faces** | `MOOD_IMAGES` in `cards.js` | Thinking on review cards, happy on success and module replies, neutral on notices |
 | **Brand colour** | `BRAND_ORANGE` in `cards.js` | `#F47A2A` on the main button of each card |
-| **Chat app avatar** | Chat app console → Avatar URL | `https://buddy-oauth-000000000000.europe-west1.run.app/assets/buddy-avatar.png` |
+| **Chat app avatar** | Chat app console → Avatar URL | `https://<your OAuth gateway URL>/assets/buddy-avatar.png` |
 
 Google Chat limits: no custom fonts, sizes or backgrounds. Style comes from images, emoji,
 button colours and wording. The Asana connect pages are normal web pages, so they use the full
@@ -128,6 +132,8 @@ Google Chat ──(signed request)──► buddy-bot  (Cloud Run, private: only
                                      └── Cloud KMS ─────────────── encrypts Asana tokens
 
 Browser ──► buddy-oauth (Cloud Run, public: only the "connect your account" pages)
+
+Cloud Scheduler ──(signed as buddy-scheduler)──► buddy-bot /tasks/daily ── modules' onSchedule → Chat DMs
 ```
 
 1. Google Chat sends each message to **buddy-bot** with a signed token; Cloud Run IAM and the
@@ -150,6 +156,8 @@ apps/
     src/voice.js         Buddy's tone of voice (instructions for Claude)
   oauth-gateway/       buddy-oauth: /auth/<module>/start and /callback, plus Buddy's images at /assets
     public/              pixel-art avatar, faces and GIFs
+  claude-proxy/        experiment, develop only: one person's Buddy answered on a Claude
+                       subscription, from their PC (docs/decisions/0010-subscription-proxy.md)
 packages/
   core/                shared building blocks — the only code modules and apps share
     src/agent-loop.js    Claude tool loop with the approval pause/resume
@@ -170,6 +178,7 @@ modules/
   admin/               grants module access from chat (config stays the floor)
   manual/              team member manual: Drive → embeddings → grounded answers
   costs/               what Buddy spends, by person, module and tool (admins)
+  receipts/            reminds people when a receipt is ready to download, with a link to it
 infra/                 setup, deploy and decommission scripts; config.env; Cloud Build
 docs/                  runbook, security model, backlog, decisions,
                        BUILDING-FOR-BUDDY.md (rules for tools built outside this repo)
@@ -180,18 +189,19 @@ legacy/bot-rev23/     the original bot, kept read-only for reference
 
 ## Modules
 
-| Module | Where | Who (default) | Needs | Stores |
+| Module | Where | Who (in the example config) | Needs | Stores |
 |---|---|---|---|---|
-| **assistant** | DMs + spaces | robin@, remy@ | — | — (free-form chat with Claude; this rule decides who can chat) |
+| **assistant** | DMs + spaces | named people | — | — (free-form chat with Claude; this rule decides who can chat) |
 | **basics** | DMs + spaces | everyone @example.com | — | — |
 | **files** | DMs + spaces | everyone @example.com (needs assistant) | — | nothing (files are processed in memory) |
-| **asana** | DMs only | robin@, remy@ (needs assistant) | `ASANA_CLIENT_ID`, `ASANA_CLIENT_SECRET` | `m_asana__tokens` (KMS-encrypted) |
-| **kudos** | spaces (votes), DMs (`/kudos`) | pilot: robin@, remy@; admins for setup commands | `KUDOS_SHEET_ID`, `KUDOS_SPACES` | appends to the Kudos Google Sheet; leadership list in `m_kudos__settings` |
+| **asana** | DMs only | named people (needs assistant) | `ASANA_CLIENT_ID`, `ASANA_CLIENT_SECRET` | `m_asana__tokens` (KMS-encrypted) |
+| **kudos** | spaces (votes), DMs (`/kudos`) | named people; admins for setup commands | `KUDOS_SHEET_ID`, `KUDOS_SPACES` | appends to the Kudos Google Sheet; leadership list in `m_kudos__settings` |
 | **ooo** | DMs + spaces | everyone @example.com | `OOO_CALENDAR_ID`, `OOO_READ_AS` | nothing (read-only) |
-| **leave** | DMs only | pilot: robin@, remy@; the accounts team at cutover (needs assistant) | `LEAVE_TEAM_EMAIL`, domain-wide delegation | each person's shift and display name in `m_leave__profiles` |
-| **admin** | DMs only | `BUDDY_ACCESS_ADMIN` — robin@, remy@ | — | grants in `core__grants` |
+| **leave** | DMs only | named people, meant for the accounts team (needs assistant) | `LEAVE_TEAM_EMAIL`, domain-wide delegation | each person's shift and display name in `m_leave__profiles` |
+| **admin** | DMs only | `BUDDY_ACCESS_ADMIN`, named people | — | grants in `core__grants` |
 | **manual** | DMs + spaces | everyone @example.com (needs assistant); `manual.admin` to reindex | `MANUAL_FOLDER_ID`, Vertex AI, Drive folder shared with `buddy-bot` | index in `m_manual__index` |
-| **costs** | DMs only | `BUDDY_ACCESS_COSTS` — robin@, remy@ | `COSTS_SHEET_ID` (optional) | usage events in `core__usage_events` (90 days) |
+| **costs** | DMs only | `BUDDY_ACCESS_COSTS`, named people | `COSTS_SHEET_ID` (optional) | usage events in `core__usage_events` (90 days) |
+| **receipts** | DMs only | `BUDDY_ACCESS_RECEIPTS`, named people (can be asked in words, scoped); `receipts.admin` adds receipts | the scheduler, for reminders | receipts in `m_receipts__receipts`, who downloaded each month in `m_receipts__months` |
 
 ### Permissions per module
 Two layers, both checked on every event:
@@ -216,6 +226,13 @@ itself alone**, so someone with `asana` can say "create a task for Remy" without
 general-purpose chatbot: Claude gets only that module's tools and declines anything else, on a
 smaller monthly allowance (`MONTHLY_USD_CAP_SCOPED`). People with neither get a free "here's what
 I can help with" card. See `docs/decisions/0007-scoped-conversation.md`.
+
+**Which model answers** follows the person, not the tool a request ends up using. Someone with the
+assistant runs on the default (`MODEL`, `EFFORT`). Someone scoped to modules runs on the
+*strongest* model any of those modules needs, at that module's effort — a module with no
+`MODULE_TUNING` entry counts as the default — so a module that needs more is never answered with
+less. It is never switched mid-conversation: a prompt cache belongs to one model. Anything that
+changes model or effort goes through `docs/EVAL.md` first.
 
 **Formatting replies:** module text is escaped before it reaches a card, then `**bold**`,
 backtick `code` and `[text](https://link)` become HTML. Never put raw HTML in a reply — it is
@@ -264,8 +281,18 @@ npm test
 ```
 
 `npm test` runs every workspace's tests with Node's built-in runner. Tests use in-memory
-storage, a local encryption key and fake Chat/Claude/Asana clients — no cloud access or
-API keys needed.
+storage, a local encryption key and local stand-ins for Chat, Claude, Asana, Calendar, Vertex
+AI, Firestore and KMS: no cloud access or API keys needed, and nothing calls a live service.
+
+One script runs the same tests with coverage and writes a single report,
+`coverage/lcov.info` (run it from Git Bash or any Linux shell):
+
+```bash
+scripts/coverage.sh
+```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs `npm ci` and `npm test` on Node 22 for every
+pull request and every push to `main` or `develop`.
 
 Run one package's tests:
 
@@ -322,15 +349,23 @@ in Secret Manager and are mounted at deploy time.
 | `APP_NAME` | config.env | Name used in messages; match the Chat app name |
 | `MODULES` | config.env | Enabled modules, e.g. `basics,files,asana` |
 | `MODEL`, `EFFORT` | config.env | Claude model and effort level |
-| `MONTHLY_USD_CAP` | config.env | Per-user monthly spend limit |
-| `USD_PER_MTOK_IN` / `_OUT` | config.env | Prices used for the spend limit |
+| `MODULE_TUNING` | config.env | `module:model:effort` — what people scoped to that one module run on |
+| `MODEL_PRICES` | config.env | `model:in:out` per million tokens, so `/costs` prices each model |
+| `MONTHLY_USD_CAP` / `_SCOPED` | config.env | Per-user monthly spend limit; a smaller one for scoped people |
+| `USD_PER_MTOK_IN` / `_OUT` | config.env | Default prices, for any model not in `MODEL_PRICES` |
+| `MAX_OUTPUT_TOKENS`, `MAX_HISTORY_CHARS`, `CACHE_TTL` | config.env | Cost controls (`0009-cost-reduction.md`) |
+| `CLEAR_TOOL_USES` | config.env | Drop the oldest tool results in a long request; `0` is off |
+| `CLAUDE_PROXY_USERS`, `CLAUDE_PROXY_URL` | config.env | Experiment (`develop`): who is answered on a Claude subscription via the proxy; empty is off. RUNBOOK §6c |
+| `claude-proxy-secret` | Secret Manager | Experiment only: shared by `buddy-bot` and the proxy |
+| `BUDDY_SCHEDULER_EMAIL` | config.env | The account Cloud Scheduler signs `/tasks` calls as (`infra/scheduler.sh`); empty turns scheduled messages off |
 | `ASANA_CLIENT_ID` | config.env | Asana **MCP app** client ID (not secret) |
 | `anthropic-key` | Secret Manager | Anthropic API key |
 | `asana-mcp-client-secret` | Secret Manager | Asana MCP app client secret |
 | `buddy-state-secret` | Secret Manager | Signs connect links (generated by `setup.sh`) |
 
 Optional module settings: `ASANA_READONLY_TOOLS` (tools that may skip approval),
-`ASANA_REQUIRE_EMAIL_MATCH` (default `true`), `FILES_MAX_BYTES`, `FILES_MAX_TEXT_CHARS`.
+`ASANA_REQUIRE_EMAIL_MATCH` (default `true`), `FILES_MAX_BYTES`, `FILES_MAX_TEXT_CHARS`,
+`RECEIPTS_FOLDER_ID` (a Drive folder offered as a link on reminders), `RECEIPTS_TIMEZONE`.
 
 Services validate settings at startup and refuse to run with a missing or malformed value.
 
@@ -345,6 +380,8 @@ Services validate settings at startup and refuse to run with a missing or malfor
    |---|---|
    | `commands` | Slash commands; replies can be text or a card with buttons; `role` restricts a command |
    | `handleMessage` | Handle a message directly without Claude (e.g. a kudos vote); gets mentions, space and sender |
+   | `afterAnswer` | Learn from an answer your tools helped produce, in the background, after the reply |
+   | `onSchedule(ctx, task)` | Say something unprompted when Cloud Scheduler wakes Buddy (`daily`). Return `[{ to: [emails], reply }]`; Buddy sends it by DM, only to people who may use the module |
    | `roles` | Module roles such as `admin`; check with `ctx.hasRole('admin')` |
    | `needsConversation` | Set to `true` if the module only works through Claude, so people without assistant access don't see it |
    | `tools(ctx)` | Actions Claude can take; mark read-only ones with `needsApproval → false` |
@@ -386,4 +423,6 @@ Details: [CLAUDE.md](CLAUDE.md).
 | [docs/SECURITY.md](docs/SECURITY.md) | Threats, controls, data flows, known limits |
 | [docs/BACKLOG.md](docs/BACKLOG.md) | What's next: Kudos results, OOO, merge into one Buddy, operations |
 | [docs/decisions/](docs/decisions/) | Recorded decisions (scope, security, naming) |
+| [modules/receipts/README.md](modules/receipts/README.md) | Receipt reminders: how a month goes, commands, who gets what |
 | [legacy/bot-rev23/](legacy/bot-rev23/) | The original bot and its docs, for reference |
+| [LICENSE](LICENSE) | Proprietary: all rights reserved |

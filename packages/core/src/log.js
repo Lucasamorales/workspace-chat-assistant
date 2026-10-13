@@ -5,6 +5,10 @@
 
 const SENSITIVE_KEY = /token|secret|authorization|password|api[-_]?key|verifier|cookie|^code$|^sealed$/i;
 
+/**
+ * A copy of `value` with anything under a credential-looking key replaced, to any
+ * depth. Errors are reduced to their message and stack.
+ */
 function redact(value, depth = 0) {
   if (depth > 6 || value === null || typeof value !== 'object') return value;
   if (value instanceof Error) return { message: value.message, stack: value.stack };
@@ -16,6 +20,11 @@ function redact(value, depth = 0) {
   return out;
 }
 
+/**
+ * A logger that writes one JSON line per call, tagged with `component`.
+ *
+ * @param sink  where lines go; stdout by default, a collector in tests
+ */
 function createLogger(component, sink = line => process.stdout.write(line + '\n')) {
   const write = (severity, message, fields) => {
     sink(JSON.stringify({ severity, component, message, ...redact(fields || {}) }));

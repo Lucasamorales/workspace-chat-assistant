@@ -2,4 +2,8 @@ node_modules/
 .env
 .env.*
 *.log
-coverage/
+# Coverage output, except the one combined report that is kept in the repo
+coverage/*
+!coverage/lcov.info
+# The subscription proxy's experiment logs stay on the machine that ran it.
+apps/claude-proxy/logs/

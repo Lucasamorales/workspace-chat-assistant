@@ -80,6 +80,37 @@ function waste(events) {
   };
 }
 
+/**
+ * Experiment 0010: requests answered on a Claude subscription through the proxy.
+ *
+ * They cost nothing in dollars, so averaging them into the API's "cost per request" would make
+ * the API look cheaper than it is; they are counted apart. What they do use is the
+ * subscription's window — reported by the CLI itself — and what they *would* have cost on the
+ * API, which is the comparison the experiment is for.
+ */
+const isSubscription = event => event.backend === 'subscription';
+
+function subscription(events) {
+  const subs = events.filter(isSubscription);
+  if (!subs.length) return null;
+  const sum = key => subs.reduce((n, e) => n + (e[key] || 0), 0);
+  const latest = [...subs].sort((a, b) => String(a.at).localeCompare(String(b.at))).reverse().find(e => e.subscription);
+  const window = (latest && latest.subscription) || {};
+  return {
+    requests: subs.length,
+    failed: subs.filter(e => e.outcome === 'failed' || e.outcome === 'refused').length,
+    inputTokens: sum('inputTokens'),
+    outputTokens: sum('outputTokens'),
+    apiEquivalentUsd: sum('apiEquivalentUsd'),
+    ms: sum('ms'),
+    cacheHitRate: waste(subs).cacheHitRate,
+    fiveHour: window.fiveHour ?? null,
+    sevenDay: window.sevenDay ?? null,
+    resetsAt: window.resetsAt ?? null,
+    usingOverage: window.usingOverage ?? null,
+  };
+}
+
 /** The Monday of an event's week, in the reporting time zone, as YYYY-MM-DD. */
 function weekOf(iso, timeZone) {
   const parts = new Intl.DateTimeFormat('en-GB', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' })
@@ -131,5 +162,5 @@ function spending(events) {
 
 module.exports = {
   groupBy, byTool, waste, weeklyRows, weekOf, totals, money, round, EMPTY,
-  spending, conversations, isSpend,
+  spending, conversations, isSpend, subscription, isSubscription,
 };

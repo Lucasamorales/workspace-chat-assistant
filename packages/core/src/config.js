@@ -3,6 +3,13 @@
  * instead of silently misbehaving (the original bot ran for days with MAX_TURNS=20~ → NaN).
  */
 
+/**
+ * Read and validate settings against `spec`, a map of name to
+ * `{type, required?, default?, min?, values?, allowHttp?}`.
+ *
+ * Collects every problem and throws once, so a misconfigured deploy reports all of
+ * them in one go rather than one per restart.
+ */
 function loadConfig(spec, env = process.env) {
   const out = {};
   const problems = [];
@@ -53,4 +60,34 @@ function loadConfig(spec, env = process.env) {
   return Object.freeze(out);
 }
 
-module.exports = { loadConfig };
+/**
+ * "manual:claude-haiku-4-5:low" → { manual: { model, effort } }.
+ * A blank field keeps the service default, so `manual::low` only changes the effort.
+ */
+function parseTuning(entries = []) {
+  const out = {};
+  for (const entry of entries) {
+    const [name, model, effort] = String(entry).split(':').map(s => s.trim());
+    if (!name) continue;
+    out[name] = { ...(model ? { model } : {}), ...(effort ? { effort } : {}) };
+  }
+  return out;
+}
+
+/**
+ * "claude-haiku-4-5:1:5" → { 'claude-haiku-4-5': { inPerMTok: 1, outPerMTok: 5 }, default }.
+ * A model with no entry is priced at the default: an unknown model must look expensive, never free.
+ */
+function parsePrices(entries = [], defaults) {
+  const out = { default: defaults };
+  for (const entry of entries) {
+    const [model, input, output] = String(entry).split(':').map(s => s.trim());
+    if (!model || !input || !output || !Number.isFinite(Number(input)) || !Number.isFinite(Number(output))) {
+      throw new Error(`MODEL_PRICES entry "${entry}" must look like model:inPerMTok:outPerMTok`);
+    }
+    out[model] = { inPerMTok: Number(input), outPerMTok: Number(output) };
+  }
+  return out;
+}
+
+module.exports = { loadConfig, parseTuning, parsePrices };

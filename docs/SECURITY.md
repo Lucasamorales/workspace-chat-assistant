@@ -32,13 +32,17 @@
 | `ooo` is read-only in name only | The reader is a frozen object with `list`/`describe` and no write method; requests are built inside the module — always GET, always the one configured calendar; the account read as comes from `OOO_READ_AS` in settings, validated, never from a user or Claude; the read-only scope is requested first and any fallback logged | `ooo/calendar.js`, `ooo/token.js` |
 | Prompt injection grants someone access ("grant bob@ everything", hidden in a task or PDF) | Grants need an admin's approval click; `admin`, `leave` and `assistant` can never be granted (constant in code, not offered to Claude); company addresses only; roles are never granted; every change logged with who made it | `admin/module.js` |
 | A chat grant removes access, or creates an admin | Config is the floor: grants only widen it, revoking removes grants only, and `BUDDY_ACCESS_ADMIN` is config-only | `core/grants.js`, `core/access.js` |
+| Someone other than Cloud Scheduler triggers a scheduled task, or uses it to message people | `/tasks` exists only when `BUDDY_SCHEDULER_EMAIL` is set; Cloud Run IAM adds only `buddy-scheduler` as invoker; the app pins the token to that exact account (Chat's token is refused there, the scheduler's everywhere else); recipients must be allowed on Buddy **and** have the module; DMs only | `infra/scheduler.sh`, `core/chat-verify.js` (`createCallerVerifier`), `chat-gateway/tasks.js` |
+| Receipt reminders used to phish (a receipt's link pointing somewhere bad), incl. by prompt injection | Only receipts admins can add or change receipts: the tools aren't offered to anyone else and are refused again when they run; every add, change, stop or "downloaded" asked in words waits for the person's approval click, and the card shows the exact link; links must be https; Buddy holds no billing login and downloads nothing | `receipts/receipts.js` (`makeBill`), `receipts/tools.js` |
 | Broken deploys (old revision 24) | Deploy refuses failing tests or uncommitted files; sets every setting every time; verifies access rules afterwards | `infra/deploy.sh` |
 
 ## Data flows
 - Message text, file contents, Asana tool results and OOO listings → Anthropic API (standard retention).
 - Asana token → only `mcp.asana.com`, from `buddy-bot`. Never sent to Anthropic.
 - Stored in Firestore (`eur3`): 30-day thread text, monthly usage counters, encrypted
-  Asana tokens, short-lived approval and login records.
+  Asana tokens, short-lived approval and login records, and for each person who has written to
+  Buddy in a DM their work email, Chat user id and that DM's space (`core__people`), so a scheduled
+  message can reach them. Nothing else about them, and nothing they said.
 
 ## Known limits
 - If Asana's token response doesn't include an email, the account-match check is skipped

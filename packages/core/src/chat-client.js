@@ -2,6 +2,10 @@
 
 const MAX_TEXT = 4000; // Chat's limit is 4096 characters; keep headroom
 
+/**
+ * Split a long reply into chunks Chat will accept, breaking on a line boundary where
+ * one falls in the second half of the chunk.
+ */
 function splitText(text) {
   const chunks = [];
   let rest = String(text);
@@ -15,11 +19,20 @@ function splitText(text) {
   return chunks;
 }
 
+/**
+ * The Chat calls Buddy makes as itself: posting text and cards, replacing a message,
+ * finding a person's DM and downloading an attachment.
+ *
+ * @param api  an authenticated `googleapis` Chat client
+ */
 function createChatClient({ api }) {
   async function post(space, thread, body) {
+    // A reply names its thread. A message Buddy starts itself (a scheduled reminder) has none, and
+    // Chat refuses a reply option without one: "The request does not specify which message to
+    // reply to" (2026-10-07). So the option goes only with a thread.
     const res = await api.spaces.messages.create({
       parent: space,
-      messageReplyOption: 'REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD',
+      ...(thread ? { messageReplyOption: 'REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD' } : {}),
       requestBody: { ...body, ...(thread ? { thread: { name: thread } } : {}) },
     });
     return res.data.name;
@@ -31,6 +44,23 @@ function createChatClient({ api }) {
     postText: (space, thread, text) => post(space, thread, { text }),
 
     postCard: (space, thread, text, cardsV2) => post(space, thread, { text, cardsV2 }),
+
+    /**
+     * The DM between Buddy and a person, for a message Buddy starts itself (a scheduled one).
+     * Null when they have never opened a chat with Buddy: an app cannot start one on its own.
+     *
+     * By Chat user id, never by email: an app may not look anyone up by email address (that
+     * form is for user sign-ins only, and is refused outright for a service account).
+     */
+    async findDirectMessage(userId) {
+      try {
+        const res = await api.spaces.findDirectMessage({ name: `users/${String(userId).split('/').pop()}` });
+        return (res.data && res.data.name) || null;
+      } catch (error) {
+        if (error && (error.code === 404 || error.status === 404)) return null;
+        throw error;
+      }
+    },
 
     /** Replace a message's text; overflow goes into follow-up messages in the same thread. */
     async replaceText(messageName, space, thread, text) {

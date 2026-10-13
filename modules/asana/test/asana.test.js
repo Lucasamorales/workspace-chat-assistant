@@ -140,15 +140,31 @@ test('access removed on Asana\'s side turns into a Reconnect request, and stored
 
 /* ---------- the tool payload: what is loaded up front, and what is looked up ---------- */
 
-const MANY_TOOLS = [
-  { name: 'search_tasks', inputSchema: { type: 'object' }, annotations: { readOnlyHint: true } },
-  { name: 'get_task', inputSchema: { type: 'object' }, annotations: { readOnlyHint: true } },
-  { name: 'create_task', inputSchema: { type: 'object' } },
-  { name: 'update_task', inputSchema: { type: 'object' } },
-  { name: 'add_custom_field_setting', inputSchema: { type: 'object' } },
-  { name: 'duplicate_portfolio', inputSchema: { type: 'object' } },
-  { name: 'reorder_sections', inputSchema: { type: 'object' } },
+/**
+ * The tool names Asana's MCP server actually returns, not invented ones.
+ *
+ * This matters: the first version of the everyday list was tested against seven made-up names
+ * chosen so it looked like it worked, and against the real ones it deferred three tools
+ * out of thirty-nine. A test of a filter has to use the strings the filter will meet.
+ */
+const REAL_TOOL_NAMES = [
+  'get_workspace_agents', 'get_agent', 'get_attachments', 'get_portfolio', 'get_portfolios',
+  'get_items_for_portfolio', 'get_project', 'get_project_internal', 'get_projects', 'get_status_overview',
+  'search_tasks', 'get_task', 'get_task_stories', 'get_tasks', 'get_my_tasks', 'get_teams',
+  'search_objects', 'search_objects_internal', 'get_user', 'get_me', 'get_users', 'log_widget_event',
+  'create_task_preview_v4', 'search_tasks_preview', 'create_project_preview_v3',
+  'create_task_from_template', 'create_project_from_template', 'create_project_status_update',
+  'create_project', 'update_project', 'create_tasks', 'update_tasks', 'add_comment', 'delete_task',
+  'create_task_confirm', 'save_task_changes_confirm', 'create_project_confirm',
+  'create_project_confirm_populate', 'save_project_changes_confirm',
 ];
+
+const READ_ONLY = new Set(['search_tasks', 'get_task', 'get_tasks', 'get_my_tasks', 'get_me']);
+const MANY_TOOLS = REAL_TOOL_NAMES.map(name => ({
+  name,
+  inputSchema: { type: 'object' },
+  ...(READ_ONLY.has(name) ? { annotations: { readOnlyHint: true } } : {}),
+}));
 
 async function toolsetWith(settings = {}) {
   const env = { ...ENV, ...settings };
@@ -166,22 +182,63 @@ test('everyday tools are loaded; the long tail is deferred, not dropped', async 
   const ts = await toolsetWith();
 
   assert.ok(ts.loadedTools.includes('search_tasks'));
-  assert.ok(ts.loadedTools.includes('create_task'));
-  assert.ok(ts.deferredTools.includes('duplicate_portfolio'), 'rarely used, so not paid for on every request');
+  assert.ok(ts.loadedTools.includes('create_tasks'));
+  assert.ok(ts.loadedTools.includes('get_my_tasks'));
+  assert.ok(ts.deferredTools.includes('duplicate_portfolio') || ts.deferredTools.includes('get_portfolios'),
+    'rarely used, so not paid for on every request');
 
   const deferred = ts.definitions.filter(d => d.defer_loading).map(d => d.name);
   assert.deepEqual(deferred.sort(), ts.deferredTools.slice().sort());
   assert.equal(ts.definitions.length, MANY_TOOLS.length, 'every tool is still offered, deferred or not');
 
   // And a deferred tool still runs when Claude finds it.
-  assert.deepEqual(await ts.execute('duplicate_portfolio', {}), { content: 'duplicate_portfolio done', isError: false });
-  assert.equal(ts.needsApproval('duplicate_portfolio'), true, 'an unannotated tool still asks first');
+  assert.deepEqual(await ts.execute('get_portfolios', {}), { content: 'get_portfolios done', isError: false });
+  assert.equal(ts.needsApproval('get_portfolios'), true, 'an unannotated tool still asks first');
+});
+
+// The test that would have caught the loose patterns. A curation that keeps almost everything
+// costs the same as no curation at all, and says in the logs that it worked.
+test('the everyday list actually cuts the payload: most of Asana is deferred', async () => {
+  const ts = await toolsetWith();
+  assert.ok(ts.deferredTools.length > MANY_TOOLS.length / 2,
+    `only ${ts.deferredTools.length} of ${MANY_TOOLS.length} deferred — the patterns are matching too much`);
+  assert.ok(ts.loadedTools.length >= 8, 'but not so few that ordinary work needs a lookup every time');
+});
+
+// Asana offers its own preview → confirm flow for creating things. Buddy's approval card IS the
+// confirmation step, so loading those would put a second one in front of it.
+test('Asana own preview and confirm tools stay out of the loaded set', async () => {
+  const ts = await toolsetWith();
+  for (const name of ['create_task_preview_v4', 'create_task_confirm', 'save_task_changes_confirm']) {
+    assert.ok(ts.deferredTools.includes(name), `${name} should not be loaded up front`);
+  }
+  assert.ok(ts.loadedTools.includes('create_tasks'), 'the one-step tool is the one Buddy uses');
+});
+
+test('a pattern matches a whole tool name, never a fragment of one', () => {
+  const { splitTools } = require('../src/toolset');
+  const quiet = { warn() {}, info() {} };
+  // "add_comment" contains "me"; "get_attachments" contains "me" and starts with "get_".
+  const { loaded } = splitTools(MANY_TOOLS, '', quiet);
+  const names = loaded.map(t => t.name);
+  assert.ok(!names.includes('get_attachments'));
+  assert.ok(!names.includes('create_project_status_update'), 'not everyday, whatever words it contains');
+});
+
+test('a list that fits nothing loads everything rather than leaving Claude with two tools', () => {
+  const { splitTools } = require('../src/toolset');
+  const warnings = [];
+  const renamed = [{ name: 'tasks.search' }, { name: 'tasks.create' }, { name: 'projects.list' }, { name: 'users.me' }];
+  const { loaded, deferred } = splitTools(renamed, '', { warn: m => warnings.push(m), info() {} });
+  assert.equal(deferred.length, 0);
+  assert.equal(loaded.length, renamed.length);
+  assert.match(warnings.join(' '), /matched too little/);
 });
 
 test('ASANA_TOOLS names the list exactly, and unknown names are logged not obeyed', async () => {
-  const ts = await toolsetWith({ ASANA_TOOLS: 'get_task,reorder_sections,not_a_tool' });
-  assert.deepEqual(ts.loadedTools.sort(), ['get_task', 'reorder_sections']);
-  assert.ok(ts.deferredTools.includes('create_task'), 'anything not named is deferred');
+  const ts = await toolsetWith({ ASANA_TOOLS: 'get_task,get_teams,search_tasks,add_comment,not_a_tool' });
+  assert.deepEqual(ts.loadedTools.sort(), ['add_comment', 'get_task', 'get_teams', 'search_tasks']);
+  assert.ok(ts.deferredTools.includes('create_tasks'), 'anything not named is deferred');
 });
 
 test('if the list matches nothing, everything is loaded rather than nothing', async () => {

@@ -9,7 +9,286 @@ live Chat app, and what is still unverified against reality).
 
 ---
 
+## 2026-10-13
+
+### Infrastructure
+- **Tests for the five files that talk to outside services and had little or no coverage**: the
+  Vertex AI embeddings client, the two Google Calendar clients (`ooo`, `leave`), the Firestore
+  store and the KMS sealer. Each runs the real client code against a local stand-in with the
+  service's own request and reply shapes; nothing calls a live service. The Firestore and
+  in-memory stores, and the KMS and local sealers, are now held to the same set of tests, since
+  every other test runs on the in-memory ones. 344 tests become 429.
+- **`scripts/coverage.sh`** runs every workspace's tests and writes one report,
+  `coverage/lcov.info`, which is kept in the repo. 95.2% of lines in the files the tests load.
+- **CI.** `.github/workflows/ci.yml` runs `npm ci` and `npm test` on Node 22 for every pull
+  request and every push to `main` or `develop`. It needs no services or credentials.
+
+### Docs
+- **README no longer describes one deployment.** The pilot status line, the people named as
+  each module's users and the avatar URL are replaced by a note that nothing is preconfigured
+  and what you have to bring. It also covers the coverage script and CI.
+- **READMEs for the folders that had none**: both apps, `packages/core`, `infra` and `legacy`.
+- **Doc comments on the public functions of `@buddy/core`** that had none (23), saying what each
+  is for and what its less obvious parameters mean.
+- **`LICENSE`**: a proprietary, all-rights-reserved notice. There was no licence file.
+
+## 2026-10-07
+
+### Fixed
+- **No scheduled reminder could be delivered.** The first real run (Docusign, 5th working day)
+  failed for everyone: Buddy asked Google for each person's DM by email address, and Google refuses
+  that for an app ("Service account authentication doesn't support access to user information
+  using email aliases"). Buddy now remembers, from every DM a person sends it, their Chat id and
+  that DM (`core__people`), and delivers reminders there. If that DM stops working it asks Chat
+  for the current one by id, which an app may do. Nobody is looked up by email any more, and no new
+  permission was needed.
+- **Then Chat refused the message itself**: "The request does not specify which message to reply
+  to". Every post asked to be a reply in a thread, and a message Buddy starts has no thread. The
+  reply option is now sent only with a thread. Found by the first live test after the fix above.
+- A reminder that can't be delivered is now a counted skip with a reason someone can act on
+  ("has not messaged Buddy yet (one message in a DM is enough)") instead of an error.
+
+### Changed
+- **To get reminders, a person must have written to Buddy once in a DM after this deploy.**
+  Earlier messages were not recorded, so everyone on a receipt's list needs to say hello again.
+- Today's reminders count as sent (a reminder is recorded when it is handed over), so the next ones
+  go out on Friday 9 October as "Reminder 2 of 3". `/receipts` shows what is pending meanwhile.
+
+### Deployed
+- Both fixes, the same day (`0653e95`). Verified live: a test receipt due that day, the job run by
+  hand, and the reminder arrived in the DM (`sent: 1, skipped: 0`). Still to see: the first
+  reminder on its own schedule to someone else, Friday 9 October (BACKLOG I4c).
+- What the failed run did prove, live: Cloud Scheduler fired at 09:00 Buenos Aires, buddy-bot
+  accepted its signed call on `/tasks/daily`, and the `receipts` module (the 2026-09-29 rename is
+  deployed) worked out that Docusign was due and handed the reminder over. Only the last step,
+  finding the DM, failed.
+
+---
+
+## 2026-09-29
+
+### Changed
+- **The `invoices` module is now `receipts`** (Robin), and the old name is retired: Buddy answers
+  `/receipts` and the word **receipts** (or **recibos**); `/invoices` and "invoices" no longer do
+  anything. Everything keyed on the name moved with it: `BUDDY_ACCESS_RECEIPTS`,
+  `BUDDY_ROLE_RECEIPTS_ADMIN`, `RECEIPTS_FOLDER_ID`, `RECEIPTS_TIMEZONE`, `receipts` in `MODULES`
+  and `MODULE_TUNING`, the package (`@buddy/module-receipts`) and its storage (`m_receipts__*`).
+  Cards and approval cards say "receipt" throughout ("+ Add a receipt", "Receipts folder"), and
+  Claude's tools are `list_receipts`, `save_receipt`, `remove_receipt`, `mark_downloaded`.
+  Google's own "Billing → Invoices" page keeps its name. The entries below describe it as built,
+  under the old name.
+
+### Infrastructure
+- `infra/migrate-invoices-to-receipts.sh`, once, right after the deploy: copies what the live
+  `invoices` module saved (one receipt so far, Docusign) into `m_receipts__*`. It only copies,
+  skips anything already there and deletes nothing.
+
+### Added
+- **`invoices` module: reminders when a bill is ready.** An invoices admin adds a bill in chat
+  (`/invoices add Name | link | 5th working day | who`). On the due day at 09:00 Buddy DMs that
+  bill's list with **Open <bill>**, **Invoices folder**, **✓ Downloaded** and **Remind me
+  tomorrow**. Downloaded closes the month for everyone and records who did it; unanswered, it
+  reminds every two working days, three times at most. `/invoices` shows every bill, this month's
+  status and the links; `preview` shows an admin the card. Google Cloud is the first bill; any bill
+  with a download page works. Robin only (`BUDDY_ACCESS_INVOICES`, `BUDDY_ROLE_INVOICES_ADMIN`).
+  `docs/decisions/0011-receipts-and-scheduled-tasks.md`.
+- **Invoices without commands**, for the accounts team. Typing **invoices** (or **bills**) shows the
+  card for free; each bill has its own **Open** and **✓ Downloaded** buttons, and admins get
+  **+ Add a bill**. Bills are added, changed and stopped by just saying so ("Add Adobe, it's ready
+  on the 1st, here's the page: …"): Buddy shows what it understood, with the next real date and,
+  on a change, what it was before, and saves nothing until **Approve**. A request missing something
+  gets a question back instead of a card. Runs on Sonnet at low effort for people scoped to
+  modules (`MODULE_TUNING`): loose wording from non-technical people matters more than the cents.
+- **Modules can speak first: the `onSchedule` hook.** Cloud Scheduler calls `POST /tasks/daily` on
+  buddy-bot at 09:00 Buenos Aires on weekdays; each module returns what to tell whom, and Buddy
+  delivers it by DM.
+
+### Changed
+- **Buddy doesn't fetch the invoices, it reminds.** A PC script that drove Chrome to download them
+  (`tools/invoice-fetcher`) was built and removed the same day. There is no API for the PDFs, and
+  after about 25 minutes Google sent any remote-controlled Chrome to the sign-in page while the same
+  profile opened normally stayed signed in: it protects the session against theft, and that isn't
+  something to work around. Nothing of it was deployed.
+
+### Security
+- **`/tasks` is a second way into buddy-bot, and as narrow as the first.** Only the
+  `buddy-scheduler` account may invoke it (Cloud Run IAM), and the app checks the token was issued
+  to that exact account: Google Chat's token is refused on `/tasks`, the scheduler's everywhere
+  else. The route doesn't exist unless `BUDDY_SCHEDULER_EMAIL` is set. A scheduled message reaches
+  someone only if they may talk to Buddy **and** use the module that wrote it.
+- The invoices module holds no login, downloads nothing and reads no files. Only invoices admins
+  add bills, and links must be https.
+
+### Infrastructure
+- `infra/scheduler.sh` (once): the `buddy-scheduler` account, `run.invoker` on buddy-bot only, and
+  the `buddy-daily` job at 09:00 Buenos Aires, Monday to Friday. `deploy.sh` passes
+  `BUDDY_SCHEDULER_EMAIL` when set. `invoices` is in `MODULES`; it needs no setting to start.
+
+### Deployed
+- Deployed after this entry was written; see 2026-10-07 for what the first scheduled run showed.
+
+---
+
+## 2026-09-28
+
+### Changed
+- **Admins and everyone with the assistant run on Opus 5.5; Asana users run on Sonnet 5.** The
+  default model is now Opus, at the same medium effort, and Asana's own setting is Sonnet, so
+  alexandra and jordan stay on Sonnet. Opus is twice Sonnet's price: Riley's API requests cost
+  twice as much against her $15 allowance, and on the subscription proxy Opus uses the window
+  faster. The default prices (`USD_PER_MTOK_IN/OUT`) are now Opus's, so an unlisted model still
+  looks expensive, and Sonnet has its own entry in `MODEL_PRICES`.
+- **A person scoped to several modules gets the strongest model any of them needs**, at that
+  module's effort; a module with no setting counts as the default. The first rule only tuned
+  someone with exactly *one* scoped module — and because the manual is open to everyone, every
+  Asana user also has it, so Asana's setting reached nobody. With Opus as the default, the old
+  rule would have put the Asana testers on Opus; this one puts them on Sonnet as intended.
+
+### Fixed
+- **On the subscription proxy, every account was taken for the Claude account's owner.** The
+  Claude CLI tells the model the email of the account it is logged into, on every request and with
+  no way to turn it off. With the proxy's CLI on one Claude account, whoever asked was addressed as
+  that person. `buddy-bot` now tells the model, for subscription requests only, who is really
+  asking, and that any other email in its context belongs to the machine; API requests are
+  unchanged. The display name is flattened to one short line first, since anyone can set theirs.
+- **A dated model id was priced at the default.** Replies can name their model with a date on
+  the end (`claude-haiku-4-5-20251001`), and the price lookup only matched exact names. With Opus
+  as the default price, a dated Sonnet reply would have shown in `/costs` at twice its cost; it now
+  takes the price of the name it starts with.
+
+## 2026-09-28 — experiment, `develop` only
+
+### Added
+- **The proxy checks its Claude login before it starts**, and logs which account and plan it
+  will answer on. Anything but a `claude.ai` subscription login — an API key, a Console login, none
+  — stops it starting, with the command that fixes it; every turn is still checked as well.
+
+### Docs
+- **`docs/SUBSCRIPTION-PROXY-SETUP.md`**: moving the experiment to a new PC and making it
+  permanent — which Claude account it runs on and how to change it, a new shared secret, the proxy
+  as a scheduled task that survives reboots, a named Cloudflare tunnel whose address never changes,
+  and connecting Buddy and deploying.
+
+### Added
+- **Buddy on a Claude subscription, for one person** (`apps/claude-proxy`, decision
+  `0010-subscription-proxy.md`). A proxy on the PC where Claude Code is logged in answers the
+  Anthropic Messages API by running the Claude CLI. `buddy-bot` sends the people in
+  `CLAUDE_PROXY_USERS` there through a tunnel; everyone else stays on the API. Modules, access,
+  scoped conversation and approval cards are unchanged — they all run in `buddy-bot`.
+- **Held sessions**: when the model asks for one of Buddy's tools, the CLI waits inside the call
+  while Buddy runs it — behind its approval card when it writes — and the same process carries on,
+  so history is never replayed. A thread's next message continues in the same process; a warm
+  spare answers a new conversation in 1.1s instead of 2.1s.
+- **Experiment logs** on the PC, one JSON line per step, content never recorded.
+- **`/costs` shows subscription use apart**: requests, share of the five-hour and weekly windows,
+  and what the API would have charged. Subscription replies cost $0 and never touch the cap.
+
+### Security
+- **No API billing and no fallback to the API.** The CLI gets an allow-listed environment and
+  never sees an API key; every turn is refused unless it reports a subscription login; the proxy
+  refuses to run while the account has extra usage switched on; `buddy-bot` never retries the
+  proxy or falls back to the API. Each check has a test that fails without it.
+- **Two accounts never share a proxy process.** Buddy's prompt doesn't name the asker, so two
+  accounts with the same permissions looked identical to the proxy, and one could have continued
+  in the process holding the other's conversation. Requests now carry an opaque owner id
+  (`metadata.user_id`, a hash, never an email); spares, continuations and held calls are per
+  person, and a request without an owner is refused.
+- **The CLI can act on nothing**: restricted, no built-in tools except ToolSearch, only the stub's
+  tools, every permission prompt refused, an empty working folder. The reference repo ran it with
+  `--dangerously-skip-permissions`; with Buddy's untrusted input, that would let a line in an Asana
+  task run commands on the PC.
+
+### Infrastructure
+- `deploy.sh` passes `CLAUDE_PROXY_USERS` and `CLAUDE_PROXY_URL`, and mounts `claude-proxy-secret`,
+  only when someone is listed. The Dockerfile lists the new workspace so the lockfile matches; the
+  proxy itself never runs in the image.
+
 ## 2026-09-24
+
+### Changed
+- **Asana-only people run on Haiku 4.5.** They are the heaviest users and the ones the saving is
+  meant for: alexandra and jordan were 74% of the first day of spend. Haiku is half price in
+  and out, so their requests drop from ~12 cents to roughly 3 once the tool curation lands too.
+  Effort stays at medium — Asana plans multi-step writes to real client projects, and a mistake
+  there is wrong data, not a worse sentence. Robin, Remy and Riley are unaffected: they have the
+  assistant, so they get free-form conversation and therefore the default model. **Run the Asana
+  eval before trusting this** (`docs/EVAL.md`); reverting is one line.
+
+### Fixed
+- **Cache writes were priced at the five-minute rate while we buy the one-hour one.** Anthropic
+  charges 2x the input price to write a cache that lives an hour, against 1.25x for five minutes;
+  we switched to an hour this morning and kept charging 1.25x. `/costs` was under-reporting the
+  first request of every burst — the expensive one — by 60%, and the monthly cap was that much too
+  generous. The rate now follows `CACHE_TTL`, per model.
+
+### Changed
+- **"Approve all" counts up while it works.** Twenty Asana changes take half a minute, and the
+  card used to sit unchanged until every one had finished — a click that looked like nothing
+  happened. It is now redrawn as the batch goes, at most once every few seconds so each redraw is
+  not a Chat API call per Asana call, and a redraw that fails is logged rather than stopping the
+  work.
+
+### Fixed
+- **Asana could get stuck in a "just ask me to carry on" loop.** This morning's 4,000-token
+  output ceiling was too low to write a large batch tool call — updating one field on 54 tasks
+  needs about 7,000 — so the call was truncated every time, at the same place, and the reply
+  invited a retry that reproduced it exactly. `max_tokens` is a ceiling, not a budget: unwritten
+  headroom costs nothing, so the lower limit saved nothing and only narrowed what was possible.
+  Back to 16,000. The loop now tells a truncated **answer** apart from a truncated **tool call**
+  and asks for a smaller batch rather than offering to carry on, and Asana is told to change at
+  most 20 things per call.
+
+### Changed
+- **Riley can test Buddy end to end.** Added to `ALLOWED_USERS` and to Asana, the assistant,
+  files, kudos (with the kudos admin role) and the manual admin role; basics, ooo and the manual
+  she already had by domain. Deliberately **not** added to `admin`, `costs` or `leave`: granting
+  other people access, reading the whole company's spend and writing to colleagues' calendars are
+  not needed to test the rest, and leave has still never run against a real calendar.
+
+### Added
+- **A cheaper model for people who only use one module.** Someone whose Buddy is just the manual
+  does not need the model that answers anything: `MODULE_TUNING` sets a model and an effort level
+  per module, and it is chosen from the person's **scope**, not from the tool a request turns out
+  to need. That matters twice over — the model cannot change mid-conversation, which would throw
+  away the prompt cache, and the saving lands on the company at large rather than on admins.
+  Prices are now per model (`MODEL_PRICES`), so `/costs` keeps telling the truth once a second
+  model is in play, and it gains a **By model** line when more than one has run.
+- **Repeat questions to the manual are free.** Eighty people will ask "how many holidays do I
+  get?" and deserve the same answer; only the first now costs anything. The cache is keyed on the
+  question's embedding — the vector retrieval needs anyway — so the same question in different
+  words, or in Spanish, still hits, and publishing a new index retires every answer written from
+  the old one. What is stored is a **hash of the question, its vector and the answer**: never the
+  question text, never who asked. A miss, or any error at all, goes to Claude exactly as before.
+- **`afterAnswer`**, a module hook: modules whose tools ran are told what the request answered,
+  in the background, after the person has their reply. It is how the manual learns; a module that
+  throws in it cannot turn an answered request into a failed one.
+- **An eval** (`docs/EVAL.md`, `evals/manual.md`): twenty questions, asked before and after any
+  change to model or effort, scored pass/partial/fail. A change ships only if nothing got worse.
+  The known-good answers still need filling in by someone who knows the manual.
+- **Context editing** (`CLEAR_TOOL_USES`), which drops the oldest tool results inside a long
+  Asana loop instead of re-sending them every step. **Off by default** — it changes what Claude
+  can still see mid-request, so it goes through the eval first.
+
+### Changed
+- **Module instructions cut from 5,500 characters to 1,772** across asana, manual, leave, ooo,
+  kudos and admin. Sent on every request, by every person; the words were doing no work.
+- **The manual is now a scoped module**, so someone can ask about policy without being given
+  free-form Claude — the same split Asana already had (`0007-scoped-conversation.md`).
+
+### Fixed
+- **The Asana tool curation was not curating.** The "everyday" patterns were loose fragments, so
+  against the real tool names they deferred three tools out of 39 — `/^get_/` alone kept 17, and
+  `/me|current_user/` matched `add_comment`. Every pattern is now anchored to a whole tool name
+  (13 of 39 loaded, checked against the live `/asana tools` output), the code loads everything if fewer than four match and warns if it keeps
+  more than 60%, and the tests use Asana's real tool names and assert the ratio. They previously
+  used seven invented names picked so the filter looked like it worked. Estimated effect on a first Asana
+  request: ~8.5¢ → ~2.8¢. It also keeps Asana's own preview/confirm tools out of the loaded set,
+  which would otherwise put a second approval step in front of Buddy's card.
+- **The cost settings were never reaching Cloud Run.** `deploy.sh` passes a fixed list of
+  variables, and `MAX_OUTPUT_TOKENS`, `MAX_HISTORY_CHARS`, `CACHE_TTL` and
+  `MONTHLY_USD_CAP_SCOPED` were not on it: editing them in `infra/config.env` changed nothing,
+  and the service ran on its built-in defaults. The defaults happened to match, so no behaviour
+  was wrong — but the knobs were not connected to anything.
 
 ### Changed
 - **"Who's out?" is answered without Claude.** The most-asked question at company scale has one
@@ -17,10 +296,10 @@ live Chat app, and what is still unverified against reality).
   use, English or Spanish, no commands needed. A question about the leave *policy* still goes to
   the manual, anything unrecognised still goes to Claude, and a calendar failure falls through
   rather than failing the message. That request now costs nothing.
-- **An hour of prompt cache instead of five minutes**, a **4,000-token ceiling on replies**
-  (output is five times the input price) and **history capped by size, not just message count**
-  (8,000 characters; twenty messages is nothing in a terse thread and a lot in a chatty one).
-  All three are settings. Decision record `0009-cost-reduction.md`.
+- **An hour of prompt cache instead of five minutes**, a **4,000-token ceiling on replies** and
+  **history capped by size, not just message count** (8,000 characters; twenty messages is nothing
+  in a terse thread and a lot in a chatty one). All three are settings. Decision record
+  `0009-cost-reduction.md`. _The output ceiling was reverted the same day — see Fixed above._
 
 ### Changed
 - **Asana no longer sends ~100 tool definitions on every request.** Asana's MCP server offers about

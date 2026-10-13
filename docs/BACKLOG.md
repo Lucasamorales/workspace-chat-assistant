@@ -16,6 +16,8 @@ shorter list: see "Proven in use" at the bottom of this section.
 | A1 | Point the Chat app **Buddy-Asana** at `buddy-bot`; visibility robin@ + remy@ | done |
 | A2 | Run the acceptance checklist (RUNBOOK §5) | doing |
 | A3 | Tune `ASANA_READONLY_TOOLS` if reads ask for approval | todo |
+| A10 | Set `ASANA_TOOLS` from the real `/asana tools` output (the commented list in `config.env` is an expectation, not a confirmation) | todo — post-deploy |
+| A11 | **Confirm the tool-search tool is accepted by the API.** `tool_search_tool_regex_20251119` has never run against a live call; if it is rejected, every Asana request fails, not just the deferred ones | todo — first Asana request after deploy |
 | A4 | After A2 passes: `feat:` commit marking the build verified | todo |
 | A5 | Remove the old bot: `CONFIRM=yes bash infra/decommission-legacy.sh` | todo |
 | A6 | Remy's feedback: one card section per task (title, description, due date, assignee by name), Approve/Cancel each, Approve all/Cancel all; update ≠ "cannot be undone" | deployed |
@@ -40,7 +42,7 @@ shorter list: see "Proven in use" at the bottom of this section.
 | # | Item | Notes |
 |---|---|---|
 | U1 | **App Home tab** in the DM: connection status, this month's usage, quick buttons | Enable "Support App Home" in the Chat console; handle `APP_HOME` events |
-| U2 | **Proactive connection check**: a daily job that warns users whose Asana connection stopped working, before they need it | Needs the scheduled jobs hook (R6) |
+| U2 | **Proactive connection check**: a daily job that warns users whose Asana connection stopped working, before they need it | The scheduled jobs hook (R6) now exists: an `onSchedule` in the asana module |
 | U3 | Register `/help` and `/asana` under Commands in the Chat console for autocomplete | Console only |
 
 ## P0: Security (independent of the merge)
@@ -91,7 +93,7 @@ shorter list: see "Proven in use" at the bottom of this section.
 | R3 | ✅ **Direct message handlers**: contract hook `handleMessage(ctx, message)` for exact matches (kudos votes, "who is out") that run before Claude | Ordered, one winner, isolated like other hooks |
 | R4 | ✅ **Mentions in context**: pass Chat user mentions (name, email, id) to modules | Kudos can read tagged teammates without parsing text |
 | R5 | ✅ **Google API access pattern**: Sheets as `buddy-bot`; calendars via delegation with no key, fenced in module code | README "Adding a module"; `0003-ooo.md`, `0004-admin-module.md` |
-| R6 | **Scheduled jobs hook** `onSchedule(ctx)` driven by Cloud Scheduler → authenticated endpoint | Not needed for Kudos/OOO; enables future reminders/digests |
+| R6 | **Scheduled jobs hook** `onSchedule(ctx, task)` driven by Cloud Scheduler → authenticated endpoint | done 2026-09-29 for receipts (Epic 13); daily task only |
 | R7 | **Module template + test helpers** (`@buddy/core/testing`: fake ctx, fake store, fake event) | New module = copy folder, add to config, tests run standalone |
 | R8 | `docs/ADDING_A_MODULE.md` | Covers contract, access, settings, storage, tests, deploy |
 | R9 | Optional: Google Group membership for access rules (Cloud Identity API) | `ACCESS_KUDOS=group:wholeteam@example.com` works |
@@ -227,6 +229,45 @@ Decision: `docs/decisions/0004-admin-module.md`. Config stays the floor; grants 
 | G11 | ✅ RUNBOOK §6b: read access with `/access` | Docs |
 | G12 | Try it live: grant a colleague a module, confirm they can use it and nobody else changed | After deploy |
 
+## Epic 13: `receipts` module (receipt reminders)
+
+Decision: `docs/decisions/0011-receipts-and-scheduled-tasks.md`. Built 2026-09-29; live since, and the
+scheduled run fired for real on 2026-10-07 (delivery failed, see I4). A PC fetcher that downloaded the PDFs was built and dropped the same day: Google signs
+remote-controlled browsers out.
+
+| # | Item | Status |
+|---|---|---|
+| I1 | `onSchedule` hook, `/tasks/:task` route, caller-pinned OIDC check, DM delivery with both access checks | live 2026-10-07: the scheduler fired at 09:00, its token was accepted and the task ran. Delivery is I4 |
+| I2 | `receipts` module: receipts added in chat, reminders on the due day, Downloaded / Remind me tomorrow, `/receipts` | live: a receipt was added in chat and came due on its 5th working day. The reminder card and its buttons arriving by themselves: I4b |
+| I3 | `infra/scheduler.sh`, `BUDDY_SCHEDULER_EMAIL`, deploy, add Google Cloud (RUNBOOK §5h) | scheduler and deploy done (it ran 2026-10-07); Google Cloud still to be added if wanted |
+| I4 | Confirm `spaces.findDirectMessage` works with the app's credentials from a scheduled call | done 2026-10-07: it does **not** work by email for an app, and the first real reminder failed. Fixed by remembering each person's Chat id and DM from their own messages (`core__people`) |
+| I4b | See a reminder actually arrive after that fix | done 2026-10-07: a test receipt due that day, the job run by hand, the reminder arrived in the DM (`sent: 1`). It took a second fix: a message Buddy starts must not be sent as a reply |
+| I4c | accounts@ messages Buddy once after the 2026-10-07 deploy, so Friday 9 Oct's Docusign reminder can reach them; then check the log shows `sent: 1` for it | todo |
+| I5 | After I3–I4 pass: `feat:` commit marking it verified | todo |
+| I6 | File names: tell people what to call the file, or rename it in the folder behind an approval card (needs Editor on the folder) | later — on hold (Robin) |
+| I9 | No commands needed: "receipts" shortcut, per-receipt buttons, "+ Add a receipt", add/change/stop receipts by asking (scoped, behind approval cards) | done — unverified live |
+| I10 | Run `docs/EVAL.md` for receipts on Sonnet (`MODULE_TUNING`): adding, changing and refusing receipts in words | todo — before the accounts person uses it |
+| I11 | Give the accounts person `BUDDY_ACCESS_RECEIPTS` and `BUDDY_ROLE_RECEIPTS_ADMIN` (and the Chat app), and put their email on the receipts | config done (Robin); still: the Chat app, and their email on each receipt |
+| I12 | A proper form (Chat dialog: Name / Link / When) for adding receipts, if talking to it isn't enough. Needs dialog support in core | later |
+| I7 | Public holidays for working days (Argentina, UK), if a reminder a day early turns out to matter | later |
+| I8 | Move the costs Sheet rollup onto the daily task instead of riding the first message of the week | later |
+
+## Epic 12: experiment — Buddy on a Claude subscription (`develop` only)
+
+Decision `0010-subscription-proxy.md`. One person, by config; never merged into `main` unless the
+result says it should be.
+
+| # | Item | Done when |
+|---|---|---|
+| S0 | ✅ Spike on the real CLI: native tool calls, held calls, caching across processes, tool search, auth and overage flags; history injection repeats writes | `scratchpad` report |
+| S1 | ✅ `apps/claude-proxy`: held sessions, thread continuation, warm spares, replay fallback | 26 tests; real-CLI smoke test |
+| S2 | ✅ No API billing: allow-listed environment, subscription login checked every turn, refuses to run with extra usage on, no fallback | Tests fail with each check removed |
+| S3 | ✅ Buddy routes `CLAUDE_PROXY_USERS` to the proxy; $0 against the cap; `/costs` shows the window and API-equivalent | Tests; real handler + real CLI with an approval card |
+| S4 | Secret in Secret Manager, tunnel up, deploy from `develop` | RUNBOOK §6c checks pass |
+| S5 | An approval that waits several minutes, through the tunnel | `resuming a held session`, not `replaying` |
+| S6 | A week of real use against the API baseline: tool-call success, latency, window per request | Written into `0010`, whatever it says |
+| S7 | *If spares keep being starved:* evict idle threads for a spare, or raise `PROXY_MAX_PROCESSES` | Measured, not guessed |
+
 ## Epic 11: cheap enough for the whole company
 
 Decision: `docs/decisions/0009-cost-reduction.md`. Order is cheapest risk first; anything that
@@ -236,16 +277,17 @@ can cost precision (model, effort, retrieval size) waits for the eval.
 |---|---|---|
 | C1 | ✅ "Who's out?" answered without Claude, in natural language (EN + ES) | Tests; that request costs nothing |
 | C2 | ✅ One-hour prompt cache, 4,000-token output ceiling, history capped by size | Tests |
-| C3 | Shorten module instructions (7 × ~800 chars on every request) without changing behaviour | Tests still pass; instructions ~half |
-| C4 | A small eval: ~20 real questions with known-good answers, run before and after any change to model, effort or retrieval | Runnable; a baseline recorded |
-| C5 | Effort per module (Asana keeps more; looking something up needs less) | Eval holds |
-| C6 | Model per module — Haiku 4.5 for manual and ooo, Sonnet for asana and leave. Model follows the **scope**, never the tool (no mid-thread switching, or the cache is thrown away each time), so the saving lands on scoped people rather than admins | Eval holds |
-| C6a | Record the model on every usage event — today it is always `null`, so `/costs` cannot tell two models apart | An event names its model |
-| C6b | Per-model price table; `/costs` and the monthly cap both read it | A Haiku request is priced at $1/$5, a Sonnet one at $2/$10 |
-| C7 | Answer cache for the manual, keyed on the question embedding we already compute, invalidated by index version; hashes only, never question text | Repeat questions cost nothing |
-| C8 | Context editing (`clear_tool_uses`) for long Asana loops | Fewer tokens per multi-step request |
-| C9 | Default most people to scoped modules rather than the assistant at the company rollout | Fewer instructions and tools per request |
+| C3 | ✅ Module instructions shortened, 5,500 → 1,772 characters, behaviour unchanged | Tests |
+| C4 | ⚠️ Eval written (`docs/EVAL.md`, `evals/manual.md`); the **known-good answers still need filling in** by someone who knows the manual, and no baseline has been run | 20 questions, scored pass/partial/fail |
+| C5 | ✅ Effort per module, via `MODULE_TUNING` | Tests; eval still to run |
+| C6 | ✅ Model per module, chosen from the person's scope and only when that scope is unambiguous (`MODULE_TUNING=manual:claude-haiku-4-5:low`) | Tests; eval still to run |
+| C6a | ✅ Every usage event names the model that ran | Test |
+| C6b | ✅ Per-model prices (`MODEL_PRICES`); an unpriced model falls back to the default rather than costing zero; `/costs` gains a By model line | Tests |
+| C7 | ✅ Answer cache for the manual: embedding-keyed, index-version invalidated, DM only, hash + vector + answer only | Tests; repeat questions never reach Claude |
+| C8 | ⚠️ Context editing built and tested, **off** (`CLEAR_TOOL_USES=0`) until the eval has been run against it | Test |
+| C9 | Default most people to scoped modules rather than the assistant at the company rollout — the manual is now scoped, so policy questions no longer need free-form Claude | Fewer instructions and tools per request |
 | C10 | Re-read `/costs` after each step; stop when the number stops mattering | Measured, not assumed |
+| C11 | ⚠️ The cost settings were not on `deploy.sh`'s variable list, so editing them changed nothing — fixed; **verify after the next deploy** that `CACHE_TTL` and friends are actually set on the service | `gcloud run services describe buddy-bot` shows them |
 
 ## Epic 10: what a request costs to send
 

@@ -260,3 +260,56 @@ test('a deferred tool keeps its flag through the registry, and stays callable', 
   assert.equal(byName['asana__duplicate_portfolio'].defer_loading, true);
   assert.deepEqual(await toolset.execute('asana__duplicate_portfolio', {}), { content: 'duplicate_portfolio ran' });
 });
+
+test('afterAnswer reaches only the modules whose tools ran', async () => {
+  const seen = [];
+  const hook = name => ({
+    name,
+    afterAnswer: async (ctx, answered) => { seen.push({ name, ...answered }); },
+  });
+  const notes = { ...hook('notes'), afterAnswer: async () => { throw new Error('boom'); } };
+  const modules = [hook('manual'), hook('tasks'), notes];
+  const registry = createRegistry({
+    modules,
+    log: quietLog,
+    env: {},
+    access: createAccessPolicy({
+      modules,
+      env: {
+        BUDDY_ACCESS_MANUAL: 'domain:example.com',
+        BUDDY_ACCESS_TASKS: 'domain:example.com',
+        BUDDY_ACCESS_NOTES: 'domain:example.com',
+      },
+    }),
+  });
+  const scope = { kind: 'DM', user: { email: 'eve@example.com' } };
+
+  await registry.afterAnswer(() => ({}), {
+    question: 'how many holidays do I get?',
+    answer: '25 days.',
+    tools: ['manual__search_manual', 'notes__write'],
+  }, scope);
+
+  assert.deepEqual(seen.map(s => s.name), ['manual'], 'tasks did no work here, and a throwing hook is swallowed');
+  assert.equal(seen[0].answer, '25 days.');
+});
+
+test('a scheduled run: one module failing does not stop the next, and notes are only emails and a reply', async () => {
+  const broken = { name: 'broken', onSchedule: async () => { throw new Error('boom'); } };
+  const sneaky = {
+    name: 'sneaky',
+    onSchedule: async () => [
+      { to: ['  Robin@Example.com ', 'not-an-email'], reply: 'hi', space: 'spaces/everyone' },
+      { to: 'robin@example.com', reply: 'wrong shape' },
+    ],
+  };
+  const modules = [broken, sneaky];
+  const registry = createRegistry({
+    modules, log: quietLog, env: {},
+    access: createAccessPolicy({ modules, env: { BUDDY_ACCESS_BROKEN: 'domain:example.com', BUDDY_ACCESS_SNEAKY: 'domain:example.com' } }),
+  });
+  const out = await registry.runScheduled(() => ({}), 'daily');
+  assert.deepEqual(out.find(r => r.module === 'broken'), { module: 'broken', failed: true, notes: [] });
+  assert.deepEqual(out.find(r => r.module === 'sneaky').notes, [{ to: ['robin@example.com'], reply: 'hi' }],
+    'the space the module tried to name is gone, and so is the malformed note');
+});

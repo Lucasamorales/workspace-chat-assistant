@@ -84,6 +84,7 @@ A Buddy module is a folder with one exported object. The parts your logic maps o
 |---|---|
 | `commands` | Slash commands, e.g. `/kudos`, `/ooo` — your "read" functions |
 | `handleMessage` | Reacting to a message without Claude, e.g. a kudos vote |
+| `afterAnswer` | Learning from an answer your tools helped produce — caching it, say. Never for replying |
 | `tools` → `describe` | Your "what will change" function — becomes the approval card |
 | `tools` → `execute` | Your "apply it" function, run only after the person clicks Approve |
 | `settings` | Your `CONFIG` object, moved to `infra/config.env` as `<MODULE>_*` |

@@ -13,8 +13,11 @@ COPY modules/leave/package.json modules/leave/
 COPY modules/admin/package.json modules/admin/
 COPY modules/manual/package.json modules/manual/
 COPY modules/costs/package.json modules/costs/
+COPY modules/receipts/package.json modules/receipts/
 COPY apps/chat-gateway/package.json apps/chat-gateway/
 COPY apps/oauth-gateway/package.json apps/oauth-gateway/
+# Listed only so the lockfile matches: the subscription proxy runs on a PC, never in this image.
+COPY apps/claude-proxy/package.json apps/claude-proxy/
 RUN npm ci --omit=dev --no-audit --no-fund
 
 FROM node:22-slim

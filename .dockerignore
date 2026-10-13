@@ -4,4 +4,5 @@ legacy
 docs
 infra
 **/test
+**/fixtures
 **/*.md

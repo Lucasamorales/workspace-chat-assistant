@@ -31,6 +31,8 @@ Replaces the Internal-RAG widget and Chrome extension. Decision: `docs/decisions
    anything below a similarity floor is dropped: no match is better than a confident wrong quote.
 6. **Answer** — Claude writes the reply from those passages, in Buddy's voice, citing each
    document.
+7. **Remember** — the answer is cached against the question's embedding, so the next person to ask
+   the same thing gets it back without Claude, for nothing.
 
 Re-indexing is incremental: a file whose modified time hasn't changed keeps the chunks and vectors
 it already had, so updating one policy costs one document's worth of work, not the manual's.
@@ -41,6 +43,23 @@ button. Progress is saved within a document as well as between them — a long p
 part at a time — and every slice does at least one part, so Continue always moves forward. The live index only changes when a run finishes, so questions keep being answered from the
 previous version rather than from half a manual. After the first full index, updates usually
 finish in one go.
+
+## The answer cache
+
+Eighty people will ask "how many holidays do I get?" and deserve the same answer; only the first
+costs anything. The key is the question's **embedding** — the vector retrieval needs anyway — so
+the same question in different words, or in Spanish, is still a hit. A near-identical question
+(0.95 cosine) is answered from the cache; anything less goes to Claude as usual.
+
+- **It goes stale on purpose.** Every entry carries the index version it was written from, so
+  `/manual reindex` retires every answer that came out of the old manual.
+- **It is not a record of who asked what.** An entry is a hash of the question, its vector and the
+  answer: never the question text, never the person. See `docs/decisions/0006-costs.md`.
+- **Direct messages only.** Embedding every message of every busy space would cost more than the
+  cache saves.
+- **A miss costs nothing extra.** The question is embedded once and that same vector is used for
+  the lookup, the search and the cache write. Any error at all falls through to Claude.
+- **100 answers**, oldest dropped. The long tail is not worth the storage.
 
 ## What it will not do
 
@@ -85,3 +104,5 @@ role it already holds on itself. No key, and the narrower scope is the one Drive
 index is part-way through. Storing per document is what makes re-indexing one policy — and
 resuming an interrupted run — cheap. Instances cache the vectors in memory and reload when the
 version changes.
+
+The answer cache lives in the same collection, in `answers-<n>` documents of 25 entries each.

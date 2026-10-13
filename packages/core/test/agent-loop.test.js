@@ -127,3 +127,26 @@ test('pause_turn continues; max steps stops runaway loops; budget is checked eve
   const budget = { check: async () => { checks += 1; if (checks > 1) throw new Error('over budget'); }, record: async () => {} };
   await assert.rejects(runLoop({ claude: forever, toolset: toolset(['asana__get']), budget, system: 's', messages: [] }), /over budget/);
 });
+
+// The 24 September loop: a batch too big to write meant every retry was cut at the same place,
+// and the reply invited the user to "carry on", which reproduced it exactly.
+test('running out of room mid-tool-call is not the same as running out mid-answer', async () => {
+  const cutMidCall = scriptedClaude([{
+    stop_reason: 'max_tokens',
+    content: [{ type: 'text', text: 'Updating all 54 tasks:' }, toolUse('1', 'asana__create', { tasks: [] })],
+  }]);
+  const result = await runLoop({
+    claude: cutMidCall, toolset: toolset(['asana__get']), budget: noBudget, messages: [], system: 's',
+  });
+  assert.equal(result.stopReason, 'max_tokens_tool');
+  assert.equal(result.text, 'Updating all 54 tasks:', 'whatever it managed to say still gets through');
+
+  const cutMidAnswer = scriptedClaude([{
+    stop_reason: 'max_tokens',
+    content: [{ type: 'text', text: 'A very long answer that ran out of' }],
+  }]);
+  const plain = await runLoop({
+    claude: cutMidAnswer, toolset: toolset(['asana__get']), budget: noBudget, messages: [], system: 's',
+  });
+  assert.equal(plain.stopReason, 'max_tokens', 'this one really can be carried on');
+});

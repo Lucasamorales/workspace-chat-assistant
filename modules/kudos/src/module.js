@@ -149,9 +149,8 @@ function createKudosModule({ sheetsApi, now = () => new Date() } = {}) {
     roles: ['admin'],
     settings: ['KUDOS_SHEET_ID'],
     examples: ['In the Kudos space: @Buddy kudos to @Eve for thinking big'],
-    instructions: 'Kudos votes are logged automatically when people tag Buddy and a teammate with a company value in the '
-      + 'Kudos space. If someone asks how to give kudos, explain: in the Kudos space, write "@Buddy kudos to @Name for '
-      + '<value>" with one of Own it, Think big, Go beyond, Be curious. You cannot log kudos yourself.',
+    instructions: 'Votes are logged automatically in the Kudos space; you cannot log one yourself. If asked how: in '
+      + 'that space, "@Buddy kudos to @Name for <value>" — Own it, Think big, Go beyond, Be curious.',
 
     async handleMessage(ctx, message) {
       if (!looksLikeKudos(message)) return null;

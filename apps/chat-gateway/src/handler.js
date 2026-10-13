@@ -17,6 +17,9 @@ const EVENT_TTL_MS = 24 * 60 * 60 * 1000;
 // Firestore documents max out at 1 MiB; leave room for per-item results added later.
 const MAX_PENDING_BYTES = 500_000;
 const MAX_ITEM_RESULT_CHARS = 10_000;
+// How often a long batch redraws its card while it runs. Every item would be a Chat API call per
+// Asana call; a few seconds is enough for the count to visibly move.
+const PROGRESS_EVERY_MS = 3_000;
 const MAX_REQUEST_TEXT_CHARS = 8_000;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const ID_PATTERN = /^[A-Za-z0-9_-]{20,64}$/;
@@ -26,6 +29,12 @@ const APPROVAL_ACTIONS = [ACTIONS.APPROVE, ACTIONS.CANCEL, ACTIONS.APPROVE_ALL, 
 const BASE_PROMPT = VOICE_GUIDE;
 
 const expose = message => Object.assign(new Error(message), { expose: true });
+
+// Model families from weakest to strongest, matched inside the model id ("claude-opus-5-5" → opus).
+// A model outside the list ranks below all of them, so it never wins by accident.
+const FAMILIES = ['haiku', 'sonnet', 'opus', 'mythos', 'fable'];
+const strength = model => FAMILIES.findIndex(f => String(model || '').includes(f));
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const hash = s => crypto.createHash('sha256').update(s).digest('hex');
 const newId = () => crypto.randomBytes(24).toString('base64url');
 
@@ -57,7 +66,8 @@ function createEventHandler(deps) {
   const {
     registry, chat, store, threads, usage, oauthFlows, claude,
     makeModuleContext, allowedUsers, log, defer, appName = 'Buddy', now = () => Date.now(),
-    grants = null, scopedCapUsd = null,
+    grants = null, scopedCapUsd = null, moduleTuning = {}, subscriptionUsers = [],
+    defaultModel = null, defaultEffort = null, people = null,
   } = deps;
   const events = store.collection('core__events');
   const pendingCol = store.collection('core__pending');
@@ -125,6 +135,66 @@ function createEventHandler(deps) {
     if (base.spaceKind !== 'DM') throw expose(privateOnly);
     if (!base.userEmail) throw expose('Oh no, I couldn\'t read your Google account email, so I can\'t connect accounts right now.');
     return oauthFlows.createLink({ userId: base.userId, userEmail: base.userEmail, moduleName });
+  }
+
+  /**
+   * Experiment (0010-subscription-proxy.md): who is answered through the subscription proxy
+   * instead of the API. Per person, from config, in the same format as BUDDY_ACCESS_* — empty
+   * means nobody, and then this build behaves exactly as without the experiment. It never widens
+   * what anyone can do: only where their answer is computed.
+   */
+  const onSubscription = subscriptionUsers.length
+    ? parseRule(subscriptionUsers.join(','), 'CLAUDE_PROXY_USERS')
+    : () => false;
+  const backendFor = base => (onSubscription({ email: base.userEmail, id: base.userId ? `users/${base.userId}` : '' })
+    ? 'subscription' : 'api');
+
+  /**
+   * On the subscription, who the model is really talking to.
+   *
+   * The Claude CLI tells the model the email of the Claude account it is logged into — with no
+   * switch to stop it — so every person on the proxy would otherwise be taken for that account's
+   * owner. Buddy never names the asker to the API, and there nothing competes; here it has to.
+   * The display name comes from Google Chat, where anyone can set theirs to anything, so it is
+   * flattened to one short line before it goes anywhere near a system prompt.
+   */
+  const plain = (text, max) => String(text || '').replace(/[\r\n\t]+/g, ' ').replace(/[<>`]/g, '').trim().slice(0, max);
+  function identityFor(base, backend) {
+    if (backend !== 'subscription') return [];
+    const email = plain(base.userEmail, 120);
+    const name = plain(base.userDisplayName, 80);
+    return [
+      `You are talking with ${name ? `${name} (${email})` : email}. Your context may also mention another `
+      + 'email address or account: that belongs to the machine you run on, not to this person. Never call them by '
+      + 'it, and never mention it.',
+    ];
+  }
+
+  /**
+   * Which model and effort this person gets.
+   *
+   * Chosen from their scope, never from the tool a request turns out to need: that is only known
+   * after Claude has answered, and switching model mid-conversation throws away the prompt cache
+   * every time. So it is fixed per person: someone with the assistant runs on the default, and
+   * someone scoped to modules runs on the *strongest* model any of those modules needs — a module
+   * with no setting of its own counts as the default — at that module's effort.
+   *
+   * Strongest rather than "only when there is one module": the manual is open to everyone, so
+   * nearly every Asana user also has the manual, and the first version of this rule gave up and
+   * used the default for all of them. Asana's setting reached nobody. Taking the strongest means a
+   * module that needs more is never answered with less, whatever else the person can use.
+   */
+  function tuningFor(scope) {
+    if (registry.conversationMode(scope) !== 'scoped') return {};
+    const options = registry.scopedFor(scope)
+      .map(name => ({ model: defaultModel, effort: defaultEffort, ...(moduleTuning[name] || {}) }));
+    if (!options.length) return {};
+    const best = options.reduce((a, b) => {
+      const byModel = strength(b.model) - strength(a.model);
+      if (byModel) return byModel > 0 ? b : a;
+      return EFFORTS.indexOf(b.effort) > EFFORTS.indexOf(a.effort) ? b : a;
+    });
+    return best.model === defaultModel && best.effort === defaultEffort ? {} : { model: best.model, effort: best.effort };
   }
 
   /**
@@ -316,6 +386,13 @@ function createEventHandler(deps) {
     let reply = result.text;
     if (result.stopReason === 'refusal') reply = 'Sorry, that\'s not one I can help with.';
     if (result.stopReason === 'max_tokens') reply += '\n\n_(Oops, I got cut off. Just ask me to carry on.)_';
+    // Never "carry on" here. A half-written tool call is discarded, so carrying on writes the very
+    // same one and is cut off at the very same place — the loop a user hit on 24 September. The
+    // only way out is a smaller batch, so ask for that instead.
+    if (result.stopReason === 'max_tokens_tool') {
+      reply = `${reply ? `${reply}\n\n` : ''}_(That's more than I can change in one go. Ask me to do it in `
+        + 'smaller batches — around twenty at a time works.)_';
+    }
     if (result.stopReason === 'max_steps') reply = `${reply ? `${reply}\n\n` : ''}_(That took a few too many steps. Try asking for one thing at a time?)_`;
     // A normal request always gets an answer; a follow-up after an approval may have nothing to add.
     if (!reply && !messageName) return;
@@ -323,6 +400,7 @@ function createEventHandler(deps) {
 
     await threads.append(base.threadKey, request.historyText || historyTextOf(request), reply);
     await showText(base, messageName, reply);
+    return reply;
   }
 
   async function postReply(base, reply) {
@@ -356,10 +434,14 @@ function createEventHandler(deps) {
       messageName = await chat.postText(base.space, base.thread, '_Hmm, give me a sec…_');
       // The meter IS the budget — the cap still stops a runaway before any call — and it collects
       // what this request cost, which tools ran and how it ended. Metadata only (0006-costs.md).
+      const tuning = tuningFor(scopeOf(base));
+      const backend = backendFor(base);
       budget = usage.meter({
         userId: base.userId,
         userEmail: base.userEmail,
         trigger,
+        model: tuning.model || null,
+        backend,
         // A smaller allowance for people who can only drive one module: widening Asana should
         // not quietly widen the bill.
         ...(mode === 'scoped' && scopedCapUsd ? { capUsd: scopedCapUsd } : {}),
@@ -386,7 +468,10 @@ function createEventHandler(deps) {
         let shown = '';
         const result = await runLoop({
           claude, toolset, budget, log,
-          system: systemFor(scopeOf(base), toolset.notes),
+          ...tuning,
+          backend,
+          owner: base.userId,
+          system: systemFor(scopeOf(base), toolset.notes, identityFor(base, backend)),
           messages: [...history, { role: 'user', content: blocks }],
           onProgress: async names => {
             const labels = [...new Set(names.map(n => toolset.moduleOf(n)).filter(Boolean))].map(m => registry.label(m));
@@ -396,8 +481,17 @@ function createEventHandler(deps) {
             await chat.replaceText(messageName, base.space, base.thread, text);
           },
         });
-        await finish(base, messageName, request, result);
+        const answer = await finish(base, messageName, request, result);
         await meterFinish(budget, result);
+        // Let the modules that did the work learn from the answer — the manual caches it, so the
+        // next person asking the same thing gets it for nothing. After the reply, never before it.
+        if (answer && request.text) {
+          defer(registry.afterAnswer(ctxFor, {
+            question: request.text,
+            answer,
+            tools: budget.tools.filter(t => !t.failed).map(t => t.name),
+          }, scopeOf(base)));
+        }
       }, budget);
     } catch (error) {
       if (budget) {
@@ -417,10 +511,18 @@ function createEventHandler(deps) {
     await chat.replaceWithCard(record.cardMessage, card.text, card.cardsV2);
   }
 
-  /** Runs items that a click moved to 'running', saving each result as soon as it exists. */
+  /**
+   * Runs items that a click moved to 'running', saving each result as soon as it exists.
+   *
+   * "Approve all" on twenty Asana changes takes half a minute, and a card that only updates at
+   * the end is half a minute of nothing happening after a click. So it is redrawn as the batch
+   * goes — no more than once every few seconds, because each redraw is a Chat API call, and never
+   * at the cost of the work: a redraw that fails is logged and the items carry on.
+   */
   async function runApproved(id, record, indexes) {
+    let shownAt = now();
     await withToolset(baseOfRecord(record), async toolset => {
-      for (const i of indexes) {
+      for (const [done, i] of indexes.entries()) {
         const r = await executeApprovedItem(toolset, record.items[i]);
         const result = { content: String(r.content ?? '').slice(0, MAX_ITEM_RESULT_CHARS), isError: Boolean(r.isError) };
         await pendingCol.update(id, doc => {
@@ -429,6 +531,12 @@ function createEventHandler(deps) {
           doc.items[i].result = result;
           return doc;
         });
+        // The last item is left to the caller's own refresh, so the finished card is drawn once.
+        const more = done < indexes.length - 1;
+        if (more && now() - shownAt >= PROGRESS_EVERY_MS) {
+          shownAt = now();
+          await refreshCard(id).catch(error => log.warn('could not show approval progress', { error }));
+        }
       }
     });
   }
@@ -468,14 +576,22 @@ function createEventHandler(deps) {
     const base = baseOfRecord(record);
     // A resumed request is its own event: the work after an approval costs money of its own,
     // and whether the person approved or declined is worth knowing.
-    const meter = usage.meter({ userId: base.userId, userEmail: base.userEmail, trigger: 'approval' });
+    const tuning = tuningFor(scopeOf(base));
+    // Decided again at resume time, from config: an approval never changes who answers.
+    const backend = backendFor(base);
+    const meter = usage.meter({
+      userId: base.userId, userEmail: base.userEmail, trigger: 'approval', model: tuning.model || null, backend,
+    });
     const declined = (record.items || []).every(it => it.state === 'declined');
     try {
       await withToolset(base, async toolset => {
         const result = await resumeLoop({
           claude, toolset, log,
+          ...tuning,
+          backend,
+          owner: base.userId,
           budget: meter,
-          system: systemFor(scopeOf(base), toolset.notes, [AFTER_APPROVAL]),
+          system: systemFor(scopeOf(base), toolset.notes, [AFTER_APPROVAL, ...identityFor(base, backend)]),
           saved: JSON.parse(record.loop),
           items: record.items,
         });
@@ -697,6 +813,12 @@ function createEventHandler(deps) {
     if (!isAllowed(event.user)) {
       log.warn('user not on the allowlist', { user: event.user.name, type: event.type });
       return ['MESSAGE', 'ADDED_TO_SPACE'].includes(event.type) ? { text: `Sorry, ${appName} isn't switched on for you just yet.` } : {};
+    }
+
+    // Where this person's DM with Buddy is, for the day Buddy has something to tell them first
+    // (a scheduled reminder). In the background: it must never slow down or break a reply.
+    if (people && spaceKindOf(event.space) === 'DM') {
+      defer(people.remember({ email: event.user.email, userId: String(event.user.name || '').split('/').pop(), space: event.space.name }));
     }
 
     switch (event.type) {

@@ -84,6 +84,14 @@
  *   someone with this module but not the assistant can talk to it in words, and Claude is given
  *   only this module's tools and told to decline anything else. It makes "use Asana by asking"
  *   an ordinary permission without handing out free-form Claude.
+ * @property {(ctx: ModuleContext, answered: {question: string, answer: string, tools: string[]}) => Promise<void>} [afterAnswer]
+ *   Called in the background after Claude answered a request in which one of this module's tools
+ *   ran. For learning from an answer — caching it, say — never for replying: the person already
+ *   has theirs. A throw is logged and ignored.
+ * @property {(ctx: ModuleContext, task: string) => Promise<Array<{to: string[], reply: Reply}>>} [onSchedule]
+ *   Called when Buddy is woken on a schedule (Cloud Scheduler → /tasks/<task>), with no person
+ *   behind it. Returns what to tell whom — work emails and a reply — and sends nothing itself:
+ *   Buddy delivers each one by DM, and only to people who can use the module.
  * @property {(ctx: ModuleContext, message: ChatMessage) => Promise<Reply|null>} [handleMessage]
  *   Handle a message directly, without Claude (e.g. a kudos vote). Return null to pass.
  *   Modules are asked in BUDDY_MODULES order; the first non-null reply wins.
@@ -117,10 +125,14 @@ const FIELDS = [
   'name', 'description', 'allowedIn', 'settings', 'instructions',
   'commands', 'readAttachment', 'tools', 'oauth', 'status',
   'examples', 'quickActions', 'connected', 'roles', 'handleMessage', 'conversation',
-  'needsConversation', 'scopedConversation',
+  'needsConversation', 'scopedConversation', 'afterAnswer', 'onSchedule',
 ];
 const SPACE_KINDS = ['DM', 'SPACE'];
 
+/**
+ * Check a module against the contract and throw, naming `source`, on the first
+ * thing wrong. Run for every module at startup, so a malformed module never loads.
+ */
 function validateModule(mod, source = 'module') {
   const fail = msg => { throw new Error(`${source}: ${msg}`); };
   if (!mod || typeof mod !== 'object') fail('must export an object');
@@ -151,7 +163,7 @@ function validateModule(mod, source = 'module') {
   for (const [cmd, spec] of Object.entries(mod.commands || {})) {
     if (spec && spec.role !== undefined && !roles.includes(spec.role)) fail(`command "${cmd}" uses undeclared role "${spec.role}"`);
   }
-  for (const hook of ['readAttachment', 'tools', 'status', 'quickActions', 'connected', 'handleMessage']) {
+  for (const hook of ['readAttachment', 'tools', 'status', 'quickActions', 'connected', 'handleMessage', 'afterAnswer', 'onSchedule']) {
     if (mod[hook] !== undefined && typeof mod[hook] !== 'function') fail(`${hook} must be a function`);
   }
   if (mod.examples !== undefined && !(Array.isArray(mod.examples) && mod.examples.every(e => typeof e === 'string'))) {

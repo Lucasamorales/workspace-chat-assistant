@@ -81,3 +81,65 @@ effort or retrieval.
   people's data. Rejected.
 - **Batch API (50% off).** Not applicable: every request here is someone waiting in a chat window.
 - **Fast mode.** The opposite of this document.
+
+## As built (2026-09-24)
+
+All ten are in, with three things worth knowing that the plan did not say:
+
+- **The model is chosen from the scope, in the handler, once per request** (`tuningFor`), and only
+  when the scope is unambiguous. Someone scoped to two modules gets the default: a request is
+  answered by one model throughout, and guessing which of two it should be is worse than not
+  guessing. Configured as `MODULE_TUNING=manual:claude-haiku-4-5:low`, priced by `MODEL_PRICES`.
+- **The answer cache lives in the module, not the gateway** — read in `handleMessage` (so a hit
+  never reaches Claude) and written in `afterAnswer`, a new hook the registry only offers to
+  modules whose tools actually ran. The question is embedded at most once per message: the cache
+  lookup, the retrieval and the write share one vector.
+- **Only direct messages are checked** against the cache. Embedding every message of every busy
+  space would cost more than the cache saves.
+
+Two are deliberately left off:
+
+- `CLEAR_TOOL_USES=0`. Context editing changes what Claude can still see inside a request, so it
+  waits for the eval.
+- The eval's known-good answers. `evals/manual.md` has the twenty questions; the answers need
+  someone who knows the manual, and inventing them would defeat the purpose.
+
+## Amendment, 2026-09-24 (same day): lever 2 was wrong, and it broke Asana
+
+Within hours of the deploy a user hit a loop: Buddy said "Oops, I got cut off. Just ask me to
+carry on", they said carry on, and it was cut off again, four times over.
+
+**`max_tokens` is a ceiling, not a budget.** Output is billed per token written; headroom that is
+never used costs nothing. Lowering the ceiling from 16,000 to 4,000 therefore saved nothing on
+ordinary replies. What it did was make a legitimate request impossible: updating one custom field
+on 54 tasks is a tool call of roughly 7,000 output tokens, so it was truncated every time, at the
+same place, deterministically. The reply then invited the user to carry on — which regenerated the
+identical too-long call. The "saving" cost four full requests and about twenty wasted minutes.
+
+Reverted to 16,000, and two guards added so the shape of the failure cannot recur silently:
+
+- the loop tells **cut off mid-answer** apart from **cut off mid-tool-call** (`max_tokens_tool`).
+  A half-written tool call is discarded, so "carry on" is the one thing that cannot work; the
+  reply now asks for a smaller batch instead;
+- the Asana instructions cap a single call at 20 items, which keeps the common case well inside
+  the ceiling in the first place.
+
+The lesson for the rest of this document: a lever that changes a **limit** is not the same as a
+lever that changes an **amount**. Levers 1, 3, 4, 5, 9 and 10 reduce what is sent or generated,
+and are real savings. Lever 2 only narrowed what was possible.
+
+## Amendment, 2026-09-28: the per-scope model reached nobody
+
+Lever 7 said a model would apply only to someone scoped to exactly **one** module, so a
+conversation never had to guess. But the manual is open to the whole domain, so everyone with Asana
+also has the manual — two scoped modules — and the rule fell back to the default for all of them.
+The usage records showed it: every request from the Asana testers ran on Sonnet 5, none on Haiku.
+
+The rule is now: the **strongest** model any of the person's scoped modules needs, at that module's
+effort, with an unconfigured module counting as the default. It is still fixed per person, so a
+conversation still never switches model.
+
+And the models moved up, not down. Admins and everyone with the assistant now run on **Opus 5.5**
+(the default); Asana users without the assistant run on **Sonnet 5**; the manual stays on Haiku for
+anyone who has only that. The opposite of this record's original plan to move Asana down to Haiku:
+precision first, then cost.

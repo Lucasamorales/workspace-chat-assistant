@@ -107,3 +107,60 @@ test('history is capped by size as well as by count, since it is re-sent every r
   assert.equal(loaded[0].role, 'user', 'and always starts with a user message');
   assert.match(loaded.at(-1).content, /answer 5/, 'keeping the most recent exchange');
 });
+
+// Anthropic charges more to write a cache that lives an hour than one that lives five minutes
+// (2x the input price rather than 1.25x). We ask for an hour, so charging the five-minute rate
+// under-reports every first request — the expensive one — by 60%.
+test('usage: a one-hour cache write is priced as one, not as a five-minute one', () => {
+  const prices = { inPerMTok: 2, outPerMTok: 10 };
+  const write = { cache_creation_input_tokens: 1e6 };
+  assert.equal(costUsd(write, prices, null, '1h'), 4);
+  assert.equal(costUsd(write, prices, null, '5m'), 2.5);
+  assert.equal(costUsd(write, prices), 4, 'an hour is what the service asks for, so it is the default');
+
+  // Haiku's writes follow its own input price, not Sonnet's.
+  const perModel = { default: prices, 'claude-haiku-4-5': { inPerMTok: 1, outPerMTok: 5 } };
+  assert.equal(costUsd(write, perModel, 'claude-haiku-4-5', '1h'), 2);
+});
+
+// Experiment 0010: the cap is API money, and a subscription reply spends none of it.
+test('usage: a subscription reply costs no dollars and never hits the cap, but its window is kept', async () => {
+  const store = createMemoryStore();
+  const usage = createUsage({ store, prices: { inPerMTok: 2, outPerMTok: 10 }, capUsd: 1 });
+  // Already over the cap on the API.
+  await usage.forUser('u').record({ output_tokens: 200_000 });
+
+  const meter = usage.meter({ userId: 'u', userEmail: 'robin@example.com', backend: 'subscription' });
+  await meter.check();
+  await meter.record({
+    input_tokens: 1e6, output_tokens: 0,
+    buddy_subscription: { five_hour_utilization: 0.31, seven_day_utilization: 0.04, five_hour_resets_at: 1790610000, using_overage: false },
+  }, 'claude-sonnet-5');
+  const event = await meter.finish();
+
+  assert.equal(event.backend, 'subscription');
+  assert.equal(event.usd, 0, 'nothing billed');
+  assert.equal(event.apiEquivalentUsd, 2, 'what the API would have charged, for the comparison');
+  assert.deepEqual(event.subscription, { fiveHour: 0.31, sevenDay: 0.04, resetsAt: 1790610000, usingOverage: false });
+  assert.equal((await usage.forUser('u').get()).usd, 2, 'the API spend is untouched by subscription use');
+
+  const api = usage.meter({ userId: 'u', userEmail: 'x', backend: 'api' });
+  await assert.rejects(api.check(), /allowance/, 'the API cap still applies to API requests');
+});
+
+// Replies can name a dated model; with Opus as the default price, a dated Sonnet reply looked up
+// by exact name would have been billed as Opus in /costs.
+test('usage: a dated model id is priced as the model it names, not the default', () => {
+  const prices = {
+    default: { inPerMTok: 4, outPerMTok: 20 },
+    'claude-sonnet-5': { inPerMTok: 2, outPerMTok: 10 },
+    'claude-opus-5': { inPerMTok: 5, outPerMTok: 25 },
+    'claude-opus-5-5': { inPerMTok: 4, outPerMTok: 20 },
+  };
+  const million = { input_tokens: 1e6 };
+  assert.equal(costUsd(million, prices, 'claude-sonnet-5-20260801'), 2);
+  assert.equal(costUsd(million, prices, 'claude-opus-5-5-20260901'), 4, 'the longer name wins over claude-opus-5');
+  assert.equal(costUsd(million, prices, 'claude-opus-5-20260101'), 5);
+  assert.equal(costUsd(million, prices, 'claude-sonnet-50'), 4, 'a prefix must end at a dash, or sonnet-5 would claim sonnet-50');
+  assert.equal(costUsd(million, prices, 'something-new'), 4, 'unknown still costs the default');
+});

@@ -13,6 +13,7 @@ const MAX_RESULT_CHARS = 30_000;
 const MAX_APPROVAL_ITEMS = 20;
 const DECLINED = 'The user declined this action. It was not performed. Do not retry it unless they ask again.';
 
+/** The plain text of a Claude reply, joined across its text blocks. */
 function textOf(content) {
   return content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
 }
@@ -55,18 +56,28 @@ function combineItems(items) {
   return { content: lines.join('\n\n'), isError: allFailed };
 }
 
-async function drive({ claude, system, toolset, budget, maxSteps, log, onProgress }, messages, stepsUsed) {
+async function drive({ claude, system, toolset, budget, maxSteps, log, onProgress, model, effort, maxTokens, backend, owner }, messages, stepsUsed) {
   let steps = stepsUsed;
   while (steps < maxSteps) {
     await budget.check();
-    const res = await claude.create({ system, tools: toolset.definitions, messages });
+    const res = await claude.create({ system, tools: toolset.definitions, messages, model, effort, maxTokens, backend, owner });
     steps += 1;
-    await budget.record(res.usage || {});
+    await budget.record(res.usage || {}, res.model || model);
     messages.push({ role: 'assistant', content: res.content });
 
     if (res.stop_reason === 'pause_turn') continue;
     if (res.stop_reason !== 'tool_use') {
-      return { status: 'done', text: textOf(res.content), stopReason: res.stop_reason, messages };
+      // Running out of room mid-answer and running out of room mid-tool-call look the same from
+      // here, but only one of them can be carried on: a half-written tool call is thrown away, so
+      // asking again produces the same half-written call. Name the two apart.
+      const cutOffMidCall = res.stop_reason === 'max_tokens'
+        && res.content.some(b => b.type === 'tool_use');
+      return {
+        status: 'done',
+        text: textOf(res.content),
+        stopReason: cutOffMidCall ? 'max_tokens_tool' : res.stop_reason,
+        messages,
+      };
     }
 
     const uses = res.content.filter(b => b.type === 'tool_use');
@@ -111,6 +122,10 @@ function withDefaults(opts) {
   return { maxSteps: 12, log: { info() {}, warn() {}, error() {} }, ...opts };
 }
 
+/**
+ * Start a conversation turn. Resolves with either a final answer or
+ * `status: 'needs_approval'` and the state to hand to `resumeLoop` later.
+ */
 function runLoop(opts) {
   return drive(withDefaults(opts), [...opts.messages], 0);
 }

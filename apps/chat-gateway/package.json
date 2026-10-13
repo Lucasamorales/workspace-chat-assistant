@@ -23,6 +23,7 @@
     "@buddy/module-leave": "*",
     "@buddy/module-admin": "*",
     "@buddy/module-manual": "*",
-    "@buddy/module-costs": "*"
+    "@buddy/module-costs": "*",
+    "@buddy/module-receipts": "*"
   }
 }

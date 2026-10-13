@@ -38,7 +38,8 @@ order is the contract: **never reorder, only add to the right**, or old rows sto
 The write happens on the first message after a week turns over — `buddy-bot` only accepts calls
 from Google Chat, and opening it to a scheduler would mean a new invoker and a new public path for
 a job that can ride an ordinary message. A finished week is written once; the week in progress is
-never written. `/costs sheet` forces it.
+never written. `/costs sheet` forces it. (A scheduled path now exists for receipt reminders, decision 0011;
+moving the rollup onto it is BACKLOG I8.)
 
 A Sheet failure is logged and never shown: whoever happened to send the message that triggered the
 rollup should not see an error about a spreadsheet they didn't ask for.
@@ -69,7 +70,20 @@ The Sheet must be shared as **Editor** with `buddy-bot@your-gcp-project.iam.gser
 and it must be a **Google Sheet**: a spreadsheet uploaded to Drive stays an Excel file until it is
 opened and saved as one, and the Sheets API cannot read those.
 
+## More than one model
+
+Each usage event names the model that answered it, and `MODEL_PRICES` gives each model its own
+price per million tokens, so a Haiku request is not priced as a Sonnet one. A model with no entry
+falls back to `USD_PER_MTOK_IN`/`_OUT`: an unpriced model must look expensive, never free.
+
+`/costs` grows a **By model** block once more than one has run — before that it would only repeat
+what the config already says.
+
 ## Deliberate omissions
+
+- **A cached answer is not a request.** When the manual answers from its cache, nothing reached
+  Claude and nothing is recorded — the same as "who's out?". Savings show up as requests that
+  stopped happening, not as a line item.
 
 - **No tool for Claude.** Costs are read with a command only, so no conversation can be steered
   into reporting on someone.
