@@ -3,6 +3,13 @@
  * instead of silently misbehaving (the original bot ran for days with MAX_TURNS=20~ → NaN).
  */
 
+/**
+ * Read and validate settings against `spec`, a map of name to
+ * `{type, required?, default?, min?, values?, allowHttp?}`.
+ *
+ * Collects every problem and throws once, so a misconfigured deploy reports all of
+ * them in one go rather than one per restart.
+ */
 function loadConfig(spec, env = process.env) {
   const out = {};
   const problems = [];

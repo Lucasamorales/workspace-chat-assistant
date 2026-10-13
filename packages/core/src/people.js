@@ -11,6 +11,10 @@
  * simply not known, which is also exactly who an app can't message first.
  */
 
+/**
+ * Remembers each person's Chat id and DM space as they write, and looks them up by
+ * email for scheduled messages.
+ */
 function createPeople({ store, now = () => Date.now() }) {
   const col = store.collection('core__people');
   // What this instance has already saved, so a busy chat is one write per person, not one per message.

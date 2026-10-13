@@ -41,6 +41,12 @@ function pricesFor(prices, model) {
   return (match && prices[match]) || prices.default || { inPerMTok: 0, outPerMTok: 0 };
 }
 
+/**
+ * The price of one Claude reply in US dollars, from its token counts.
+ *
+ * Cache writes and reads are charged at multiples of the input price; `cacheTtl`
+ * selects the write multiplier.
+ */
 function costUsd(usage, prices, model, cacheTtl = '1h') {
   const input = usage.input_tokens || 0;
   const cacheWrite = usage.cache_creation_input_tokens || 0;
@@ -59,6 +65,12 @@ function costUsd(usage, prices, model, cacheTtl = '1h') {
 const EVENT_TTL_DAYS = 90;
 const randomId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
+/**
+ * Monthly spend per person, and the cap that refuses a call once it is reached.
+ *
+ * @param capUsd  the monthly allowance
+ * @param prices  per-million-token prices, either one pair or a map by model name
+ */
 function createUsage({ store, prices, capUsd, cacheTtl = '1h', now = () => new Date(), eventTtlDays = EVENT_TTL_DAYS }) {
   const col = store.collection('core__usage');
   const events = store.collection('core__usage_events');

@@ -9,6 +9,12 @@
 
 const CHAT_ISSUER = 'chat@system.gserviceaccount.com';
 
+/**
+ * Build a check for an `Authorization: Bearer` Google ID token.
+ *
+ * The token must be for `audience`, and its verified email must be exactly `email`:
+ * a valid Google token from any other identity is refused. Returns the token payload.
+ */
 function createCallerVerifier({ audience, oauthClient, email }) {
   if (!audience) throw new Error('caller verifier needs an audience');
   if (!email) throw new Error('caller verifier needs the email it expects');
@@ -25,6 +31,7 @@ function createCallerVerifier({ audience, oauthClient, email }) {
   };
 }
 
+/** The same check, pinned to Google Chat's own service account. */
 const createChatVerifier = ({ audience, oauthClient }) => createCallerVerifier({ audience, oauthClient, email: CHAT_ISSUER });
 
 module.exports = { createChatVerifier, createCallerVerifier, CHAT_ISSUER };

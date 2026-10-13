@@ -2,6 +2,11 @@
 
 const { scopeStore } = require('./store');
 
+/**
+ * Returns a function that builds the `ctx` for one module: a store limited to that
+ * module's collections, only the settings that carry its prefix, and encryption bound
+ * to its name. A module cannot reach another module's data through what it is given.
+ */
 function createContextFactory({ store, sealer, env = process.env, log, fetchImpl = fetch, access = null }) {
   const settingsFor = mod => {
     const prefix = `${mod.name.toUpperCase()}_`;

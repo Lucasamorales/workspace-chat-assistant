@@ -28,6 +28,10 @@ function isActive(entry, nowMs) {
   return Date.parse(`${entry.until}T23:59:59Z`) + 3 * 3600 * 1000 > nowMs;
 }
 
+/**
+ * Access granted from chat, cached for `ttlMs` so a check is not a database read
+ * per message. Grants can carry an end date and only ever add to configured access.
+ */
 function createGrants({ store, now = () => Date.now(), ttlMs = DEFAULT_TTL_MS }) {
   const col = store.collection('core__grants');
   let cache = empty();

@@ -16,6 +16,13 @@ const SESSION_TTL_MS = 60 * 60 * 1000;
 
 const b64url = buf => buf.toString('base64url');
 
+/**
+ * The two halves of a module's OAuth connection: starting a flow from inside Chat,
+ * and finishing it in the browser callback.
+ *
+ * @param secret   signs the link tokens
+ * @param baseUrl  public URL of the OAuth gateway, used to build redirect URIs
+ */
 function createOAuthFlows({ store, secret, baseUrl, fetchImpl = fetch, now = () => Date.now() }) {
   const sessions = store.collection('core__oauth_sessions');
   const redirectUri = moduleName => `${baseUrl}/auth/${moduleName}/callback`;
