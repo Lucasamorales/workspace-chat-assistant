@@ -12,9 +12,12 @@ Buddy is a small core plus independent **modules**: `assistant`, `basics`, `file
 and tests, so a change to one can't break another, and any of them can be switched off without
 touching the rest. What is deployed and what is still unproven: [backlog](docs/BACKLOG.md).
 
-> **Status:** pilot, live as the Chat app **Buddy-Asana** for robin@ and remy@. Kudos is being
-> tested against a copy of the Kudos Sheet. The app will be renamed **Buddy** for the whole team
-> once Kudos and OOO are ready. What changed and when: [CHANGELOG.md](CHANGELOG.md).
+> **Nothing is preconfigured.** The repository holds no credentials and points at no live
+> service. "Buddy", the robot avatar, `example.com`, the people named in examples and tests, and
+> every project, sheet and space ID in [`infra/config.env`](infra/config.env) are placeholders.
+> To run it you bring your own Google Cloud project, Google Workspace, Anthropic key and (for
+> the Asana module) Asana app: [docs/RUNBOOK.md](docs/RUNBOOK.md) is the step-by-step.
+> What changed and when: [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -110,7 +113,7 @@ Google Chat allows. Changing any of this changes personality only, never behavio
 | **Pixel-art images** | `apps/oauth-gateway/public/`, served at `https://buddy-oauth-…/assets/<file>` | Avatar (512 px on orange), neutral/happy/thinking faces (256 px), animated idle/talking/thinking GIFs |
 | **Card faces** | `MOOD_IMAGES` in `cards.js` | Thinking on review cards, happy on success and module replies, neutral on notices |
 | **Brand colour** | `BRAND_ORANGE` in `cards.js` | `#F47A2A` on the main button of each card |
-| **Chat app avatar** | Chat app console → Avatar URL | `https://buddy-oauth-000000000000.europe-west1.run.app/assets/buddy-avatar.png` |
+| **Chat app avatar** | Chat app console → Avatar URL | `https://<your OAuth gateway URL>/assets/buddy-avatar.png` |
 
 Google Chat limits: no custom fonts, sizes or backgrounds. Style comes from images, emoji,
 button colours and wording. The Asana connect pages are normal web pages, so they use the full
@@ -186,19 +189,19 @@ legacy/bot-rev23/     the original bot, kept read-only for reference
 
 ## Modules
 
-| Module | Where | Who (default) | Needs | Stores |
+| Module | Where | Who (in the example config) | Needs | Stores |
 |---|---|---|---|---|
-| **assistant** | DMs + spaces | robin@, remy@ | — | — (free-form chat with Claude; this rule decides who can chat) |
+| **assistant** | DMs + spaces | named people | — | — (free-form chat with Claude; this rule decides who can chat) |
 | **basics** | DMs + spaces | everyone @example.com | — | — |
 | **files** | DMs + spaces | everyone @example.com (needs assistant) | — | nothing (files are processed in memory) |
-| **asana** | DMs only | robin@, remy@ (needs assistant) | `ASANA_CLIENT_ID`, `ASANA_CLIENT_SECRET` | `m_asana__tokens` (KMS-encrypted) |
-| **kudos** | spaces (votes), DMs (`/kudos`) | pilot: robin@, remy@; admins for setup commands | `KUDOS_SHEET_ID`, `KUDOS_SPACES` | appends to the Kudos Google Sheet; leadership list in `m_kudos__settings` |
+| **asana** | DMs only | named people (needs assistant) | `ASANA_CLIENT_ID`, `ASANA_CLIENT_SECRET` | `m_asana__tokens` (KMS-encrypted) |
+| **kudos** | spaces (votes), DMs (`/kudos`) | named people; admins for setup commands | `KUDOS_SHEET_ID`, `KUDOS_SPACES` | appends to the Kudos Google Sheet; leadership list in `m_kudos__settings` |
 | **ooo** | DMs + spaces | everyone @example.com | `OOO_CALENDAR_ID`, `OOO_READ_AS` | nothing (read-only) |
-| **leave** | DMs only | pilot: robin@, remy@; the accounts team at cutover (needs assistant) | `LEAVE_TEAM_EMAIL`, domain-wide delegation | each person's shift and display name in `m_leave__profiles` |
-| **admin** | DMs only | `BUDDY_ACCESS_ADMIN` — robin@, remy@ | — | grants in `core__grants` |
+| **leave** | DMs only | named people, meant for the accounts team (needs assistant) | `LEAVE_TEAM_EMAIL`, domain-wide delegation | each person's shift and display name in `m_leave__profiles` |
+| **admin** | DMs only | `BUDDY_ACCESS_ADMIN`, named people | — | grants in `core__grants` |
 | **manual** | DMs + spaces | everyone @example.com (needs assistant); `manual.admin` to reindex | `MANUAL_FOLDER_ID`, Vertex AI, Drive folder shared with `buddy-bot` | index in `m_manual__index` |
-| **costs** | DMs only | `BUDDY_ACCESS_COSTS` — robin@, remy@ | `COSTS_SHEET_ID` (optional) | usage events in `core__usage_events` (90 days) |
-| **receipts** | DMs only | `BUDDY_ACCESS_RECEIPTS` — robin@, accounts@ (can be asked in words, scoped); `receipts.admin` adds receipts | the scheduler, for reminders | receipts in `m_receipts__receipts`, who downloaded each month in `m_receipts__months` |
+| **costs** | DMs only | `BUDDY_ACCESS_COSTS`, named people | `COSTS_SHEET_ID` (optional) | usage events in `core__usage_events` (90 days) |
+| **receipts** | DMs only | `BUDDY_ACCESS_RECEIPTS`, named people (can be asked in words, scoped); `receipts.admin` adds receipts | the scheduler, for reminders | receipts in `m_receipts__receipts`, who downloaded each month in `m_receipts__months` |
 
 ### Permissions per module
 Two layers, both checked on every event:
@@ -278,8 +281,18 @@ npm test
 ```
 
 `npm test` runs every workspace's tests with Node's built-in runner. Tests use in-memory
-storage, a local encryption key and fake Chat/Claude/Asana clients — no cloud access or
-API keys needed.
+storage, a local encryption key and local stand-ins for Chat, Claude, Asana, Calendar, Vertex
+AI, Firestore and KMS: no cloud access or API keys needed, and nothing calls a live service.
+
+One script runs the same tests with coverage and writes a single report,
+`coverage/lcov.info` (run it from Git Bash or any Linux shell):
+
+```bash
+scripts/coverage.sh
+```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs `npm ci` and `npm test` on Node 22 for every
+pull request and every push to `main` or `develop`.
 
 Run one package's tests:
 
@@ -412,3 +425,4 @@ Details: [CLAUDE.md](CLAUDE.md).
 | [docs/decisions/](docs/decisions/) | Recorded decisions (scope, security, naming) |
 | [modules/receipts/README.md](modules/receipts/README.md) | Receipt reminders: how a month goes, commands, who gets what |
 | [legacy/bot-rev23/](legacy/bot-rev23/) | The original bot and its docs, for reference |
+| [LICENSE](LICENSE) | Proprietary: all rights reserved |

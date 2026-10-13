@@ -23,6 +23,15 @@ live Chat app, and what is still unverified against reality).
 - **CI.** `.github/workflows/ci.yml` runs `npm ci` and `npm test` on Node 22 for every pull
   request and every push to `main` or `develop`. It needs no services or credentials.
 
+### Docs
+- **README no longer describes one deployment.** The pilot status line, the people named as
+  each module's users and the avatar URL are replaced by a note that nothing is preconfigured
+  and what you have to bring. It also covers the coverage script and CI.
+- **READMEs for the folders that had none**: both apps, `packages/core`, `infra` and `legacy`.
+- **Doc comments on the public functions of `@buddy/core`** that had none (23), saying what each
+  is for and what its less obvious parameters mean.
+- **`LICENSE`**: a proprietary, all-rights-reserved notice. There was no licence file.
+
 ## 2026-10-07
 
 ### Fixed
