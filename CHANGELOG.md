@@ -9,6 +9,20 @@ live Chat app, and what is still unverified against reality).
 
 ---
 
+## 2026-10-13
+
+### Infrastructure
+- **Tests for the five files that talk to outside services and had little or no coverage**: the
+  Vertex AI embeddings client, the two Google Calendar clients (`ooo`, `leave`), the Firestore
+  store and the KMS sealer. Each runs the real client code against a local stand-in with the
+  service's own request and reply shapes; nothing calls a live service. The Firestore and
+  in-memory stores, and the KMS and local sealers, are now held to the same set of tests, since
+  every other test runs on the in-memory ones. 344 tests become 429.
+- **`scripts/coverage.sh`** runs every workspace's tests and writes one report,
+  `coverage/lcov.info`, which is kept in the repo. 95.2% of lines in the files the tests load.
+- **CI.** `.github/workflows/ci.yml` runs `npm ci` and `npm test` on Node 22 for every pull
+  request and every push to `main` or `develop`. It needs no services or credentials.
+
 ## 2026-10-07
 
 ### Fixed
