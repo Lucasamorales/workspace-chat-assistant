@@ -1,5 +1,8 @@
 # Buddy
 
+> **Placeholders:** "Buddy", the robot avatar, `example.com`, the people named in examples and every ID in
+> `infra/config.env` are examples. Set your own bot name, Workspace domain, people and project IDs before deploying.
+
 Your company's assistant inside **Google Chat**. People talk to Buddy like a colleague: ask
 questions about the team member manual, send files, see who's out, record leave, give kudos, and
 work in **Asana** as themselves — with every change shown for approval before it happens.
